@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  turbopack: {},
+  transpilePackages: ["react-globe.gl", "three-globe"],
 };
 
 export default nextConfig;

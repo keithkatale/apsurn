@@ -1,0 +1,9 @@
+export interface ProspectCriteria { industries: string[]; companySizeRange?: string; geographies: string[]; personas?: string[]; minimumConfidence?: number; requiredContactChannels?: Array<"email" | "phone" | "profile">; }
+export interface ContactEvidence { url: string; excerpt: string; observedAt: string; contentHash?: string; sourceType?: string; }
+export type ContactOrigin = "public" | "inferred" | "customer_confirmed";
+export type ContactStatus = "observed" | "verified" | "accept_all" | "risky" | "invalid" | "stale" | "suppressed";
+export interface ExtractedPerson { fullName: string; normalizedName: string; title: string | null; location: string | null; sourceUrl: string; email: string | null; phone: string | null; profileUrl: string | null; evidence: ContactEvidence; }
+export interface CandidateCompany { name: string; domain: string; websiteUrl: string; industry: string | null; employeeRange: string | null; location: string | null; icpFitScore: number; dataConfidence: number; source: string; sourceRef: Record<string, unknown>; }
+export interface CandidateContact { fullName: string; normalizedName: string; title: string | null; location: string | null; email: string | null; emailStatus: ContactStatus; phone: string | null; linkedinUrl: string | null; origin: ContactOrigin; confidence: number; evidence: ContactEvidence[]; source: string; sourceRef: Record<string, unknown>; }
+export interface ProspectDataSource { id: string; findCompanies(criteria: ProspectCriteria, opts: { limit: number }): Promise<CandidateCompany[]>; findContacts(company: CandidateCompany, criteria: ProspectCriteria, opts: { limit: number }): Promise<CandidateContact[]>; }
+export type RunStatus = "queued" | "discovering" | "enriching" | "verifying" | "completed" | "partial" | "failed" | "cancelled";
