@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Landing videos hosted in Supabase Storage
+/public/landing-video/

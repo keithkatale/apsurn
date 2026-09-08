@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { Mail, MapPin, CheckCircle2 } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
+import { landingVideoUrl } from "@/lib/landing/videos";
 
 export function ContactSection() {
   const [submitted, setSubmitted] = useState(false);
@@ -50,7 +51,7 @@ export function ContactSection() {
             {/* Illustration */}
             <div className="relative size-36 sm:size-52">
               <video
-                src="/landing-video/contactform.mp4"
+                src={landingVideoUrl("contactform.mp4")}
                 autoPlay
                 loop
                 muted

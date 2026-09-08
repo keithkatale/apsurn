@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { landingVideoUrl } from "@/lib/landing/videos";
 
 export function IntegrationSection() {
   const row1Logos = [
@@ -48,7 +49,7 @@ export function IntegrationSection() {
           {/* Main Central Hub Illustration */}
           <div className="relative z-10 size-36 sm:size-52">
             <video
-              src="/landing-video/connect.mp4"
+              src={landingVideoUrl("connect.mp4")}
               autoPlay
               loop
               muted

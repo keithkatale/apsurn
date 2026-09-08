@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { Plus, Minus, ArrowRight } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
+import { landingVideoUrl } from "@/lib/landing/videos";
 
 export function FaqSection() {
   const [openIdx, setOpenIdx] = useState<number | null>(0);
@@ -65,7 +66,7 @@ export function FaqSection() {
             {/* Illustration */}
             <div className="relative size-36 sm:size-52">
               <video
-                src="/landing-video/support.mp4"
+                src={landingVideoUrl("support.mp4")}
                 autoPlay
                 loop
                 muted

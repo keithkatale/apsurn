@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
+import { landingVideoUrl } from "@/lib/landing/videos";
 
 export function HeroFeaturesSection() {
   return (
@@ -130,7 +131,7 @@ export function HeroFeaturesSection() {
           <div className="w-full lg:max-w-[365px] flex flex-col gap-5 sm:gap-6 items-start">
             <div className="w-full max-w-[365px] aspect-[365/274] relative overflow-hidden">
               <video
-                src="/landing-video/hero.mp4"
+                src={landingVideoUrl("hero.mp4")}
                 autoPlay
                 loop
                 muted
