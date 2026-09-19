@@ -1,18 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
+import { AuthenticationError } from "@/lib/auth/session";
+import { AdminAccessError, requireAdminUser } from "@/lib/auth/admin";
 import { getVertexServiceAccountJson, setVertexServiceAccountJson } from "@/lib/ai/settings";
 import { parseServiceAccountJson } from "@/lib/ai/vertex";
 
 const requestSchema = z.object({ json: z.string().trim().min(1).max(20_000) });
 
+function handleAuthError(error: unknown) {
+  if (error instanceof AuthenticationError) return NextResponse.json({ error: error.message }, { status: 401 });
+  if (error instanceof AdminAccessError) return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+  throw error;
+}
+
 /** Never returns the stored credential — just whether one is configured. */
 export async function GET() {
   try {
-    await getCurrentUserId();
+    await requireAdminUser();
   } catch (error) {
-    if (error instanceof AuthenticationError) return NextResponse.json({ error: error.message }, { status: 401 });
-    throw error;
+    return handleAuthError(error);
   }
 
   const json = await getVertexServiceAccountJson();
@@ -29,10 +35,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    await getCurrentUserId();
+    await requireAdminUser();
   } catch (error) {
-    if (error instanceof AuthenticationError) return NextResponse.json({ error: error.message }, { status: 401 });
-    throw error;
+    return handleAuthError(error);
   }
 
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
@@ -50,10 +55,9 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE() {
   try {
-    await getCurrentUserId();
+    await requireAdminUser();
   } catch (error) {
-    if (error instanceof AuthenticationError) return NextResponse.json({ error: error.message }, { status: 401 });
-    throw error;
+    return handleAuthError(error);
   }
 
   await setVertexServiceAccountJson(null);

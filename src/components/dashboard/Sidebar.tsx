@@ -16,7 +16,6 @@ import {
   Radar,
   Crosshair,
   Settings,
-  ShieldCheck,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -28,7 +27,6 @@ const NAV_ITEMS = [
   { href: "/dashboard/sequences", label: "Sequences", icon: GitBranch },
   { href: "/dashboard/inboxes", label: "Inboxes", icon: Mail },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
-  { href: "/dashboard/admin", label: "Admin", icon: ShieldCheck },
 ];
 
 function isActivePath(pathname: string, href: string) {
