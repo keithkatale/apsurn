@@ -71,40 +71,23 @@ function createOpenRouterClient(): { ai: AiClient; model: string } {
   };
 }
 
-/** First provider (other than Vertex) that actually has credentials configured, for fallback when Vertex fails. */
-function fallbackAiClient(): { ai: AiClient; model: string } {
-  if (process.env.OPENROUTER_API_KEY?.trim()) return createOpenRouterClient();
-  if (process.env.OPENAI_API_KEY?.trim()) return createOpenAiClient();
-  throw new Error("No AI provider is configured. Set OPENROUTER_API_KEY, OPENAI_API_KEY, or a working Vertex credential.");
-}
-
 /**
  * Resolves the currently-selected provider (openai | openrouter | vertex)
  * and returns a ready-to-use client plus the model name to pass alongside
  * it. Call once per request/turn — do not cache the result, since the
  * active provider can change at any time from the admin panel.
  *
- * Vertex is preferred by default (billing/credits live there), but it only
- * works in serverless production with a real service-account key — a local
- * `gcloud` ADC login never exists in a Vercel function. If Vertex fails to
- * initialize (missing/invalid credential), this falls back to whichever of
- * OpenRouter/OpenAI is actually configured instead of breaking every AI
- * call in the app.
+ * No automatic fallback: if Vertex is selected but misconfigured, this
+ * throws rather than silently routing to another provider — that silent
+ * fallback was masking whether Vertex actually works, which defeats
+ * debugging it. Re-add a fallback only once Vertex is confirmed reliable.
  */
 export async function getAiClient(): Promise<{ ai: AiClient; model: string }> {
   const provider = await getActiveProvider();
 
   if (provider === "vertex") {
-    try {
-      const [geminiApiKey, serviceAccountJson] = await Promise.all([getGeminiApiKey(), getVertexServiceAccountJson()]);
-      return { ai: createVertexAiClient(geminiApiKey, serviceAccountJson) as unknown as AiClient, model: getVertexModel() };
-    } catch (error) {
-      console.error(
-        "[ai] Vertex is the active provider but failed to initialize — falling back to another provider:",
-        error instanceof Error ? error.message : error
-      );
-      return fallbackAiClient();
-    }
+    const [geminiApiKey, serviceAccountJson] = await Promise.all([getGeminiApiKey(), getVertexServiceAccountJson()]);
+    return { ai: createVertexAiClient(geminiApiKey, serviceAccountJson) as unknown as AiClient, model: getVertexModel() };
   }
 
   if (provider === "openai") return createOpenAiClient();
