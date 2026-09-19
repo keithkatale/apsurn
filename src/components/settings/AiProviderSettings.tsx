@@ -6,12 +6,16 @@ import { ThreeDButton } from "@/components/buttons/three-d-button";
 
 const PROVIDERS = [
   { id: "openai", label: "OpenAI", description: "gpt-5.6-luna. Paid, most reliable tool-calling." },
-  { id: "openrouter", label: "OpenRouter", description: "Free DeepSeek model by default. Capped at 50 requests/day until the account has $10+ credit." },
+  {
+    id: "openrouter",
+    label: "OpenRouter",
+    description: "Default. Free DeepSeek model. Capped at 50 requests/day until the account has $10+ credit.",
+  },
   {
     id: "vertex",
     label: "Vertex AI (Gemini)",
     description:
-      "Default. Google Cloud Gemini. Currently running on a refreshed local ADC credential — paste a service-account key below for one that never goes stale.",
+      "Google Cloud Gemini. Needs a real service-account key below to work in production — ADC (a local gcloud login) only works on the machine that ran it, never in a serverless deploy.",
   },
 ] as const;
 

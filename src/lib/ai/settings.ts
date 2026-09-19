@@ -14,6 +14,12 @@ let cachedGeminiApiKey: { key: string | null; expiresAt: number } | null = null;
 
 function defaultProvider(): AiProviderId {
   const envValue = process.env.AI_PROVIDER?.trim();
+  // Vertex is the preferred default (billing/credits live there) — but it
+  // only actually works in serverless production with a real service-account
+  // key. ADC (a local `gcloud` login) never exists in a Vercel function, so
+  // if Vertex isn't properly configured yet, getAiClient() falls back to a
+  // working provider automatically rather than breaking every AI call — see
+  // its try/catch below.
   return (AI_PROVIDERS as readonly string[]).includes(envValue ?? "") ? (envValue as AiProviderId) : "vertex";
 }
 
@@ -22,7 +28,8 @@ export async function getActiveProvider(): Promise<AiProviderId> {
   if (cached && cached.expiresAt > Date.now()) return cached.provider;
 
   const db = createAdminClient();
-  const { data } = await db.from("app_settings").select("value").eq("key", SETTINGS_KEY).maybeSingle();
+  const { data, error } = await db.from("app_settings").select("value").eq("key", SETTINGS_KEY).maybeSingle();
+  if (error) console.error("[ai/settings] failed to read active provider, falling back to default:", error.message);
   const stored = (data?.value as { provider?: string } | null)?.provider;
   const provider = (AI_PROVIDERS as readonly string[]).includes(stored ?? "") ? (stored as AiProviderId) : defaultProvider();
 
@@ -48,7 +55,8 @@ export async function getVertexServiceAccountJson(): Promise<string | null> {
   if (cachedVertexCredentials && cachedVertexCredentials.expiresAt > Date.now()) return cachedVertexCredentials.json;
 
   const db = createAdminClient();
-  const { data } = await db.from("app_settings").select("value").eq("key", VERTEX_CREDENTIALS_KEY).maybeSingle();
+  const { data, error } = await db.from("app_settings").select("value").eq("key", VERTEX_CREDENTIALS_KEY).maybeSingle();
+  if (error) console.error("[ai/settings] failed to read Vertex credentials:", error.message);
   const json = (data?.value as { json?: string } | null)?.json ?? null;
 
   cachedVertexCredentials = { json, expiresAt: Date.now() + CACHE_MS };
@@ -69,7 +77,8 @@ export async function getGeminiApiKey(): Promise<string | null> {
   if (cachedGeminiApiKey && cachedGeminiApiKey.expiresAt > Date.now()) return cachedGeminiApiKey.key;
 
   const db = createAdminClient();
-  const { data } = await db.from("app_settings").select("value").eq("key", GEMINI_API_KEY_KEY).maybeSingle();
+  const { data, error } = await db.from("app_settings").select("value").eq("key", GEMINI_API_KEY_KEY).maybeSingle();
+  if (error) console.error("[ai/settings] failed to read Gemini API key:", error.message);
   const key = (data?.value as { key?: string } | null)?.key ?? null;
 
   cachedGeminiApiKey = { key, expiresAt: Date.now() + CACHE_MS };
