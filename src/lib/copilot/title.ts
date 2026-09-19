@@ -1,4 +1,4 @@
-import { createGenAIClient, getAiModel } from "@/lib/ai/vertex";
+import { getAiClient } from "@/lib/ai/openai";
 
 function fallbackTitle(message: string): string {
   const words = message.trim().split(/\s+/).slice(0, 5).join(" ");
@@ -7,22 +7,13 @@ function fallbackTitle(message: string): string {
 
 export async function generateConversationTitle(firstMessage: string): Promise<string> {
   try {
-    const ai = createGenAIClient();
-    const response = await ai.models.generateContent({
-      model: getAiModel(),
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              text: `Generate a short 2-4 word title (no punctuation, no quotes) summarizing this chat message. Reply with only the title.\n\nMessage: "${firstMessage.slice(0, 500)}"`,
-            },
-          ],
-        },
-      ],
-      config: { temperature: 0.2, maxOutputTokens: 20, thinkingConfig: { thinkingBudget: 0 } },
+    const { ai, model } = await getAiClient();
+    const response = await ai.responses.create({
+      model,
+      input: `Generate a short 2-4 word title (no punctuation, no quotes) summarizing this chat message. Reply with only the title.\n\nMessage: "${firstMessage.slice(0, 500)}"`,
+      max_output_tokens: 20,
     });
-    const text = response.text?.trim().replace(/^["']|["']$/g, "");
+    const text = response.output_text?.trim().replace(/^["']|["']$/g, "");
     return text && text.length > 0 && text.length <= 80 ? text : fallbackTitle(firstMessage);
   } catch {
     return fallbackTitle(firstMessage);

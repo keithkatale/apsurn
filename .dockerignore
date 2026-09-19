@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.env*
+npm-debug.log*
+Dockerfile
+.dockerignore
+README.md
+gemini.md
+vendor
+supabase/.branches
+supabase/.temp
+**/*.test.ts
+.vscode
+.cursor

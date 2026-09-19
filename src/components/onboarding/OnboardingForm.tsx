@@ -1,25 +1,45 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Sparkles, Loader2, Globe } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { BlueprintReviewForm, type BlueprintData } from "./BlueprintReviewForm";
 
+function stripProtocol(raw: string) {
+  return raw.trim().replace(/^https?:\/\//i, "").replace(/^\/+/, "");
+}
+
+function isValidDomain(raw: string) {
+  const value = stripProtocol(raw);
+  if (!value || /\s/.test(value)) return false;
+  const host = value.split("/")[0].split("?")[0].split("#")[0].split(":")[0].toLowerCase();
+  if (host === "localhost") return true;
+  return /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/.test(host);
+}
+
 function OnboardingFormInner({ initialUrl = "" }: { initialUrl?: string }) {
   const searchParams = useSearchParams();
-  const [websiteUrl, setWebsiteUrl] = useState(
-    () => initialUrl || searchParams.get("url") || searchParams.get("websiteUrl") || ""
+  const [domain, setDomain] = useState(() =>
+    stripProtocol(initialUrl || searchParams.get("url") || searchParams.get("websiteUrl") || "")
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [blueprint, setBlueprint] = useState<BlueprintData | null>(null);
 
+  const [domainError, setDomainError] = useState(false);
+  const valid = useMemo(() => isValidDomain(domain), [domain]);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!websiteUrl.trim()) return;
+    if (!valid) {
+      setDomainError(true);
+      return;
+    }
+    const websiteUrl = `https://${stripProtocol(domain)}`;
     setLoading(true);
+    setDomainError(false);
     setError(null);
     setBlueprint(null);
     try {
@@ -41,39 +61,51 @@ function OnboardingFormInner({ initialUrl = "" }: { initialUrl?: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <form onSubmit={submit} className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-neutral-400">
-            <Globe className="size-4" />
+      <div className="flex flex-col gap-1.5">
+        <form onSubmit={submit} className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-lg border border-neutral-300 bg-white px-3 transition-[border-color] focus-within:border-neutral-900">
+            <Globe className="size-4 shrink-0 text-neutral-400" aria-hidden />
+            <span className="shrink-0 select-none text-sm text-neutral-500">https://</span>
+            <input
+              type="text"
+              inputMode="url"
+              autoComplete="off"
+              spellCheck={false}
+              aria-invalid={domainError}
+              className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 disabled:bg-transparent disabled:text-neutral-400"
+              placeholder="yourcompany.com"
+              value={domain}
+              onChange={(e) => {
+                setDomainError(false);
+                setDomain(stripProtocol(e.target.value));
+              }}
+              disabled={loading}
+            />
           </div>
-          <input
-            className="input w-full pl-9"
-            placeholder="https://yourcompany.com"
-            value={websiteUrl}
-            onChange={(e) => setWebsiteUrl(e.target.value)}
+          <ThreeDButton
+            type="submit"
+            variant="solid"
+            size="md"
             disabled={loading}
-          />
-        </div>
-        <ThreeDButton
-          type="submit"
-          variant="solid"
-          size="md"
-          disabled={loading || !websiteUrl.trim()}
-          className="whitespace-nowrap"
-        >
-          {loading ? (
-            <>
-              <Loader2 className="size-4 animate-spin" />
-              <span>Analyzing website…</span>
-            </>
-          ) : (
-            <>
-              <Sparkles className="size-4" />
-              <span>Build blueprint</span>
-            </>
-          )}
-        </ThreeDButton>
-      </form>
+            className="whitespace-nowrap"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                <span>Analyzing website…</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="size-4" />
+                <span>Build blueprint</span>
+              </>
+            )}
+          </ThreeDButton>
+        </form>
+        {domainError && (
+          <p className="text-sm text-red-600">Enter a valid domain like acme.com</p>
+        )}
+      </div>
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">

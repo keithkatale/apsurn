@@ -1,6 +1,6 @@
 import { Check, Loader2 } from "lucide-react";
 
-const TOOL_LABELS: Record<string, string> = {
+const COPILOT_TOOL_LABELS: Record<string, string> = {
   get_account_snapshot: "Checking your account",
   list_prospect_companies: "Looking up companies",
   list_contacts: "Looking up contacts",
@@ -13,8 +13,16 @@ const TOOL_LABELS: Record<string, string> = {
   enroll_contacts: "Enrolling contacts",
 };
 
-export function ToolActivity({ name, status }: { name: string; status: "running" | "done" }) {
-  const label = TOOL_LABELS[name] ?? name;
+export function ToolActivity({
+  name,
+  status,
+  labels = COPILOT_TOOL_LABELS,
+}: {
+  name: string;
+  status: "running" | "done";
+  labels?: Record<string, string>;
+}) {
+  const label = labels[name] ?? name;
   const running = status === "running";
 
   return (

@@ -7,8 +7,8 @@ export interface ScrapedPage { url: string; title: string; text: string; html: s
 export interface SiteSnapshot { rootUrl: string; pages: ScrapedPage[]; fetchedAt: string; }
 
 const HINTS = ["about", "leadership", "team", "people", "company", "contact", "news", "press", "author", "product", "solutions"];
-const USER_AGENT = "ApsurnBot/1.0 (+https://apsurn.com/bot; contact: privacy@apsurn.com)";
-const MAX_BYTES = 1_500_000;
+export const USER_AGENT = "ApsurnBot/1.0 (+https://apsurn.com/bot; contact: privacy@apsurn.com)";
+export const MAX_BYTES = 1_500_000;
 
 function privateIp(ip: string) {
   if (isIP(ip) === 4) {
@@ -31,7 +31,7 @@ export async function assertSafePublicUrl(input: string): Promise<URL> {
   return url;
 }
 
-async function robotsAllows(root: URL, path: string) {
+export async function robotsAllows(root: URL, path: string) {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 4_000);
@@ -96,13 +96,34 @@ function links(html: string, root: URL) {
   return [...found].sort((a, b) => a[1] - b[1]).slice(0, 7).map(([url]) => new URL(url));
 }
 
-export async function crawlSite(inputUrl: string): Promise<SiteSnapshot> {
+export async function crawlSite(
+  inputUrl: string,
+  opts: { render?: boolean } = {}
+): Promise<SiteSnapshot> {
   const root = await assertSafePublicUrl(inputUrl);
-  const home = await fetchHtml(root, root);
+
+  // When rendering is requested, route fetches through the hybrid fetcher
+  // (headless browser escalation). Lazy-imported to avoid a module cycle.
+  const renderedHtml = opts.render
+    ? async (url: URL): Promise<string | null> => {
+        try {
+          const { fetchPage } = await import("./fetch-page");
+          const page = await fetchPage(url.toString(), { render: true });
+          return page?.html ?? null;
+        } catch {
+          return null;
+        }
+      }
+    : null;
+
+  const getHtml = async (url: URL): Promise<string | null> =>
+    (renderedHtml ? await renderedHtml(url) : null) ?? (await fetchHtml(url, root));
+
+  const home = await getHtml(root);
   if (!home) throw new Error(`Could not safely fetch ${root.toString()}`);
   const pages = [extractPage(home, root.toString())];
   for (const url of links(home, root)) {
-    const html = await fetchHtml(url, root);
+    const html = await getHtml(url);
     if (html) {
       const page = extractPage(html, url.toString());
       if (page.text.length > 40) pages.push(page);

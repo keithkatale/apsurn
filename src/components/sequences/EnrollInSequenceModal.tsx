@@ -95,13 +95,19 @@ export function EnrollInSequenceModal({
             </div>
 
             {result ? (
-              <p className="text-sm text-neutral-700">
-                Enrolled {result.enrolled}
-                {result.skipped > 0
-                  ? ` · skipped ${result.skipped} (no email, already enrolled, or archived)`
-                  : ""}
-                .
-              </p>
+              <div className="flex flex-col gap-2 text-sm text-neutral-700">
+                <p>
+                  Enrolled {result.enrolled}
+                  {result.skipped > 0
+                    ? ` · skipped ${result.skipped} (no email, already enrolled, or archived)`
+                    : ""}
+                  .
+                </p>
+                <p className="text-neutral-500">
+                  Sending is separate — run a send pass from Sequences when an inbox is connected
+                  and the sequence is active.
+                </p>
+              </div>
             ) : sequences === null ? (
               <p className="text-sm text-neutral-500">Loading sequences…</p>
             ) : sequences.length === 0 ? (

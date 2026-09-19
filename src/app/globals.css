@@ -38,6 +38,115 @@ body {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Market Insights — scanning progress + live logs.                       */
+/* ---------------------------------------------------------------------- */
+
+.market-scan {
+  width: 100%;
+  text-align: center;
+}
+
+.market-scan-kicker {
+  margin: 0 0 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #737373;
+}
+
+.market-scan h2 {
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  color: #171717;
+}
+
+.market-scan-bar {
+  position: relative;
+  height: 10px;
+  margin-top: 20px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(23, 23, 23, 0.08);
+}
+
+.market-scan-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #4379ee;
+  transition: width 0.45s ease;
+}
+
+.market-scan-bar-fill.is-live {
+  background-image: linear-gradient(90deg, #a9c1fb 0%, #4379ee 45%, #a9c1fb 100%);
+  background-size: 180% 100%;
+  animation: market-scan-sheen 1.4s linear infinite;
+}
+
+.market-scan.is-failed .market-scan-bar-fill {
+  background: #ef4444;
+  animation: none;
+}
+
+@keyframes market-scan-sheen {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -180% 0;
+  }
+}
+
+.market-scan-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #737373;
+}
+
+.market-scan-logs {
+  margin: 18px 0 0;
+  padding: 20px 4px;
+  max-height: 168px;
+  overflow-y: auto;
+  list-style: none;
+  text-align: left;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 22px, #000 calc(100% - 22px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 22px, #000 calc(100% - 22px), transparent 100%);
+}
+
+.market-scan-logs li {
+  position: relative;
+  padding: 5px 0 5px 14px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #737373;
+}
+
+.market-scan-logs li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.72em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(23, 23, 23, 0.28);
+}
+
+.market-scan-logs li:last-of-type {
+  color: #171717;
+}
+
+.market-scan-logs li:last-of-type::before {
+  background: #4379ee;
+}
+
+/* ---------------------------------------------------------------------- */
 /* Copilot — ported from workOS's copilot chat (light theme values only). */
 /* ---------------------------------------------------------------------- */
 
@@ -357,5 +466,24 @@ body {
 @keyframes prompt-glow-spin {
   to {
     --prompt-angle: 360deg;
+  }
+}
+
+@keyframes apsurn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.apsurn-spin {
+  animation: apsurn-spin 0.75s linear infinite;
+  transform-origin: center;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .apsurn-spin {
+    animation: none;
   }
 }

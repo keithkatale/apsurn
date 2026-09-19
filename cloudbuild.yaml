@@ -1,0 +1,43 @@
+# Build the Playwright-enabled container and deploy to Cloud Run.
+#
+#   gcloud builds submit --config cloudbuild.yaml \
+#     --substitutions=_SERVICE=apsurn,_REGION=us-central1
+#
+# The scraping agent needs a headless browser, so we run on Cloud Run (not
+# Vercel). Give the service enough memory/CPU for Chromium and a long request
+# timeout; the agent run is also driven by Inngest so it isn't bound to one
+# HTTP request. Secrets/env are set on the service (see --set-secrets below or
+# configure them in the Cloud Run console).
+
+substitutions:
+  _SERVICE: apsurn
+  _REGION: us-central1
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-t", "gcr.io/$PROJECT_ID/${_SERVICE}:$COMMIT_SHA", "."]
+
+  - name: gcr.io/cloud-builders/docker
+    args: ["push", "gcr.io/$PROJECT_ID/${_SERVICE}:$COMMIT_SHA"]
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=gcr.io/$PROJECT_ID/${_SERVICE}:$COMMIT_SHA
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --memory=2Gi
+      - --cpu=2
+      - --timeout=3600
+      - --concurrency=10
+      - --set-env-vars=SCRAPER_ENABLE_RENDER=1,PROSPECTING_MODE=agent
+
+images:
+  - gcr.io/$PROJECT_ID/${_SERVICE}:$COMMIT_SHA
+
+options:
+  machineType: E2_HIGHCPU_8

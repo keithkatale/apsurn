@@ -12,8 +12,14 @@ interface StepDraft {
   stop_on_reply: boolean;
 }
 
-function blankStep(): StepDraft {
-  return { subject_template: "", body_template: "", delay_days: 0, stop_on_reply: true };
+function blankStep(index = 0): StepDraft {
+  return {
+    subject_template: "",
+    // Step 1 may use {{ai}} — draft from qualify_reason via Vertex at send time.
+    body_template: index === 0 ? "{{ai}}" : "",
+    delay_days: index === 0 ? 0 : 2,
+    stop_on_reply: true,
+  };
 }
 
 export function CreateSequenceModal({
@@ -36,7 +42,9 @@ export function CreateSequenceModal({
 
   async function createSequence(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || steps.some((s) => !s.body_template.trim())) return;
+    if (!name.trim() || steps.some((s) => !s.body_template.trim() && !s.subject_template.trim())) {
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -124,10 +132,20 @@ export function CreateSequenceModal({
                   />
                   <textarea
                     className="input min-h-20"
-                    placeholder="Email body"
+                    placeholder={
+                      index === 0
+                        ? "Email body — use {{ai}} to draft from qualify reason at send time"
+                        : "Email body — {{first_name}}, {{company}}"
+                    }
                     value={step.body_template}
                     onChange={(e) => updateStep(index, { body_template: e.target.value })}
                   />
+                  {index === 0 && (
+                    <p className="text-[11px] text-neutral-500">
+                      Step 1 can be AI-drafted from the contact&apos;s qualify reason when body is{" "}
+                      <code className="text-neutral-700">{"{{ai}}"}</code>.
+                    </p>
+                  )}
                   <label className="flex items-center gap-2 text-xs text-neutral-600">
                     Send after
                     <input
@@ -150,7 +168,7 @@ export function CreateSequenceModal({
                 variant="soft"
                 size="sm"
                 className="self-start"
-                onClick={() => setSteps((prev) => [...prev, blankStep()])}
+                onClick={() => setSteps((prev) => [...prev, blankStep(prev.length)])}
               >
                 <Plus className="size-3.5" />
                 <span>Add step</span>

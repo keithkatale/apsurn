@@ -1,5 +1,4 @@
 import type { LucideIcon } from "lucide-react";
-import { Loader } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 
@@ -21,7 +20,7 @@ const SIZE: Record<SpinLoaderSize, number> = {
 
 export function SpinLoader({
   size = "md",
-  icon: Icon = Loader,
+  icon: Icon,
   label = "Loading",
   className,
   iconClassName,
@@ -37,15 +36,38 @@ export function SpinLoader({
       aria-live="polite"
       aria-label={label}
     >
-      <Icon
-        size={iconSize}
-        strokeWidth={2}
-        className={cn(
-          "animate-spin text-neutral-900 motion-reduce:animate-none",
-          iconClassName,
-        )}
-        aria-hidden
-      />
+      {Icon ? (
+        <Icon
+          size={iconSize}
+          strokeWidth={2}
+          className={cn("apsurn-spin text-neutral-900", iconClassName)}
+          aria-hidden
+        />
+      ) : (
+        <svg
+          width={iconSize}
+          height={iconSize}
+          viewBox="0 0 24 24"
+          fill="none"
+          className={cn("apsurn-spin text-neutral-900", iconClassName)}
+          aria-hidden
+        >
+          <circle
+            cx="12"
+            cy="12"
+            r="9.25"
+            stroke="currentColor"
+            strokeWidth="2.25"
+            opacity="0.18"
+          />
+          <path
+            d="M21.25 12a9.25 9.25 0 0 0-9.25-9.25"
+            stroke="currentColor"
+            strokeWidth="2.25"
+            strokeLinecap="round"
+          />
+        </svg>
+      )}
     </div>
   );
 }

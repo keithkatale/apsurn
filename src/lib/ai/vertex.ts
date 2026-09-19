@@ -1,161 +1,233 @@
 import { GoogleGenAI } from "@google/genai";
-import type { GoogleAuthOptions } from "google-auth-library";
+import type { ResponseInputItem, Tool } from "openai/resources/responses/responses";
 
-const DEFAULT_PROJECT = "massive-catfish-507004-p4";
-const DEFAULT_LOCATION = "us-central1";
-const DEFAULT_MODEL = "gemini-2.5-flash";
+// Gemini, via Google's unified `@google/genai` SDK — which speaks either the
+// plain Gemini Developer API (a flat API key, no GCP project/IAM at all) or
+// full Vertex AI, through the exact same class.
+//
+// Auth is resolved in this order, cheapest/most-reliable first:
+//   1. GEMINI_API_KEY (admin panel or env var) — the Gemini Developer API.
+//      Just a key from https://aistudio.google.com/apikey, completely
+//      decoupled from any GCP project, IAM role, or org policy. This is the
+//      recommended path: it sidesteps the two dead ends already hit on this
+//      project — personal ADC credentials need periodic interactive
+//      browser re-auth ("invalid_grant"/RAPT) that a server can't perform,
+//      and this GCP org's `iam.managed.disableServiceAccountKeyCreation`
+//      policy blocks downloadable service-account keys entirely.
+//   2. A service-account JSON key stored in the app (admin panel), for
+//      projects where the org policy above isn't in effect and full Vertex
+//      AI (billing tied to the GCP project, VPC-SC, etc.) is actually
+//      wanted over the Developer API.
+//   3. GOOGLE_SERVICE_ACCOUNT_JSON env var (same JSON, for deploys that
+//      prefer an env-var secret over the admin-panel copy).
+//   4. Application Default Credentials as a last resort (works if the
+//      compute environment has a service account attached — e.g. Cloud Run
+//      with `--service-account` — but will hit the RAPT failure above if
+//      it's actually a personal `gcloud auth application-default login`).
+//
+// This file is a compatibility SHIM: it exposes just enough of the OpenAI
+// Responses API surface (`.responses.create(...)`, both streaming and not)
+// for our existing call sites to use unmodified, translating requests and
+// responses to/from Gemini's own shapes underneath.
 
-const VERTEX_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
-
-function envTrue(name: string): boolean {
-  const v = process.env[name]?.trim().toLowerCase();
-  return v === "1" || v === "true" || v === "yes" || v === "on";
+export function isVertexConfigured(): boolean {
+  return Boolean(process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_CLOUD_PROJECT?.trim());
 }
 
-/**
- * Credentials JSON for Vercel / serverless (ADC files are not available there).
- * Accepts a service-account key, or an authorized_user ADC JSON as fallback.
- */
-export function loadServiceAccountCredentials():
-  | Record<string, unknown>
-  | null {
-  const jsonRaw =
-    process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim() ||
-    process.env.GCP_SERVICE_ACCOUNT_JSON?.trim() ||
-    process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON?.trim();
+export function getVertexModel(): string {
+  return process.env.VERTEX_MODEL?.trim() || process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+}
 
-  if (jsonRaw) {
-    try {
-      return JSON.parse(jsonRaw) as Record<string, unknown>;
-    } catch {
-      throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON");
+/** Parses/validates a pasted service-account key without ever logging its contents. */
+export function parseServiceAccountJson(raw: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("That doesn't look like valid JSON.");
+  }
+  const obj = parsed as Record<string, unknown>;
+  if (obj.type !== "service_account" || typeof obj.private_key !== "string" || typeof obj.client_email !== "string") {
+    throw new Error('Not a service-account key — expected a JSON file with "type": "service_account".');
+  }
+  return obj;
+}
+
+function createGenAI(geminiApiKey: string | null, serviceAccountJson: string | null): GoogleGenAI {
+  const apiKey = geminiApiKey || process.env.GEMINI_API_KEY?.trim();
+  if (apiKey) {
+    return new GoogleGenAI({ apiKey });
+  }
+
+  const project = process.env.GOOGLE_CLOUD_PROJECT?.trim();
+  if (!project) {
+    throw new Error("Gemini is not configured. Set GEMINI_API_KEY (recommended), or GOOGLE_CLOUD_PROJECT for Vertex AI.");
+  }
+  const location = process.env.GOOGLE_CLOUD_LOCATION?.trim() || "us-central1";
+
+  const rawCredentials = serviceAccountJson || process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim();
+  if (rawCredentials) {
+    const credentials = parseServiceAccountJson(rawCredentials);
+    return new GoogleGenAI({ vertexai: true, project, location, googleAuthOptions: { credentials } });
+  }
+
+  // Falls back to ADC — only reliable if the compute environment has a
+  // service account attached (e.g. Cloud Run); a personal `gcloud auth
+  // application-default login` will eventually hit the RAPT failure above.
+  return new GoogleGenAI({ vertexai: true, project, location });
+}
+
+interface CreateParams {
+  model: string;
+  input: string | ResponseInputItem[];
+  instructions?: string;
+  max_output_tokens?: number;
+  text?: { format?: { type?: string } };
+  tools?: Tool[];
+  stream?: boolean;
+}
+
+interface CreateOptions {
+  signal?: AbortSignal;
+}
+
+type GeminiFunctionCall = { name?: string; args?: Record<string, unknown> };
+type GeminiChunk = { text?: string; functionCalls?: GeminiFunctionCall[] };
+
+function usesWebSearch(tools: CreateParams["tools"]): boolean {
+  return Array.isArray(tools) && tools.some((t) => t.type === "web_search");
+}
+
+function functionDeclarationsOf(tools: CreateParams["tools"]) {
+  if (!Array.isArray(tools)) return undefined;
+  const fnTools = tools.filter((t): t is Extract<Tool, { type: "function" }> => t.type === "function");
+  if (fnTools.length === 0) return undefined;
+  return fnTools.map((t) => ({ name: t.name, description: t.description ?? undefined, parameters: t.parameters ?? undefined }));
+}
+
+/** Converts our accumulated Responses-API input array into Gemini's Content[] shape. */
+function convertInput(input: CreateParams["input"]): string | { role: string; parts: Record<string, unknown>[] }[] {
+  if (typeof input === "string") return input;
+
+  const callIdToName = new Map<string, string>();
+  for (const item of input) {
+    if ("type" in item && item.type === "function_call" && "call_id" in item && "name" in item) {
+      callIdToName.set(item.call_id as string, item.name as string);
     }
   }
 
-  const b64 = process.env.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64?.trim();
-  if (b64) {
-    try {
-      return JSON.parse(
-        Buffer.from(b64, "base64").toString("utf8")
-      ) as Record<string, unknown>;
-    } catch {
-      throw new Error(
-        "GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 is not valid base64 JSON"
-      );
+  const contents: { role: string; parts: Record<string, unknown>[] }[] = [];
+  for (const item of input) {
+    if ("role" in item && typeof (item as { content?: unknown }).content === "string") {
+      const role = item.role === "assistant" ? "model" : "user";
+      contents.push({ role, parts: [{ text: (item as { content: string }).content }] });
+    } else if ("type" in item && item.type === "function_call") {
+      const call = item as { name: string; arguments: string };
+      let args: Record<string, unknown> = {};
+      try {
+        args = JSON.parse(call.arguments || "{}");
+      } catch {
+        // leave args empty if the model produced malformed JSON
+      }
+      contents.push({ role: "model", parts: [{ functionCall: { name: call.name, args } }] });
+    } else if ("type" in item && item.type === "function_call_output") {
+      const out = item as { call_id: string; output: string };
+      const name = callIdToName.get(out.call_id) ?? "unknown_function";
+      let response: unknown = out.output;
+      try {
+        response = JSON.parse(out.output);
+      } catch {
+        response = { result: out.output };
+      }
+      contents.push({ role: "user", parts: [{ functionResponse: { name, response } }] });
+    } else if ("type" in item && item.type === "message") {
+      const message = item as { role?: string; content?: unknown };
+      const content = message.content;
+      const text = Array.isArray(content)
+        ? content.map((c) => (typeof c === "object" && c && "text" in c ? String((c as { text: unknown }).text) : "")).join("")
+        : "";
+      if (text) contents.push({ role: message.role === "user" ? "user" : "model", parts: [{ text }] });
     }
   }
-
-  const adcPath = process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
-  if (adcPath?.startsWith("{")) {
-    try {
-      return JSON.parse(adcPath) as Record<string, unknown>;
-    } catch {
-      /* file path string — handled by google-auth-library */
-    }
-  }
-
-  return null;
+  return contents;
 }
 
-function buildGoogleAuthOptions(): GoogleAuthOptions | undefined {
-  const credentials = loadServiceAccountCredentials();
-  if (!credentials) return undefined;
-  return {
-    credentials,
-    scopes: [VERTEX_SCOPE],
-  };
+let callIdCounter = 0;
+function nextCallId(): string {
+  callIdCounter += 1;
+  return `vertex_call_${Date.now()}_${callIdCounter}`;
 }
 
-function hasVertexCredentialSource(): boolean {
-  return Boolean(
-    loadServiceAccountCredentials() ||
-      process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim()
-  );
+async function createNonStreaming(genAI: GoogleGenAI, params: CreateParams) {
+  const config: Record<string, unknown> = {};
+  if (params.max_output_tokens) config.maxOutputTokens = params.max_output_tokens;
+  if (params.text?.format?.type === "json_object") config.responseMimeType = "application/json";
+  if (usesWebSearch(params.tools)) config.tools = [{ googleSearch: {} }];
+  if (params.instructions) config.systemInstruction = params.instructions;
+
+  const response = await genAI.models.generateContent({
+    model: params.model,
+    contents: convertInput(params.input),
+    config,
+  });
+
+  return { output_text: response.text ?? "" };
 }
 
-export function isVertexConfigured() {
-  const apiKey =
-    process.env.VERTEX_API_KEY?.trim() ||
-    process.env.GEMINI_API_KEY?.trim() ||
-    process.env.GOOGLE_API_KEY?.trim();
-  if (apiKey) return true;
+async function* createStreaming(genAI: GoogleGenAI, params: CreateParams, options?: CreateOptions) {
+  const config: Record<string, unknown> = {};
+  if (params.instructions) config.systemInstruction = params.instructions;
+  const functionDeclarations = functionDeclarationsOf(params.tools);
+  if (functionDeclarations) config.tools = [{ functionDeclarations }];
+  else if (usesWebSearch(params.tools)) config.tools = [{ googleSearch: {} }];
 
-  const hasProject = Boolean(
-    process.env.GOOGLE_CLOUD_PROJECT?.trim() ||
-      process.env.VERTEX_PROJECT_ID?.trim()
-  );
-  if (!hasProject) return false;
+  const stream = await genAI.models.generateContentStream({
+    model: params.model,
+    contents: convertInput(params.input),
+    config,
+  });
 
-  if (hasVertexCredentialSource()) return true;
+  let textAccum = "";
+  const calls: { callId: string; name: string; args: Record<string, unknown> }[] = [];
 
-  // Local dev may use gcloud ADC without explicit env credentials.
-  return process.env.NODE_ENV !== "production";
-}
-
-export function getVertexProjectId() {
-  return (
-    process.env.GOOGLE_CLOUD_PROJECT?.trim() ||
-    process.env.VERTEX_PROJECT_ID?.trim() ||
-    DEFAULT_PROJECT
-  );
-}
-
-export function getVertexLocation() {
-  return (
-    process.env.GOOGLE_CLOUD_LOCATION?.trim() ||
-    process.env.VERTEX_LOCATION?.trim() ||
-    DEFAULT_LOCATION
-  );
-}
-
-export function getAiModel() {
-  return process.env.VERTEX_MODEL || process.env.GEMINI_MODEL || DEFAULT_MODEL;
-}
-
-/**
- * Vertex AI via ADC (local) or service-account JSON (Vercel).
- * Optional Gemini / Vertex Express API keys for dev fallback.
- */
-export function createGenAIClient() {
-  const apiKey =
-    process.env.VERTEX_API_KEY?.trim() ||
-    process.env.GEMINI_API_KEY?.trim() ||
-    process.env.GOOGLE_API_KEY?.trim();
-
-  const googleAuthOptions = buildGoogleAuthOptions();
-
-  const useVertex =
-    envTrue("GOOGLE_GENAI_USE_VERTEXAI") ||
-    Boolean(googleAuthOptions) ||
-    Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim()) ||
-    !apiKey;
-
-  if (useVertex) {
-    if (process.env.NODE_ENV === "production" && !googleAuthOptions && !apiKey) {
-      const hasAdcPath = Boolean(
-        process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim() &&
-          !process.env.GOOGLE_APPLICATION_CREDENTIALS.trim().startsWith("{")
-      );
-      if (!hasAdcPath) {
-        throw new Error(
-          "Vertex AI credentials missing on this server. Set GOOGLE_SERVICE_ACCOUNT_JSON (service account JSON) on Vercel, or GOOGLE_APPLICATION_CREDENTIALS locally."
-        );
+  try {
+    for await (const chunk of stream as AsyncIterable<GeminiChunk>) {
+      if (options?.signal?.aborted) throw new Error("Request aborted");
+      if (chunk.text) {
+        textAccum += chunk.text;
+        yield { type: "response.output_text.delta", delta: chunk.text };
+      }
+      if (chunk.functionCalls) {
+        for (const call of chunk.functionCalls) {
+          if (call.name) calls.push({ callId: nextCallId(), name: call.name, args: call.args ?? {} });
+        }
       }
     }
-
-    return new GoogleGenAI({
-      vertexai: true,
-      project: getVertexProjectId(),
-      location: getVertexLocation(),
-      ...(googleAuthOptions ? { googleAuthOptions } : {}),
-    });
+  } catch (error) {
+    yield { type: "error", message: error instanceof Error ? error.message : "Vertex stream failed" };
+    return;
   }
 
-  if (!apiKey) {
-    throw new Error(
-      "Vertex AI is not configured. Set GOOGLE_SERVICE_ACCOUNT_JSON + GOOGLE_CLOUD_PROJECT, or GEMINI_API_KEY for Google AI Studio."
-    );
+  const output: unknown[] = [];
+  if (textAccum) {
+    output.push({ type: "message", role: "assistant", content: [{ type: "output_text", text: textAccum }] });
+  }
+  for (const call of calls) {
+    output.push({ type: "function_call", call_id: call.callId, name: call.name, arguments: JSON.stringify(call.args) });
   }
 
-  return new GoogleGenAI({ apiKey });
+  yield { type: "response.completed", response: { output } };
+}
+
+/** A minimal object shaped like the OpenAI SDK client, backed by Vertex/Gemini, for use anywhere `createAiClient()` is called. */
+export function createVertexAiClient(geminiApiKey: string | null = null, serviceAccountJson: string | null = null) {
+  const genAI = createGenAI(geminiApiKey, serviceAccountJson);
+  return {
+    responses: {
+      create(params: CreateParams, options?: CreateOptions) {
+        if (params.stream) return Promise.resolve(createStreaming(genAI, params, options));
+        return createNonStreaming(genAI, params);
+      },
+    },
+  };
 }

@@ -1,12 +1,13 @@
-import { webScrapeSource } from "./sources/web-scrape";
+import { directoryAgentSource } from "./sources/directory-agent";
 import type { ProspectDataSource } from "./types";
 
 /**
- * Enabled prospecting data sources, in priority order. `web_scrape` is the
- * only one for MVP; a future paid enrichment provider (Clearbit/Apollo-style)
- * registers here with zero changes to callers — see the pluggable
- * `ProspectDataSource` interface in ./types.ts.
+ * `directory_agent` is the only enabled data source: an autonomous
+ * multi-step scraper over public business directories + company sites (see
+ * src/lib/prospecting/agent/). The full run path is the agent loop invoked
+ * by runProspecting; this registry's single consumer is the daily canonical
+ * index refresh job (refreshProspectIndex).
  */
 export function getEnabledDataSources(): ProspectDataSource[] {
-  return [webScrapeSource];
+  return [directoryAgentSource];
 }

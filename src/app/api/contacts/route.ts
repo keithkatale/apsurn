@@ -9,10 +9,23 @@ const requestSchema = z
     contactIds: z.array(z.string().uuid()).min(1).max(500),
     lead_status: z.enum(["new", "qualified", "contacted", "replied", "won", "lost"]).optional(),
     archived: z.boolean().optional(),
+    full_name: z.string().trim().max(200).nullable().optional(),
+    title: z.string().trim().max(200).nullable().optional(),
+    email: z.string().trim().max(200).nullable().optional(),
+    phone: z.string().trim().max(60).nullable().optional(),
+    linkedin_url: z.string().trim().max(400).nullable().optional(),
   })
-  .refine((body) => body.lead_status !== undefined || body.archived !== undefined, {
-    message: "At least one of lead_status or archived is required",
-  });
+  .refine(
+    (body) =>
+      body.lead_status !== undefined ||
+      body.archived !== undefined ||
+      body.full_name !== undefined ||
+      body.title !== undefined ||
+      body.email !== undefined ||
+      body.phone !== undefined ||
+      body.linkedin_url !== undefined,
+    { message: "At least one field to update is required" }
+  );
 
 export async function PATCH(request: NextRequest) {
   let userId: string;
@@ -32,6 +45,11 @@ export async function PATCH(request: NextRequest) {
   const result = await updateContacts(db, userId, parsed.data.contactIds, {
     leadStatus: parsed.data.lead_status,
     archived: parsed.data.archived,
+    fullName: parsed.data.full_name,
+    title: parsed.data.title,
+    email: parsed.data.email,
+    phone: parsed.data.phone,
+    linkedinUrl: parsed.data.linkedin_url,
   });
 
   return NextResponse.json(result);

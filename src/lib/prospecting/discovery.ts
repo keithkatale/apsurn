@@ -1,4 +1,4 @@
-import { createGenAIClient, getAiModel } from "@/lib/ai/vertex";
+import { getAiClient } from "@/lib/ai/openai";
 import type { ProspectCriteria } from "./types";
 import { safeAiErrorMessage } from "@/lib/ai/errors";
 
@@ -131,19 +131,15 @@ Exclude social media platforms, directories, review sites, marketplaces, and agg
 Return ONLY a JSON array (no markdown fences, no commentary) of objects: [{ "name": string, "domain": string, "evidenceUrl": string }]. "domain" must be the company's own root domain and "evidenceUrl" must be a public search result supporting the match. If you can't find enough, return fewer — never invent companies.`;
 
     try {
-      const ai = createGenAIClient();
-      const response = await ai.models.generateContent({
-        model: getAiModel(),
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        config: {
-          temperature: 0.4,
-          maxOutputTokens: 2048,
-          tools: [{ googleSearch: {} }],
-          thinkingConfig: { thinkingBudget: 0 },
-        },
+      const { ai, model } = await getAiClient();
+      const response = await ai.responses.create({
+        model,
+        input: prompt,
+        max_output_tokens: 2048,
+        tools: [{ type: "web_search" }],
       });
 
-      const parsed = extractJsonArray(response.text ?? "[]");
+      const parsed = extractJsonArray(response.output_text ?? "[]");
       if (!Array.isArray(parsed)) continue;
 
       for (const item of parsed) {

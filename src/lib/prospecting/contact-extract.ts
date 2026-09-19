@@ -1,6 +1,6 @@
 import * as cheerio from "cheerio";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
-import { createGenAIClient, getAiModel } from "@/lib/ai/vertex";
+import { getAiClient } from "@/lib/ai/openai";
 import type { SiteSnapshot } from "@/lib/scraper/crawl";
 import type { ContactEvidence, ExtractedPerson } from "./types";
 import { safeAiErrorMessage } from "@/lib/ai/errors";
@@ -49,8 +49,9 @@ Return only JSON: [{"fullName":string,"title":string|null,"location":string|null
 Every person must be named in a supplied source. Contact values must appear verbatim in that same source; otherwise use null. Never infer or invent people or contact values. Maximum 12.\n${pages}`;
   let records: unknown[] = [];
   try {
-    const response = await createGenAIClient().models.generateContent({ model: getAiModel(), contents: [{ role: "user", parts: [{ text: prompt }] }], config: { temperature: 0.1, maxOutputTokens: 3072, responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } } });
-    records = jsonArray(response.text ?? "[]");
+    const { ai, model } = await getAiClient();
+    const response = await ai.responses.create({ model, input: prompt, max_output_tokens: 3072 });
+    records = jsonArray(response.output_text ?? "[]");
   } catch (error) { console.error(`[prospecting] contact extraction failed: ${safeAiErrorMessage(error)}`); }
   const allowedUrls = new Set(snapshot.pages.map((p) => p.url));
   return records.flatMap((raw): ExtractedPerson[] => {

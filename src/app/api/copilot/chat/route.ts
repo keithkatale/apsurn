@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import type { Content, FunctionCall } from "@google/genai";
-import { createPartFromFunctionResponse } from "@google/genai";
+import type { ResponseFunctionToolCall, ResponseInputItem, ResponseOutputItem } from "openai/resources/responses/responses";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
-import { createGenAIClient, getAiModel } from "@/lib/ai/vertex";
+import { getAiClient, toFunctionTool } from "@/lib/ai/openai";
 import { COPILOT_SYSTEM_INSTRUCTION, COPILOT_TOOL_DECLARATIONS, getAccountSnapshot, runCopilotTool } from "@/lib/copilot/tools";
-import { readStreamChunk } from "@/lib/copilot/stream-parts";
 import { generateConversationTitle } from "@/lib/copilot/title";
 
 export const runtime = "nodejs";
@@ -16,7 +14,7 @@ export const maxDuration = 120;
 const MAX_TOOL_ROUNDS = 6;
 
 const requestSchema = z.object({
-  conversationId: z.string().uuid().optional(),
+  conversationId: z.string().uuid().nullable().optional(),
   message: z.string().trim().min(1).max(4000),
 });
 
@@ -28,26 +26,20 @@ interface MessageRow {
   metadata: Record<string, unknown>;
 }
 
-function buildGeminiContents(rows: MessageRow[]): Content[] {
-  const contents: Content[] = [];
+function buildResponsesInput(rows: MessageRow[]): ResponseInputItem[] {
+  const input: ResponseInputItem[] = [];
   for (const row of rows) {
     if (row.role === "user") {
-      contents.push({ role: "user", parts: [{ text: row.content }] });
+      input.push({ role: "user", content: row.content });
     } else if (row.role === "model") {
-      if (row.content) contents.push({ role: "model", parts: [{ text: row.content }] });
+      if (row.content) input.push({ role: "assistant", content: row.content });
     } else if (row.role === "tool" && row.tool_name && row.tool_call_id) {
       const args = (row.metadata?.args as Record<string, unknown>) ?? {};
-      let result: Record<string, unknown> = {};
-      try {
-        result = JSON.parse(row.content);
-      } catch {
-        result = { raw: row.content };
-      }
-      contents.push({ role: "model", parts: [{ functionCall: { id: row.tool_call_id, name: row.tool_name, args } }] });
-      contents.push({ role: "user", parts: [createPartFromFunctionResponse(row.tool_call_id, row.tool_name, result)] });
+      input.push({ type: "function_call", call_id: row.tool_call_id, name: row.tool_name, arguments: JSON.stringify(args) });
+      input.push({ type: "function_call_output", call_id: row.tool_call_id, output: row.content });
     }
   }
-  return contents;
+  return input;
 }
 
 function sseEncode(payload: Record<string, unknown>): Uint8Array {
@@ -102,7 +94,7 @@ export async function POST(request: NextRequest) {
     .order("created_at", { ascending: true })
     .limit(120);
 
-  const contents = buildGeminiContents((historyRows ?? []) as MessageRow[]);
+  const input = buildResponsesInput((historyRows ?? []) as MessageRow[]);
   const conversationIdFinal: string = conversationId as string;
 
   const stream = new ReadableStream({
@@ -115,8 +107,8 @@ export async function POST(request: NextRequest) {
         if (isFirstTurn) {
           const snapshot = await getAccountSnapshot(db, userId);
           const briefingId = "briefing";
-          contents.push({ role: "model", parts: [{ functionCall: { id: briefingId, name: "get_account_snapshot", args: {} } }] });
-          contents.push({ role: "user", parts: [createPartFromFunctionResponse(briefingId, "get_account_snapshot", snapshot as Record<string, unknown>)] });
+          input.push({ type: "function_call", call_id: briefingId, name: "get_account_snapshot", arguments: "{}" });
+          input.push({ type: "function_call_output", call_id: briefingId, output: JSON.stringify(snapshot) });
           await db.from("copilot_messages").insert({
             conversation_id: conversationIdFinal,
             role: "tool",
@@ -127,48 +119,44 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        const ai = createGenAIClient();
-        const model = getAiModel();
+        const { ai, model } = await getAiClient();
+        const tools = COPILOT_TOOL_DECLARATIONS.map(toFunctionTool);
         let finalText = "";
 
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
           send({ type: "status", status: "thinking" });
 
-          const result = await ai.models.generateContentStream({
+          let roundText = "";
+          let outputItems: ResponseOutputItem[] = [];
+
+          const responseStream = await ai.responses.create({
             model,
-            contents,
-            config: {
-              systemInstruction: COPILOT_SYSTEM_INSTRUCTION,
-              tools: [{ functionDeclarations: COPILOT_TOOL_DECLARATIONS }],
-            },
+            input,
+            instructions: COPILOT_SYSTEM_INSTRUCTION,
+            tools,
+            stream: true,
           });
 
-          let roundText = "";
-          const collectedCalls: FunctionCall[] = [];
-          let cleared = false;
-
-          for await (const chunk of result) {
-            const { text, functionCalls } = readStreamChunk(chunk);
-            if (functionCalls.length > 0) {
-              if (roundText && !cleared) {
-                send({ type: "clear_assistant" });
-                cleared = true;
-                roundText = "";
-              }
-              collectedCalls.push(...functionCalls);
-            } else if (text) {
-              roundText += text;
-              send({ type: "token", text });
+          for await (const event of responseStream) {
+            if (event.type === "response.output_text.delta") {
+              roundText += event.delta;
+              send({ type: "token", text: event.delta });
+            } else if (event.type === "response.completed") {
+              outputItems = event.response.output;
+            } else if (event.type === "error") {
+              throw new Error(event.message);
             }
           }
 
-          if (collectedCalls.length === 0) {
+          for (const item of outputItems) input.push(item as ResponseInputItem);
+
+          const calls = outputItems.filter((item): item is ResponseFunctionToolCall => item.type === "function_call");
+          if (calls.length === 0) {
             finalText = roundText;
             break;
           }
+          if (roundText) send({ type: "clear_assistant" });
 
-          const callParts: Content["parts"] = [];
-          const responseParts: Content["parts"] = [];
           const toolRows: Array<{
             conversation_id: string;
             role: "tool";
@@ -178,11 +166,9 @@ export async function POST(request: NextRequest) {
             metadata: { args: Record<string, unknown> };
           }> = [];
 
-          for (let i = 0; i < collectedCalls.length; i++) {
-            const call = collectedCalls[i];
-            const toolName = call.name ?? "unknown_tool";
-            const callId = call.id ?? `${toolName}-${round}-${i}`;
-            const args = call.args ?? {};
+          for (const call of calls) {
+            const toolName = call.name;
+            const args = JSON.parse(call.arguments || "{}") as Record<string, unknown>;
 
             send({ type: "tool_start", name: toolName, args });
             let resultData: unknown;
@@ -193,20 +179,17 @@ export async function POST(request: NextRequest) {
             }
             send({ type: "tool_end", name: toolName, result: resultData });
 
-            callParts!.push({ functionCall: { id: callId, name: toolName, args } });
-            responseParts!.push(createPartFromFunctionResponse(callId, toolName, resultData as Record<string, unknown>));
+            input.push({ type: "function_call_output", call_id: call.call_id, output: JSON.stringify(resultData) });
             toolRows.push({
               conversation_id: conversationIdFinal,
               role: "tool",
               tool_name: toolName,
-              tool_call_id: callId,
+              tool_call_id: call.call_id,
               content: JSON.stringify(resultData).slice(0, 20000),
               metadata: { args },
             });
           }
 
-          contents.push({ role: "model", parts: callParts });
-          contents.push({ role: "user", parts: responseParts });
           if (toolRows.length > 0) await db.from("copilot_messages").insert(toolRows);
         }
 

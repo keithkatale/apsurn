@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUserId } from "@/lib/auth/session";
 import { CreateSequenceModal } from "@/components/sequences/CreateSequenceModal";
+import { RunSendPassButton } from "@/components/sequences/RunSendPassButton";
 
 interface EnrolledContact {
   id: string;
@@ -21,22 +22,27 @@ export default async function SequencesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex items-center justify-between">
+      <header className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-neutral-900">Sequences</h1>
           <p className="text-neutral-600">
-            Multi-step email outreach with scheduled follow-ups.
+            Multi-step email outreach with scheduled follow-ups. Step 1 can be AI-drafted from a
+            contact&apos;s qualify reason; send passes run on a schedule or on demand — never
+            automatically after prospecting.
           </p>
         </div>
-        <CreateSequenceModal />
+        <div className="flex items-center gap-2">
+          <RunSendPassButton />
+          <CreateSequenceModal />
+        </div>
       </header>
 
       {!sequences || sequences.length === 0 ? (
         <div className="rounded-lg border border-dashed border-neutral-300 bg-white p-10 text-center">
           <p className="font-medium text-neutral-900">No sequences yet</p>
           <p className="mt-1 text-sm text-neutral-500">
-            Create a sequence, then enroll contacts from the Prospects page. Sending is not wired
-            up yet (Gmail isn&apos;t connected), but enrollments and step order are tracked here.
+            Create a sequence (step 1 body can be {"{{ai}}"}), enroll contacts from Prospects, connect
+            a Gmail inbox, set the sequence active, then run a send pass.
           </p>
         </div>
       ) : (

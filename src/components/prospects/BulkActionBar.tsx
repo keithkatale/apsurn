@@ -60,17 +60,18 @@ export function BulkActionBar({
       { key: "phone", header: "Phone", value: (r) => r.contact.phone ?? "" },
       { key: "linkedin", header: "LinkedIn", value: (r) => r.contact.linkedin_url ?? "" },
       { key: "lead_status", header: "Lead Status", value: (r) => r.contact.lead_status },
+      { key: "qualify_reason", header: "Why Fit", value: (r) => r.contact.qualify_reason ?? "" },
       { key: "company_status", header: "Company Status", value: (r) => r.company?.status ?? "" },
     ]);
     downloadCsv(`contacts-${new Date().toISOString().slice(0, 10)}.csv`, csv);
   }
 
   const btn =
-    "inline-flex h-7 items-center gap-1.5 rounded border border-neutral-200 bg-white px-2.5 text-[12px] font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50";
+    "inline-flex h-9 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50";
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 border border-neutral-200 bg-neutral-50 px-2 py-1.5">
-      <span className="mr-1 text-[12px] font-medium text-neutral-600">
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="mr-1 text-xs font-medium text-neutral-500">
         {selectedContactIds.length} selected
       </span>
 

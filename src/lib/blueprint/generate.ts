@@ -1,4 +1,4 @@
-import { createGenAIClient, getAiModel } from "@/lib/ai/vertex";
+import { getAiClient } from "@/lib/ai/openai";
 import type { SiteSnapshot } from "@/lib/scraper/crawl";
 import { findCompetitors } from "./competitors";
 import { sanitizeBlueprint } from "./sanitize";
@@ -96,29 +96,21 @@ function fallbackBlueprint(snapshot: SiteSnapshot): CompanyBlueprint {
 }
 
 export async function generateCompanyBlueprint(snapshot: SiteSnapshot): Promise<CompanyBlueprint> {
-  const model = getAiModel();
   try {
-    const ai = createGenAIClient();
+    const { ai, model } = await getAiClient();
     const prompt = buildPrompt(snapshot);
     const response = await withTimeout(
-      ai.models.generateContent({
+      ai.responses.create({
         model,
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        config: {
-          temperature: 0.3,
-          maxOutputTokens: 4096,
-          responseMimeType: "application/json",
-          // gemini-2.5-flash spends output-token budget on internal
-          // "thinking" by default; this is a straightforward extraction
-          // task, so disable it to leave the full budget for the JSON.
-          thinkingConfig: { thinkingBudget: 0 },
-        },
+        input: prompt,
+        max_output_tokens: 4096,
+        text: { format: { type: "json_object" } },
       }),
       MODEL_TIMEOUT_MS,
       "Blueprint generation"
     );
 
-    const text = response.text ?? "";
+    const text = response.output_text ?? "";
     const parsed = extractJsonObject(text);
     const blueprint = sanitizeBlueprint(parsed, { confidence: "model", modelUsed: model });
 

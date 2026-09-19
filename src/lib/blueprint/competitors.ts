@@ -1,4 +1,4 @@
-import { createGenAIClient, getAiModel } from "@/lib/ai/vertex";
+import { getAiClient } from "@/lib/ai/openai";
 import { safeAiErrorMessage } from "@/lib/ai/errors";
 
 function extractJsonArray(text: string): unknown {
@@ -45,19 +45,15 @@ Industries: ${industries.join(", ") || "unknown"}
 Return ONLY a JSON array of competitor company names (max 8), no markdown fences, no commentary. Example: ["Competitor One", "Competitor Two"]. If you can't find any real competitors, return [].`;
 
   try {
-    const ai = createGenAIClient();
-    const response = await ai.models.generateContent({
-      model: getAiModel(),
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      config: {
-        temperature: 0.2,
-        maxOutputTokens: 1024,
-        tools: [{ googleSearch: {} }],
-        thinkingConfig: { thinkingBudget: 0 },
-      },
+    const { ai, model } = await getAiClient();
+    const response = await ai.responses.create({
+      model,
+      input: prompt,
+      max_output_tokens: 1024,
+      tools: [{ type: "web_search" }],
     });
 
-    const parsed = extractJsonArray(response.text ?? "[]");
+    const parsed = extractJsonArray(response.output_text ?? "[]");
     if (!Array.isArray(parsed)) return [];
     return parsed
       .filter((item): item is string => typeof item === "string")

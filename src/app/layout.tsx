@@ -18,8 +18,11 @@ export const metadata: Metadata = {
   title: "apsurn — AI SDR & Autonomous Prospecting Engine",
   description: "Outbound sales on autopilot. Turn your website into a 24/7 autonomous prospecting machine.",
   icons: {
-    icon: "/branding/apsurn-gtm.png",
-    apple: "/branding/apsurn-gtm.png",
+    icon: [
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-48.png", sizes: "48x48", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
 };
 

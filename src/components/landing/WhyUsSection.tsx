@@ -3,6 +3,29 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 
+const FEATURES = [
+  {
+    icon: "/landing/feat-ai-forecasting.svg",
+    title: "AI driven forecasting",
+    description: "See AI-powered revenue and risk predictions in seconds.",
+  },
+  {
+    icon: "/landing/feat-dashboard.svg",
+    title: "Unified dashboard",
+    description: "Track key metrics in one clean, customizable view.",
+  },
+  {
+    icon: "/landing/feat-reporting.svg",
+    title: "Automated reporting",
+    description: "Create clear reports instantly with no manual effort.",
+  },
+  {
+    icon: "/landing/feat-risk.svg",
+    title: "Risk detection",
+    description: "Spot unusual patterns and potential risks right away.",
+  },
+];
+
 const TABS = [
   {
     id: "benefit-1",
@@ -64,6 +87,45 @@ export function WhyUsSection() {
   return (
     <section id="why-us" className="bg-white py-16 sm:py-28">
       <div className="mx-auto max-w-[1280px] px-4 sm:px-8">
+        <div className="mb-16 sm:mb-20 lg:mb-28">
+          <div className="hidden md:block w-full rounded-[16px] bg-white p-6 shadow-[0px_4px_20px_0px_rgba(0,0,0,0.04)] border border-[#EEEEEE]">
+            <div className="grid grid-cols-4 divide-x divide-[#EEEEEE]">
+              {FEATURES.map((feature) => (
+                <div key={feature.title} className="flex flex-col gap-5 px-5">
+                  <Image src={feature.icon} alt="" width={24} height={24} className="size-6" />
+                  <div className="flex flex-col gap-1.5">
+                    <h3 className="text-[20px] font-semibold text-black tracking-[-0.8px] font-heading leading-snug">
+                      {feature.title}
+                    </h3>
+                    <p className="text-[16px] text-[#605F5F] tracking-[-0.64px] font-sans leading-[1.25]">
+                      {feature.description}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="md:hidden flex flex-col gap-3 w-full">
+            {FEATURES.map((feature) => (
+              <div
+                key={feature.title}
+                className="bg-[#FAFAFA] rounded-[12px] p-4 flex flex-col gap-3 border border-neutral-100"
+              >
+                <Image src={feature.icon} alt="" width={24} height={24} className="size-6" />
+                <div className="flex flex-col gap-1">
+                  <h3 className="text-[18px] font-semibold text-black tracking-[-0.72px] font-heading leading-[23.4px]">
+                    {feature.title}
+                  </h3>
+                  <p className="text-[16px] text-[#605F5F] tracking-[-0.64px] font-sans leading-[19.2px]">
+                    {feature.description}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12 lg:gap-14">
           <div className="flex flex-col gap-6 sm:gap-8 lg:sticky lg:top-32 lg:col-span-5 lg:h-[calc(100vh-8rem)] lg:justify-center">
             <div className="flex flex-col gap-3 sm:gap-4">

@@ -14,6 +14,7 @@ export interface ContactRow {
   evidence: Array<{ url: string; observedAt: string }>;
   lead_status: LeadStatus;
   archived_at: string | null;
+  qualify_reason: string | null;
 }
 
 export interface ProspectRow {
@@ -23,7 +24,11 @@ export interface ProspectRow {
   industry: string | null;
   location: string | null;
   icp_fit_score: number | null;
+  data_confidence: number | null;
   status: string;
+  qualify_reason: string | null;
+  evidence: Array<{ url: string; excerpt?: string; observedAt: string }>;
+  recommended_contact_id: string | null;
   archived_at: string | null;
   contacts: ContactRow[];
 }

@@ -36,9 +36,23 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Local Google ADC credentials copied into the project (NEVER commit)
+/.gcp/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
 
 # Landing videos hosted in Supabase Storage
 /public/landing-video/
+
+# Vendor GPL reference trees — keep source, skip heavy demo/assets if present
+/vendor/**/node_modules/
+/vendor/**/.venv/
+/vendor/**/__pycache__/
+/vendor/**/*.pyc
+/vendor/**/.git/
+/vendor/**/dist/
+/vendor/**/build/
+/vendor/**/*.sqlite3
+/vendor/**/media/

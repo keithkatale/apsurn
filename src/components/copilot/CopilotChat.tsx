@@ -12,7 +12,7 @@ function uid(): string {
   return `local-${Date.now()}-${uidCounter}`;
 }
 
-export function CopilotChat() {
+export function CopilotChat({ buildContext }: { buildContext?: () => string } = {}) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [activeTools, setActiveTools] = useState<ActiveTool[]>([]);
@@ -35,10 +35,12 @@ export function CopilotChat() {
     setTyping(true);
 
     try {
+      const context = buildContext?.();
+      const outgoing = context ? `Context: ${context}\n\n---\n\n${message}` : message;
       const res = await fetch("/api/copilot/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId: activeId, message }),
+        body: JSON.stringify({ conversationId: activeId, message: outgoing }),
       });
       if (!res.ok || !res.body) {
         const data = await res.json().catch(() => ({}));
