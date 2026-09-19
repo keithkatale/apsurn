@@ -17,6 +17,9 @@ FROM mcr.microsoft.com/playwright:v1.56.0-jammy AS build
 WORKDIR /app
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 ENV NEXT_TELEMETRY_DISABLED=1
+# Only set here — Vercel's own build must NOT get standalone output (see
+# next.config.ts comment).
+ENV NEXT_STANDALONE_BUILD=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
