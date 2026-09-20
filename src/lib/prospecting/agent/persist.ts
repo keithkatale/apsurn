@@ -1,46 +1,14 @@
 /**
- * Durable persistence for the scraping agent.
+ * Durable persistence for the prospecting pipeline.
  *
- * Writes the same rows the generic pipeline does (canonical index +
- * per-list prospect_companies/contacts), plus a raw scrape_snapshots copy of
- * every page read, so a lead can be re-derived without re-fetching the source.
+ * Writes the same rows the generic pipeline does: the canonical index plus
+ * per-list prospect_companies/contacts.
  */
 
-import type { FetchedPage } from "@/lib/scraper/fetch-page";
 import { isSuppressed, saveCanonicalCompany, saveCanonicalContact } from "../pipeline";
 import type { CandidateCompany, CandidateContact } from "../types";
 import type { AgentRunContext } from "./context";
 import { rememberDirectory } from "./directories";
-
-type PageKind = "directory_listing" | "company_detail" | "company_site" | "search" | "unknown";
-
-/** Store our own raw copy of a fetched page (best-effort; never throws). */
-export async function saveSnapshot(
-  ctx: AgentRunContext,
-  page: FetchedPage,
-  pageKind: PageKind = "unknown"
-): Promise<void> {
-  try {
-    await ctx.db.from("scrape_snapshots").upsert(
-      {
-        run_id: ctx.runId,
-        url: page.url,
-        final_url: page.finalUrl,
-        http_status: page.status,
-        content_hash: page.contentHash,
-        title: page.title.slice(0, 500),
-        text: page.text.slice(0, 200_000),
-        html: page.html.slice(0, 1_000_000),
-        rendered: page.rendered,
-        page_kind: pageKind,
-        fetched_at: new Date().toISOString(),
-      },
-      { onConflict: "run_id,url" }
-    );
-  } catch (error) {
-    console.error("[agent] snapshot save failed", page.url, error instanceof Error ? error.message : error);
-  }
-}
 
 export interface SaveLeadResult {
   saved: boolean;

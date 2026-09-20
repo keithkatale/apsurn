@@ -300,6 +300,83 @@ export async function findCompanyLeads(opts: {
   });
 }
 
+export interface FoundCompany {
+  name: string;
+  website: string | null;
+  location: string | null;
+  size: number | null;
+  industry: string | null;
+}
+
+/**
+ * Step 1 of the two-step deterministic pipeline: which companies match the
+ * ICP, with no assumption yet about who works there. Deliberately does not
+ * filter by job title — that is Step 2's job (findPeopleAtCompany, scoped to
+ * one specific company at a time), so a company is not excluded here just
+ * because Icypeas' index happens to have no title-matched employee for it.
+ *
+ * Under the hood this still queries find-people (the only company-level
+ * search Icypeas exposes), then keeps only the company fields off each row
+ * and discards the person — whoever they are is incidental, not a match.
+ */
+export async function findCompaniesByIcp(opts: {
+  industries: string[];
+  geographies: string[];
+  minHeadcount?: number;
+  maxHeadcount?: number;
+  limit?: number;
+}): Promise<FoundCompany[] | null> {
+  const apiKey = process.env.ICYPEAS_API_KEY?.trim();
+  if (!apiKey) return null;
+
+  const query: Record<string, unknown> = {};
+  if (opts.industries.length > 0) query["currentCompany.industry"] = { include: opts.industries.slice(0, 200) };
+  if (opts.geographies.length > 0) query["currentCompany.location"] = { include: opts.geographies.slice(0, 200) };
+  if (opts.minHeadcount !== undefined || opts.maxHeadcount !== undefined) {
+    const headcount: Record<string, number> = {};
+    if (opts.minHeadcount !== undefined) headcount[">="] = Math.max(0, Math.floor(opts.minHeadcount));
+    if (opts.maxHeadcount !== undefined) headcount["<="] = Math.max(0, Math.floor(opts.maxHeadcount));
+    query["currentCompany.headcount"] = headcount;
+  }
+  // An unconstrained query would return an arbitrary slice of the entire
+  // database rather than anything resembling "matches this ICP".
+  if (Object.keys(query).length === 0) return [];
+
+  // Oversampled relative to the requested limit: many rows will share a
+  // company (multiple employees indexed at the same place), so the raw page
+  // needs to be larger than the number of distinct companies wanted.
+  const limit = Math.min(200, Math.max(1, opts.limit ?? 25));
+  const response = await post<{ success?: boolean; leads?: CompanySearchLead[] }>(
+    "/find-people",
+    { query, pagination: { size: Math.min(200, limit * 5) } },
+    apiKey
+  );
+  if (!response?.success) {
+    console.warn("[icypeas] find-companies-by-icp query failed", JSON.stringify(query).slice(0, 300));
+    return null;
+  }
+
+  const seen = new Set<string>();
+  const out: FoundCompany[] = [];
+  for (const lead of response.leads ?? []) {
+    const name = (lead.lastCompanyName ?? "").trim();
+    if (!name) continue;
+    const website = lead.lastCompanyWebsite?.trim() || null;
+    const dedupeKey = (website || name).toLowerCase();
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    out.push({
+      name,
+      website,
+      location: lead.lastCompanyAddress?.trim() || null,
+      size: typeof lead.lastCompanySize === "number" ? lead.lastCompanySize : null,
+      industry: lead.lastCompanyIndustry?.trim() || null,
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
 /**
  * How many people the provider knows at a domain, matching the titles.
  *

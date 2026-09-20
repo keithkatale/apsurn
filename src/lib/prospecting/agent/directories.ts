@@ -1,12 +1,11 @@
 /**
- * Public directory registry for the scraping agent.
+ * Host exclusions and the directory_sources memory table.
  *
- * The agent does not rely on per-site CSS selectors — extraction is LLM-driven,
- * so any public listing works. This module just gives the agent good starting
- * points: a small seed of scrape-friendly directory types, plus a helper to
- * remember directories that produced leads (directory_sources table).
- *
- * Social networks and ToS-hostile scrapers are explicitly excluded.
+ * Left over from the LLM-driven directory scraper, which used to look up and
+ * remember which directory sites had produced leads for similar ICPs. The
+ * deterministic pipeline (agent/run.ts) doesn't scrape directories at all —
+ * only `isExcludedHost` and `rememberDirectory` are still used, by
+ * shared.ts's domain normalization and persist.ts's bookkeeping respectively.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -37,58 +36,12 @@ export function isExcludedHost(host: string): boolean {
   return EXCLUDED_DIRECTORY_HOSTS.some((bad) => h === bad || h.endsWith(`.${bad}`));
 }
 
-/**
- * Seed search phrases that tend to surface public member lists / directories
- * for a given ICP. The agent runs these (or its own variants) through
- * web_search, then opens the listing pages.
- */
-export function seedDirectoryQueries(criteria: ProspectCriteria): string[] {
-  const industries = criteria.industries.length ? criteria.industries : ["B2B"];
-  const geos = criteria.geographies.length ? criteria.geographies : [""];
-  const queries: string[] = [];
-
-  for (const industry of industries.slice(0, 3)) {
-    for (const geo of geos.slice(0, 2)) {
-      const where = geo ? ` in ${geo}` : "";
-      queries.push(`${industry} companies directory${where}`);
-      queries.push(`${industry} industry association member list${where}`);
-      queries.push(`chamber of commerce ${industry} members${where}`);
-      queries.push(`list of ${industry} companies${where}`);
-    }
-  }
-
-  return [...new Set(queries)].slice(0, 12);
-}
-
 /** ICP tags used to remember/reuse productive directories. */
 export function icpTags(criteria: ProspectCriteria): string[] {
   return [...criteria.industries, ...criteria.geographies]
     .map((t) => t.trim().toLowerCase())
     .filter(Boolean)
     .slice(0, 20);
-}
-
-/** Previously productive directories for this ICP (best-effort; never throws). */
-export async function knownDirectories(
-  db: SupabaseClient,
-  criteria: ProspectCriteria,
-  limit = 10
-): Promise<Array<{ host: string; exampleUrl: string | null }>> {
-  try {
-    const tags = icpTags(criteria);
-    let q = db
-      .from("directory_sources")
-      .select("host, example_url, yield_count")
-      .order("yield_count", { ascending: false })
-      .limit(limit);
-    if (tags.length) q = q.overlaps("icp_tags", tags);
-    const { data } = await q;
-    return (data ?? [])
-      .filter((d) => !isExcludedHost(d.host))
-      .map((d) => ({ host: d.host, exampleUrl: d.example_url }));
-  } catch {
-    return [];
-  }
 }
 
 /** Record that a directory host produced leads, for future reuse. */
