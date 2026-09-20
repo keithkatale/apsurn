@@ -12,6 +12,7 @@ import type { FetchedPage } from "@/lib/scraper/fetch-page";
 import { extractPeople } from "../contact-extract";
 import { emailCandidates, learnEmailPattern, type Pattern } from "../email-pattern";
 import { verifyEmail } from "../email-verifier";
+import { findEmail } from "../email-finder";
 import type { CandidateContact, ContactStatus, ExtractedPerson, ProspectCriteria } from "../types";
 import { isExcludedHost } from "./directories";
 
@@ -232,6 +233,35 @@ export async function resolveEmail(
       return { email: person.email, origin: "public", status: "accept_all", checks: v.checks };
     }
   }
+
+  // A discovery provider, when one is configured, is tried before guessing.
+  // It returns an address someone actually observed, where the loop below
+  // only produces hypotheses — and each hypothesis costs a verifier round
+  // trip to disprove. Misses cost nothing, so there is no reason to guess
+  // first. Null covers every failure mode, including "genuinely not found".
+  const found = await findEmail(person.fullName, domain);
+  if (found) {
+    if (found.status === "verified" || found.status === "accept_all") {
+      return {
+        email: found.email,
+        origin: "public",
+        status: found.status,
+        checks: { source: found.provider, certainty: found.certainty },
+      };
+    }
+    // Returned with low confidence: let our own verifier settle it rather
+    // than trusting or discarding the provider's grade.
+    const v = await verifyEmail(found.email);
+    if (v.status === "verified" || v.status === "accept_all") {
+      return {
+        email: found.email,
+        origin: "public",
+        status: v.status,
+        checks: { ...v.checks, source: found.provider, certainty: found.certainty },
+      };
+    }
+  }
+
   for (const candidate of emailCandidates(person.fullName, domain, pattern)) {
     if (candidate === person.email) continue;
     const v = await verifyEmail(candidate);
