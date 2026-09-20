@@ -67,13 +67,26 @@ function createGenAI(geminiApiKey: string | null, serviceAccountJson: string | n
 
   const rawCredentials = serviceAccountJson || process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim();
   if (rawCredentials) {
-    const credentials = parseServiceAccountJson(rawCredentials);
-    return new GoogleGenAI({ vertexai: true, project, location, googleAuthOptions: { credentials } });
+    try {
+      const credentials = parseServiceAccountJson(rawCredentials);
+      return new GoogleGenAI({ vertexai: true, project, location, googleAuthOptions: { credentials } });
+    } catch (error) {
+      // An explicitly-provided key that doesn't parse is a misconfiguration
+      // worth shouting about — but it must not be fatal, because ADC below
+      // is the correct path on Cloud Run (attached service account) and is
+      // exactly how the reference "quant" project authenticates. Hard-
+      // throwing here meant one bad env var took down every AI call.
+      console.error(
+        "[ai/vertex] GOOGLE_SERVICE_ACCOUNT_JSON / stored key is set but unusable — ignoring it and trying Application Default Credentials instead:",
+        error instanceof Error ? error.message : error
+      );
+    }
   }
 
-  // Falls back to ADC — only reliable if the compute environment has a
-  // service account attached (e.g. Cloud Run); a personal `gcloud auth
-  // application-default login` will eventually hit the RAPT failure above.
+  // Application Default Credentials. On Cloud Run this resolves the service
+  // account attached to the service (no key file, so no conflict with the
+  // org policy that blocks key creation). Locally it uses `gcloud auth
+  // application-default login`, which can go stale and need re-running.
   return new GoogleGenAI({ vertexai: true, project, location });
 }
 
