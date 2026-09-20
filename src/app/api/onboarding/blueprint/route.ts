@@ -55,6 +55,12 @@ export async function POST(request: NextRequest) {
           confidence: blueprint.confidence,
           model_used: blueprint.modelUsed,
           generated_at: new Date().toISOString(),
+          // Regenerating replaces every field above, so a previous approval no
+          // longer refers to anything the user actually read. Clearing it sends
+          // them back through review rather than letting freshly-generated,
+          // unreviewed targeting silently drive prospecting runs.
+          approved_at: null,
+          edited_by_user: false,
         },
         { onConflict: "company_id" }
       )

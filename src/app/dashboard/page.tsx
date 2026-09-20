@@ -92,9 +92,17 @@ export default async function DashboardOverviewPage() {
       </section>
 
       <section className="rounded-lg border border-neutral-200 bg-white p-6">
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-neutral-500">
-          Blueprint
-        </h2>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">
+            Blueprint
+          </h2>
+          {/* Second entry point: this card is where the blueprint is actually
+              read, so "this is wrong, redo it" belongs here as well as in
+              Settings. */}
+          <Link href="/dashboard/settings" className="shrink-0 text-sm font-medium text-blue-700 hover:underline">
+            Rebuild
+          </Link>
+        </div>
         {!blueprint?.approved_at && (
           <p className="mb-4 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
             This blueprint hasn&apos;t been approved yet.{" "}
