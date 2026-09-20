@@ -12,6 +12,17 @@ export function safeAiErrorMessage(error: unknown): string {
     message?: unknown;
   } | null;
 
+  // Google's ADC failure message says nothing about what to actually fix,
+  // and it's the single most likely Vertex failure: no credential reachable
+  // in this environment.
+  if (typeof candidate?.message === "string" && /could not load the default credentials/i.test(candidate.message)) {
+    return (
+      "Vertex AI has no usable credentials in this environment. On Cloud Run, attach a service account with the " +
+      "'Vertex AI User' role to the service. Locally, run `gcloud auth application-default login`. " +
+      "Alternatively set GEMINI_API_KEY, or switch the provider at /admin."
+    );
+  }
+
   if (typeof candidate?.status === "number") {
     const type = typeof candidate.type === "string" ? candidate.type : null;
     const code = typeof candidate.code === "string" ? candidate.code : null;

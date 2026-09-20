@@ -86,7 +86,22 @@ export function Sidebar() {
           );
         })}
       </div>
-      <button className="mt-auto px-3 py-2 text-left text-sm text-neutral-500 hover:text-neutral-900" onClick={async () => { await createClient().auth.signOut(); router.replace("/login"); }}>Sign out</button>
+      <button
+        className="mt-auto px-3 py-2 text-left text-sm text-neutral-500 hover:text-neutral-900"
+        onClick={async () => {
+          // Always leave for /login, even if signOut throws (e.g. Supabase
+          // env vars missing from the build) — otherwise the button appears
+          // to do nothing at all.
+          try {
+            await createClient().auth.signOut();
+          } catch (error) {
+            console.error("[auth] sign out failed:", error);
+          }
+          router.replace("/login");
+        }}
+      >
+        Sign out
+      </button>
     </nav>
   );
 }

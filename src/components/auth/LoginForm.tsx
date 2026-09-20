@@ -19,23 +19,32 @@ export function LoginForm({ mode = "signin" }: { mode?: "signin" | "signup" }) {
   async function submit() {
     setBusy(true);
     setMessage(null);
-    const supabase = createClient();
-    const result =
-      mode === "signin"
-        ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({ email, password });
-    if (result.error) {
+    try {
+      const supabase = createClient();
+      const result =
+        mode === "signin"
+          ? await supabase.auth.signInWithPassword({ email, password })
+          : await supabase.auth.signUp({ email, password });
+      if (result.error) {
+        setBusy(false);
+        setMessage(result.error.message);
+        return;
+      }
+      if (result.data.session) {
+        setNavigationPending(true);
+        router.replace("/dashboard");
+        return;
+      }
       setBusy(false);
-      setMessage(result.error.message);
-      return;
+      setMessage("Check your email to confirm your account.");
+    } catch (error) {
+      // Without this, anything that throws before the awaits resolve (most
+      // notably createClient() when the NEXT_PUBLIC_SUPABASE_* vars weren't
+      // present at BUILD time and got inlined as undefined) left `busy`
+      // stuck true — the button span forever with no message shown.
+      setBusy(false);
+      setMessage(error instanceof Error ? error.message : "Could not sign in. Please try again.");
     }
-    if (result.data.session) {
-      setNavigationPending(true);
-      router.replace("/dashboard");
-      return;
-    }
-    setBusy(false);
-    setMessage("Check your email to confirm your account.");
   }
 
   return (
