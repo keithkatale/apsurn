@@ -153,14 +153,70 @@ async function tryWorkable(token: string): Promise<AtsBoard | null> {
   };
 }
 
+// Ordered by how reliably the token maps to the company that owns the domain.
 const PROVIDERS: Array<(token: string) => Promise<AtsBoard | null>> = [tryGreenhouse, tryAshby, tryLever, tryWorkable];
 
-/** Finds a company's public job board by probing candidate tokens. Null when it has none we can reach. */
-export async function findAtsBoard(domain: string): Promise<AtsBoard | null> {
+/** Comparable form of a company or board name: lowercase alphanumeric words, legal suffixes dropped. */
+function nameTokens(value: string): Set<string> {
+  return new Set(
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((word) => word && !/^(inc|llc|ltd|gmbh|corp|co|company|the|group|holdings|technologies|labs)$/.test(word))
+  );
+}
+
+/**
+ * Whether a board plausibly belongs to the company we are asking about.
+ *
+ * Tokens are guessed from the domain, and guesses collide: probing
+ * "rescale" on Workable returns a food-supply-chain company also called
+ * Rescale, not the rescale.com we meant. Without this check a collision
+ * silently attributes a stranger's open roles to the company being scored,
+ * which is worse than finding no board at all.
+ */
+function boardNameMatches(boardName: string | null, companyName: string | null | undefined): boolean {
+  if (!boardName || !companyName) return true; // Nothing to contradict.
+  const board = nameTokens(boardName);
+  const company = nameTokens(companyName);
+  if (board.size === 0 || company.size === 0) return true;
+
+  let shared = 0;
+  for (const token of company) if (board.has(token)) shared += 1;
+  return shared / Math.min(board.size, company.size) >= 0.8;
+}
+
+/**
+ * Finds a company's public job board by probing candidate tokens.
+ *
+ * All four providers are probed concurrently per token — serially this was up
+ * to 12 round trips before admitting a company has no board, which at ~50%
+ * hit rate is most of them. Null when no board is reachable, which is normal.
+ */
+export async function findAtsBoard(
+  domain: string,
+  opts: { companyName?: string | null; signal?: AbortSignal } = {}
+): Promise<AtsBoard | null> {
   for (const token of candidateTokens(domain)) {
-    for (const probe of PROVIDERS) {
-      const board = await probe(token);
-      if (board && board.roles.length > 0) return board;
+    if (opts.signal?.aborted) return null;
+
+    const results = await Promise.all(
+      PROVIDERS.map(async (probe) => {
+        try {
+          return await probe(token);
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    // Provider order is the tie-break, so the result stays deterministic
+    // regardless of which probe happened to return first.
+    for (const board of results) {
+      if (!board || board.roles.length === 0) continue;
+      if (!boardNameMatches(board.companyName, opts.companyName)) continue;
+      return board;
     }
   }
   return null;

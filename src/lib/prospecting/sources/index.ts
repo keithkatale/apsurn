@@ -15,11 +15,14 @@
 
 import { fmcsaCarriers, npiOrganizations } from "./registries";
 import { arbeitnowCompanies, remotiveCompanies, ycCompanies } from "./startups";
+import { toStateCode, translateGeoTokens, translateYcTerms } from "./vocabulary";
 import type { SourcedCompany } from "./types";
 
 export type { SourcedCompany } from "./types";
 export { findAtsBoard, matchRoles, type AtsBoard, type AtsRole } from "./ats";
 export { normalizeDomain } from "./client";
+export { ycCompanies, ycCount, ycVocabulary, type YcFilter } from "./startups";
+export * from "./vocabulary";
 
 export const LEAD_SOURCE_IDS = [
   "yc",
@@ -99,10 +102,13 @@ export async function findCompanies(opts: FindCompaniesOptions): Promise<Sourced
 
   switch (opts.source) {
     case "yc":
+      // Legacy free-text adapter. YC's taxonomy is a closed set, so raw ICP
+      // wording is mapped onto it rather than matched against it — see
+      // translateYcTerms. Callers that already know the exact vocabulary
+      // (the pipeline's TRANSLATE stage) should call ycCompanies directly.
       return ycCompanies({
-        industries: opts.industries,
-        geographies: opts.geographies,
-        keywords: opts.keywords,
+        ...translateYcTerms(opts.industries ?? [], opts.keywords ?? []),
+        locationTokens: translateGeoTokens(opts.geographies ?? []),
         hiringOnly: opts.hiringOnly,
         minTeamSize: opts.minTeamSize,
         maxTeamSize: opts.maxTeamSize,
@@ -120,12 +126,12 @@ export async function findCompanies(opts: FindCompaniesOptions): Promise<Sourced
         // The taxonomy is the vertical filter; fall back to whatever industry
         // wording the caller had, since CMS matches on description text.
         taxonomy: opts.taxonomy ?? opts.industries?.[0] ?? "",
-        state: opts.state,
+        state: opts.state ? (toStateCode(opts.state) ?? opts.state) : undefined,
         limit,
       });
 
     case "fmcsa_trucking":
-      return fmcsaCarriers({ state: opts.state, limit });
+      return fmcsaCarriers({ state: opts.state ? (toStateCode(opts.state) ?? opts.state) : undefined, limit });
 
     default:
       return [];
