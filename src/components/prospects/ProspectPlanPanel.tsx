@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, Check, MessageCircle, RefreshCw, Sparkles } from "lucide-react";
+import { AlertCircle, Check, MessageCircle, RefreshCw } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
+import { ScanOverlay, type ScanLogEntry } from "@/components/progress/ScanOverlay";
 import type { ProspectSearchCriteria } from "./ProspectComposeModal";
 
 /**
@@ -65,6 +66,9 @@ export function ProspectPlanPanel({
   const [companySizeRange, setCompanySizeRange] = useState("");
   const [limit, setLimit] = useState(15);
 
+  const [progress, setProgress] = useState(0);
+  const [logs, setLogs] = useState<ScanLogEntry[]>([]);
+
   // The panel mounts on open; without this the plan would be requested twice
   // under React's development double-invoke, costing a duplicate AI call.
   const requestedRef = useRef(false);
@@ -72,6 +76,27 @@ export function ProspectPlanPanel({
   const loadPlan = useCallback(async () => {
     setPhase("loading");
     setError(null);
+    setProgress(0);
+
+    // One request, so the stages below are the request's real phases rather
+    // than server-reported steps: what has been sent, and what is outstanding.
+    const stages = [
+      "Reading your approved blueprint…",
+      "Working out which industries to target…",
+      "Choosing decision-maker titles to look for…",
+      "Drafting the enrichment plan…",
+    ];
+    setLogs([{ id: "stage-0", text: stages[0] }]);
+    let stage = 0;
+    const ticker = setInterval(() => {
+      stage = Math.min(stage + 1, stages.length - 1);
+      setLogs((prev) =>
+        prev.some((l) => l.id === `stage-${stage}`) ? prev : [...prev, { id: `stage-${stage}`, text: stages[stage] }]
+      );
+      // Creeps toward, but never reaches, completion while the call is open.
+      setProgress((p) => Math.min(92, p + 12));
+    }, 1800);
+
     try {
       const res = await fetch("/api/prospecting/plan", { method: "POST" });
       const data = (await res.json()) as { plan?: Plan; error?: string };
@@ -85,10 +110,13 @@ export function ProspectPlanPanel({
       setPersonas(plan.criteria.personas.join(", "));
       setCompanySizeRange(plan.criteria.companySizeRange);
       setLimit(plan.limit);
+      setProgress(100);
       setPhase("ready");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not build a plan");
       setPhase("error");
+    } finally {
+      clearInterval(ticker);
     }
   }, []);
 
@@ -100,10 +128,13 @@ export function ProspectPlanPanel({
 
   if (phase === "loading") {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-        <Sparkles className="size-5 animate-pulse text-blue-600" />
-        <p className="text-sm font-medium text-neutral-900">Reading your blueprint…</p>
-        <p className="text-xs text-neutral-500">Working out who to target and how to find them.</p>
+      <div className="flex h-full flex-col justify-center p-4">
+        <ScanOverlay
+          state={{ phase: "scanning", progress, logs }}
+          kicker="Reading your blueprint"
+          title="Building an enrichment plan"
+          runningLabel="Thinking"
+        />
       </div>
     );
   }

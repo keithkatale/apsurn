@@ -3,7 +3,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
 import { reserveProspectingRun } from "@/lib/prospecting/start-run";
-import { runDirectoryAgent, type AgentStreamEvent } from "@/lib/prospecting/agent/run";
+import { interactiveWallclockMs, runDirectoryAgent, type AgentStreamEvent } from "@/lib/prospecting/agent/run";
 import type { ProspectCriteria, RunStatus } from "@/lib/prospecting/types";
 
 export const runtime = "nodejs";
@@ -105,7 +105,9 @@ export async function POST(request: NextRequest) {
       const heartbeat = setInterval(() => write(new TextEncoder().encode(": keepalive\n\n")), 15_000);
 
       try {
-        send({ type: "meta", runId, listId });
+        // targetCount and the time budget let the panel show real progress
+        // and a real time remaining, instead of an indeterminate spinner.
+        send({ type: "meta", runId, listId, targetCount, wallclockMs: interactiveWallclockMs() });
         await progress("discovering", { started_at: new Date().toISOString(), target_count: targetCount });
         await progress("enriching");
 

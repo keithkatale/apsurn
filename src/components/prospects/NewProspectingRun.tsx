@@ -5,6 +5,7 @@ import { Square } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { CopilotMarkdown } from "@/components/copilot/CopilotMarkdown";
 import { AgentActivityItem, type AgentActivityItemData } from "@/components/prospects/AgentActivity";
+import { ScanOverlay, type ScanLogEntry } from "@/components/progress/ScanOverlay";
 import type { ProspectSearchCriteria } from "@/components/prospects/ProspectComposeModal";
 
 function textToList(text: string): string[] {
@@ -18,6 +19,44 @@ let uidCounter = 0;
 function uid(): string {
   uidCounter += 1;
   return `item-${Date.now()}-${uidCounter}`;
+}
+
+
+/** Turns a raw agent tool call into a line a user can follow. */
+function describeTool(name: string, args: Record<string, unknown>): string {
+  const str = (key: string) => (typeof args[key] === "string" ? (args[key] as string) : "");
+  const host = (url: string) => {
+    try {
+      return new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      return url;
+    }
+  };
+  switch (name) {
+    case "web_search":
+      return `Searching for "${str("query")}"`;
+    case "open_page":
+      return `Reading ${host(str("url"))}`;
+    case "extract_companies":
+      return `Pulling companies from ${host(str("url"))}`;
+    case "extract_people":
+      return `Looking for decision makers at ${host(str("url"))}`;
+    case "qualify":
+      return `Qualifying ${str("fullName") || "a contact"} at ${str("companyName") || "a company"}`;
+    case "resolve_email":
+      return `Resolving an email for ${str("fullName") || "a contact"}`;
+    case "save_lead":
+      return "Saving a qualified lead";
+    default:
+      return name;
+  }
+}
+
+function formatDuration(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
 }
 
 type Item = ({ id: string; kind: "text"; text: string }) | ({ id: string; kind: "tool" } & AgentActivityItemData);
@@ -35,9 +74,22 @@ export function NewProspectingRun({
   const [items, setItems] = useState<Item[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<{ found: number; contactCount: number; warnings: number; stopReason?: string } | null>(null);
+  const [logs, setLogs] = useState<ScanLogEntry[]>([]);
+  const [leadsFound, setLeadsFound] = useState(0);
+  const leadsFoundRef = useRef(0);
+  const [budget, setBudget] = useState<{ targetCount: number; wallclockMs: number } | null>(null);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const startedRef = useRef(false);
+
+  // Drives the elapsed/remaining readout while the run is in flight.
+  useEffect(() => {
+    if (phase !== "running" || startedAt === null) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [phase, startedAt]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -91,6 +143,12 @@ export function NewProspectingRun({
           const event = JSON.parse(line.slice(5).trim());
 
           switch (event.type) {
+            case "meta": {
+              if (typeof event.targetCount === "number" && typeof event.wallclockMs === "number") {
+                setBudget({ targetCount: event.targetCount, wallclockMs: event.wallclockMs });
+              }
+              break;
+            }
             case "token": {
               const last = local[local.length - 1];
               if (last && last.kind === "text") {
@@ -104,6 +162,7 @@ export function NewProspectingRun({
             case "tool_start": {
               local.push({ id: uid(), kind: "tool", name: event.name, status: "running", args: event.args ?? {} });
               setItems([...local]);
+              setLogs((prev) => [...prev, { id: uid(), text: describeTool(event.name, event.args ?? {}) }].slice(-18));
               break;
             }
             case "tool_end": {
@@ -116,6 +175,9 @@ export function NewProspectingRun({
               }
               setItems([...local]);
               if (event.name === "save_lead" && (event.result as { saved?: boolean } | undefined)?.saved) {
+                leadsFoundRef.current += 1;
+                setLeadsFound(leadsFoundRef.current);
+                setLogs((prev) => [...prev, { id: uid(), text: "Saved a qualified lead" }].slice(-18));
                 onLeadSaved?.();
               }
               break;
@@ -150,7 +212,11 @@ export function NewProspectingRun({
       }
     } catch (err) {
       if ((err as Error)?.name === "AbortError") {
+        // Only the Stop button aborts now. Report it as a stop with whatever
+        // was saved, rather than an empty panel that just says "Finished".
+        setSummary({ found: leadsFoundRef.current, contactCount: 0, warnings: 0, stopReason: "stopped by you" });
         setPhase("done");
+        onRunFinished?.();
       } else {
         setError(err instanceof Error ? err.message : "Prospecting failed");
         setPhase("error");
@@ -161,13 +227,32 @@ export function NewProspectingRun({
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
+    setStartedAt(Date.now());
     runSearch();
-    return () => abortRef.current?.abort();
+    // Deliberately no abort on unmount: React's development double-invoke
+    // mounts, unmounts and remounts this panel, and aborting there killed the
+    // run while the `startedRef` guard stopped it being restarted — leaving a
+    // blank panel headed "Finished". Stopping is an explicit user action, and
+    // the server drops the work when the request stream is cancelled anyway.
   }, [runSearch]);
 
   function stop() {
     abortRef.current?.abort();
   }
+
+  // Progress is the better of "leads saved against the target" and "time spent
+  // against the run's budget", so the bar keeps moving during the long
+  // stretches between saves without ever implying more progress than the leads
+  // actually represent.
+  const elapsedMs = startedAt === null ? 0 : now - startedAt;
+  const leadProgress = budget && budget.targetCount > 0 ? (leadsFound / budget.targetCount) * 100 : 0;
+  const timeProgress = budget && budget.wallclockMs > 0 ? (elapsedMs / budget.wallclockMs) * 100 : 0;
+  const progress = Math.min(99, Math.max(leadProgress, timeProgress));
+
+  const remainingMs = budget ? Math.max(0, budget.wallclockMs - elapsedMs) : 0;
+  const detail = budget
+    ? `${leadsFound} of ${budget.targetCount} leads · up to ${formatDuration(remainingMs)} left`
+    : `${leadsFound} lead${leadsFound === 1 ? "" : "s"} so far`;
 
   return (
     <div className="flex h-full flex-col">
@@ -188,12 +273,14 @@ export function NewProspectingRun({
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         <div className="flex flex-col gap-2.5 px-4 py-4">
-          {items.length === 0 && phase === "running" && (
-            <div className="copilot-typing" aria-label="Working">
-              <span />
-              <span />
-              <span />
-            </div>
+          {phase === "running" && (
+            <ScanOverlay
+              state={{ phase: "scanning", progress, logs }}
+              kicker="Enriching prospects"
+              title="Finding qualified leads"
+              runningLabel="Working"
+              detail={detail}
+            />
           )}
 
           {items.map((item) =>

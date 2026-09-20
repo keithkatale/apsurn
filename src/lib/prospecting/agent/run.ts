@@ -37,6 +37,11 @@ const DEFAULT_MAX_PAGES = 60;
 const DEFAULT_WALLCLOCK_MS = 4 * 60_000;
 const BACKGROUND_WALLCLOCK_MS = 8 * 60_000;
 
+/** The interactive run's time budget, so the UI can show honest progress and time remaining. */
+export function interactiveWallclockMs(): number {
+  return num("SCRAPER_WALLCLOCK_MS", DEFAULT_WALLCLOCK_MS);
+}
+
 function num(name: string, fallback: number): number {
   const v = Number(process.env[name] ?? "");
   return Number.isFinite(v) && v > 0 ? Math.floor(v) : fallback;
