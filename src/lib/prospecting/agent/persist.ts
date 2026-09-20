@@ -30,9 +30,13 @@ export async function persistLead(
     return { saved: false, contactCount: 0, reason: "already saved this run" };
   }
 
-  const candidateContacts = contacts.filter(
-    (c) => c.emailStatus === "verified" || c.emailStatus === "accept_all" || Boolean(c.phone)
-  );
+  // Any contact with a name, a title, and an address to reach them at is worth
+  // keeping — including an unverified ("risky") guessed email — rather than
+  // only ones a verifier could confirm. Losing a real decision maker because
+  // their email couldn't be proven costs more than sending cautiously to one
+  // that turns out wrong; the emailStatus is kept on the row either way so
+  // outreach can treat a risky address differently (e.g. lower volume).
+  const candidateContacts = contacts.filter((c) => Boolean(c.email) || Boolean(c.phone));
   // Drop contacts whose email/phone is on the global suppression list.
   const actionable: CandidateContact[] = [];
   for (const c of candidateContacts) {
@@ -65,6 +69,12 @@ export async function persistLead(
         source_ref: company.sourceRef,
         icp_fit_score: company.icpFitScore,
         data_confidence: company.dataConfidence,
+        // Skips the manual approval queue: every company reaching this point
+        // already matched the ICP's industry/geography/headcount by
+        // construction (Step 1) and carries a named contact found for it
+        // (Step 2) — there is no separate judgment left for a human to
+        // ratify before it becomes an actionable lead.
+        status: "qualified",
       },
       { onConflict: "list_id,domain" }
     )

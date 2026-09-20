@@ -53,10 +53,14 @@ const BACKGROUND_WALLCLOCK_MS = 8 * 60_000;
 // for the run to reliably reach its target.
 const COMPANY_OVERSAMPLE = 4;
 // Companies are processed with this many Step 2/3 lookups in flight at once.
-// Each is 1-2 short HTTP calls (find-people, then an async email search that
-// itself polls), so a handful in parallel keeps a full run well inside the
-// wall-clock budget without hammering the provider.
-const CONCURRENCY = 4;
+// The dominant per-lead cost is resolve_email's Icypeas poll (up to ~12s
+// worst case), not find_people (typically well under a second), so running
+// more of these concurrently is close to a direct multiplier on throughput.
+// Each lane is a different company, i.e. a different domain, so this does
+// not collide with the verifier's own per-domain rate limit (see the comment
+// on the pattern-candidate loop in resolveEmail, which deliberately stays
+// sequential for exactly that reason).
+const CONCURRENCY = 8;
 // GTM roles used when the ICP names no personas at all — the default buyer
 // this app looks for absent any more specific instruction.
 const DEFAULT_TITLES = ["Founder", "Co-Founder", "CEO", "Head of Sales", "VP Sales", "Head of Growth"];
@@ -156,7 +160,13 @@ function candidateContactFrom(person: ExtractedPerson, resolved: { email: string
     phone: null,
     linkedinUrl: person.profileUrl,
     origin: resolved.origin,
-    confidence: resolved.email && resolved.status === "verified" ? 0.85 : resolved.email ? 0.65 : 0,
+    confidence: resolved.email
+      ? resolved.status === "verified"
+        ? 0.85
+        : resolved.status === "accept_all"
+          ? 0.7
+          : 0.5 // "risky": an unverified guess, kept rather than dropped, but ranked below anything the verifier could confirm.
+      : 0,
     evidence: [person.evidence],
     source: "icypeas",
     sourceRef: { discovery: "icypeas_find_people", sourceUrl: person.sourceUrl, verification: resolved.checks },

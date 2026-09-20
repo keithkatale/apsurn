@@ -250,7 +250,11 @@ export async function resolveEmail(
       };
     }
     // Returned with low confidence: let our own verifier settle it rather
-    // than trusting or discarding the provider's grade.
+    // than trusting or discarding the provider's grade. If the verifier
+    // can't confirm it either, it is still a real address a paid database
+    // named for this person — a stronger fallback than a locally-generated
+    // pattern guess, so it is kept as the best guess so far rather than
+    // discarded outright.
     const v = await verifyEmail(found.email);
     if (v.status === "verified" || v.status === "accept_all") {
       return {
@@ -260,8 +264,30 @@ export async function resolveEmail(
         checks: { ...v.checks, source: found.provider, certainty: found.certainty },
       };
     }
+    if (v.status !== "invalid") {
+      return {
+        email: found.email,
+        origin: "public",
+        status: "risky",
+        checks: { ...v.checks, source: found.provider, certainty: found.certainty },
+      };
+    }
   }
 
+  // Nothing verified outright. An unproven pattern guess is still worth
+  // keeping — marked "risky" so outreach treats it cautiously (e.g. low
+  // volume, no bulk sending) — rather than dropping a real decision maker
+  // just because their exact address couldn't be confirmed. A candidate the
+  // verifier actively disproved ("invalid") is excluded; anything else is a
+  // legitimate fallback.
+  //
+  // Deliberately sequential, not concurrent: the verifier rate-limits at 1
+  // request/second/domain, and every candidate here is at the same domain.
+  // Firing them in parallel would trip that limiter and turn what should
+  // verify cleanly into a false "risky" — the opposite of what raising
+  // concurrency elsewhere (different companies, different domains, see
+  // agent/run.ts) is safe to do.
+  let bestGuess: string | null = null;
   for (const candidate of emailCandidates(person.fullName, domain, pattern)) {
     if (candidate === person.email) continue;
     const v = await verifyEmail(candidate);
@@ -272,8 +298,9 @@ export async function resolveEmail(
       // Without a verifier, keep the top pattern guess as a soft-trusted lead.
       return { email: candidate, origin: "inferred", status: "accept_all", checks: v.checks };
     }
+    if (v.status !== "invalid" && !bestGuess) bestGuess = candidate;
   }
-  return { email: null, origin: "inferred", status: "risky", checks: {} };
+  return { email: bestGuess, origin: "inferred", status: "risky", checks: {} };
 }
 
 export { learnEmailPattern };

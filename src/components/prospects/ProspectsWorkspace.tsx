@@ -3,7 +3,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { PanelLeftOpen, Search, X } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
-import { ApprovalQueue } from "@/components/prospects/ApprovalQueue";
 import { BulkActionBar } from "@/components/prospects/BulkActionBar";
 import { ContactProfilePanel } from "@/components/prospects/ContactProfilePanel";
 import { ContactsTable, type FlatRow } from "@/components/prospects/ContactsTable";
@@ -49,11 +48,14 @@ export function ProspectsWorkspace({ initialCompanies }: { initialCompanies: Pro
     [query]
   );
 
-  const pending = useMemo(() => active.filter((p) => p.status === "new" && matchesQuery(p)), [active, matchesQuery]);
-
+  // Every prospecting run saves a company straight in — there is no manual
+  // approval step to wait for any more, so "new" (rows saved before this
+  // change, or by anything else that still writes that default) is treated
+  // exactly like "qualified". Only an explicit past "rejected" stays hidden,
+  // since that was a deliberate action, not a pending one.
   const qualified = useMemo(() => {
     return active
-      .filter((p) => p.status === "qualified" && matchesQuery(p))
+      .filter((p) => p.status !== "rejected" && matchesQuery(p))
       .map((p) => ({
         ...p,
         contacts: stageFilter === "all" ? p.contacts : p.contacts.filter((c) => c.lead_status === stageFilter),
@@ -171,13 +173,12 @@ export function ProspectsWorkspace({ initialCompanies }: { initialCompanies: Pro
                 </select>
               </div>
 
-              {pending.length === 0 && qualified.length === 0 ? (
+              {qualified.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-neutral-300 bg-white p-8 text-center">
                   <p className="text-sm text-neutral-500">No prospects match your search or filters.</p>
                 </div>
               ) : null}
 
-              {pending.length > 0 && <ApprovalQueue prospects={pending} onChanged={refetch} />}
               {qualified.length > 0 && (
                 <ContactsTable
                   prospects={qualified}

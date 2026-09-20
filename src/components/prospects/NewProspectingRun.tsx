@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Square } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
-import { CopilotMarkdown } from "@/components/copilot/CopilotMarkdown";
-import { AgentActivityItem, type AgentActivityItemData } from "@/components/prospects/AgentActivity";
 import { ScanOverlay, type ScanLogEntry } from "@/components/progress/ScanOverlay";
 import type { ProspectSearchCriteria } from "@/components/prospects/ProspectComposeModal";
 
@@ -21,42 +19,53 @@ function uid(): string {
   return `item-${Date.now()}-${uidCounter}`;
 }
 
-
-/** Turns a raw agent tool call into a line a user can follow. */
-function describeTool(name: string, args: Record<string, unknown>): string {
+/** Every step's outcome, turned into one log line — this is now the only place a run's activity is shown. */
+function describeToolStart(name: string, args: Record<string, unknown>): string | null {
   const str = (key: string) => (typeof args[key] === "string" ? (args[key] as string) : "");
-  const host = (url: string) => {
-    try {
-      return new URL(url).hostname.replace(/^www\./, "");
-    } catch {
-      return url;
-    }
-  };
   switch (name) {
-    case "web_search":
-      return `Searching for "${str("query")}"`;
-    case "open_page":
-      return `Reading ${host(str("url"))}`;
-    case "extract_companies":
-      return `Pulling companies from ${host(str("url"))}`;
-    case "find_leads":
-      return "Searching the contact database for matching decision makers";
+    case "find_companies":
+      return "Searching for companies matching your ICP";
     case "find_people":
       return `Looking up decision makers at ${str("domain")}`;
-    case "extract_people":
-      return `Reading the team page at ${host(str("url"))}`;
-    case "find_companies":
-      return `Pulling companies from ${str("source")}`;
-    case "check_hiring_signal":
-      return `Checking open roles at ${str("domain")}`;
-    case "qualify":
-      return `Qualifying ${str("fullName") || "a contact"} at ${str("companyName") || "a company"}`;
     case "resolve_email":
       return `Resolving an email for ${str("fullName") || "a contact"}`;
-    case "save_lead":
-      return "Saving a qualified lead";
     default:
-      return name;
+      return null;
+  }
+}
+
+function describeToolEnd(name: string, args: Record<string, unknown>, result: Record<string, unknown>): string | null {
+  const str = (key: string) => (typeof args[key] === "string" ? (args[key] as string) : "");
+  switch (name) {
+    case "find_companies": {
+      if (typeof result.error === "string") return `Couldn't search for companies — ${result.error}`;
+      const count = typeof result.count === "number" ? result.count : 0;
+      return `Found ${count} compan${count === 1 ? "y" : "ies"} matching your ICP`;
+    }
+    case "find_people": {
+      const domain = str("domain");
+      if (typeof result.error === "string") return `Couldn't look up people at ${domain} — ${result.error}`;
+      const count = Array.isArray(result.people) ? result.people.length : 0;
+      return count > 0 ? `Found ${count} decision ${count === 1 ? "maker" : "makers"} at ${domain}` : `No decision makers listed at ${domain}`;
+    }
+    case "resolve_email": {
+      const who = str("fullName") || "a contact";
+      const email = typeof result.email === "string" ? result.email : null;
+      const status = typeof result.status === "string" ? ` (${result.status})` : "";
+      return email ? `Resolved ${email} for ${who}${status}` : `Could not resolve an email for ${who}`;
+    }
+    case "save_lead": {
+      const company = (args.company ?? {}) as Record<string, unknown>;
+      const name = typeof company.name === "string" ? company.name : typeof company.domain === "string" ? company.domain : "a company";
+      if (result.saved) {
+        const count = typeof result.contactCount === "number" ? result.contactCount : 0;
+        return `Saved ${name} — ${count} contact${count === 1 ? "" : "s"}`;
+      }
+      const reason = typeof result.reason === "string" ? result.reason : null;
+      return `Skipped ${name}${reason ? ` (${reason})` : ""}`;
+    }
+    default:
+      return null;
   }
 }
 
@@ -66,8 +75,6 @@ function formatDuration(ms: number): string {
   const seconds = total % 60;
   return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
 }
-
-type Item = ({ id: string; kind: "text"; text: string }) | ({ id: string; kind: "tool" } & AgentActivityItemData);
 
 export function NewProspectingRun({
   criteria,
@@ -79,7 +86,6 @@ export function NewProspectingRun({
   onRunFinished?: () => void;
 }) {
   const [phase, setPhase] = useState<"running" | "done" | "error">("running");
-  const [items, setItems] = useState<Item[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<{ found: number; contactCount: number; warnings: number; stopReason?: string } | null>(null);
   const [logs, setLogs] = useState<ScanLogEntry[]>([]);
@@ -89,8 +95,6 @@ export function NewProspectingRun({
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const abortRef = useRef<AbortController | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const startedRef = useRef(false);
 
   // Drives the elapsed/remaining readout while the run is in flight.
   useEffect(() => {
@@ -99,31 +103,23 @@ export function NewProspectingRun({
     return () => clearInterval(timer);
   }, [phase, startedAt]);
 
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [items, summary, error]);
-
   const runSearch = useCallback(async () => {
     const controller = new AbortController();
     abortRef.current = controller;
+
+    const requestCriteria = {
+      industries: textToList(criteria.industries),
+      geographies: textToList(criteria.geographies),
+      companySizeRange: criteria.companySizeRange,
+      personas: textToList(criteria.personas),
+    };
 
     try {
       const res = await fetch("/api/prospecting/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
-        body: JSON.stringify({
-          version: 1,
-          limit: criteria.limit,
-          criteria: {
-            industries: textToList(criteria.industries),
-            geographies: textToList(criteria.geographies),
-            companySizeRange: criteria.companySizeRange,
-            personas: textToList(criteria.personas),
-          },
-        }),
+        body: JSON.stringify({ version: 1, limit: criteria.limit, criteria: requestCriteria }),
       });
 
       if (!res.ok || !res.body) {
@@ -135,7 +131,6 @@ export function NewProspectingRun({
       const decoder = new TextDecoder();
       let buffer = "";
       let sawTerminalEvent = false;
-      const local: Item[] = [];
 
       while (true) {
         const { done, value } = await reader.read();
@@ -157,35 +152,17 @@ export function NewProspectingRun({
               }
               break;
             }
-            case "token": {
-              const last = local[local.length - 1];
-              if (last && last.kind === "text") {
-                last.text += event.text;
-              } else {
-                local.push({ id: uid(), kind: "text", text: event.text });
-              }
-              setItems([...local]);
-              break;
-            }
             case "tool_start": {
-              local.push({ id: uid(), kind: "tool", name: event.name, status: "running", args: event.args ?? {} });
-              setItems([...local]);
-              setLogs((prev) => [...prev, { id: uid(), text: describeTool(event.name, event.args ?? {}) }].slice(-18));
+              const text = describeToolStart(event.name, event.args ?? {});
+              if (text) setLogs((prev) => [...prev, { id: uid(), text }].slice(-30));
               break;
             }
             case "tool_end": {
-              for (let i = local.length - 1; i >= 0; i--) {
-                const it = local[i];
-                if (it.kind === "tool" && it.name === event.name && it.status === "running") {
-                  local[i] = { ...it, status: "done", result: event.result };
-                  break;
-                }
-              }
-              setItems([...local]);
+              const text = describeToolEnd(event.name, event.args ?? {}, (event.result ?? {}) as Record<string, unknown>);
+              if (text) setLogs((prev) => [...prev, { id: uid(), text }].slice(-30));
               if (event.name === "save_lead" && (event.result as { saved?: boolean } | undefined)?.saved) {
                 leadsFoundRef.current += 1;
                 setLeadsFound(leadsFoundRef.current);
-                setLogs((prev) => [...prev, { id: uid(), text: "Saved a qualified lead" }].slice(-18));
                 onLeadSaved?.();
               }
               break;
@@ -232,6 +209,7 @@ export function NewProspectingRun({
     }
   }, [criteria, onLeadSaved, onRunFinished]);
 
+  const startedRef = useRef(false);
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
@@ -248,6 +226,18 @@ export function NewProspectingRun({
     abortRef.current?.abort();
   }
 
+  function runAgain() {
+    leadsFoundRef.current = 0;
+    setLeadsFound(0);
+    setLogs([]);
+    setSummary(null);
+    setError(null);
+    setBudget(null);
+    setStartedAt(Date.now());
+    setPhase("running");
+    runSearch();
+  }
+
   // Progress is the better of "leads saved against the target" and "time spent
   // against the run's budget", so the bar keeps moving during the long
   // stretches between saves without ever implying more progress than the leads
@@ -255,12 +245,42 @@ export function NewProspectingRun({
   const elapsedMs = startedAt === null ? 0 : now - startedAt;
   const leadProgress = budget && budget.targetCount > 0 ? (leadsFound / budget.targetCount) * 100 : 0;
   const timeProgress = budget && budget.wallclockMs > 0 ? (elapsedMs / budget.wallclockMs) * 100 : 0;
-  const progress = Math.min(99, Math.max(leadProgress, timeProgress));
+  const progress = phase === "running" ? Math.min(99, Math.max(leadProgress, timeProgress)) : 100;
 
   const remainingMs = budget ? Math.max(0, budget.wallclockMs - elapsedMs) : 0;
-  const detail = budget
-    ? `${leadsFound} of ${budget.targetCount} leads · up to ${formatDuration(remainingMs)} left`
-    : `${leadsFound} lead${leadsFound === 1 ? "" : "s"} so far`;
+  const detail =
+    phase === "running"
+      ? budget
+        ? `${leadsFound} of ${budget.targetCount} leads · up to ${formatDuration(remainingMs)} left`
+        : `${leadsFound} lead${leadsFound === 1 ? "" : "s"} so far`
+      : undefined;
+
+  const scanPhase = phase === "running" ? "scanning" : phase === "error" ? "error" : "done";
+
+  const doneSummary =
+    phase === "done" && summary ? (
+      summary.found === 0 ? (
+        // A run that saves nothing is not a success. Say what stopped it and
+        // what to change — a bare checkmark would read as though it worked
+        // and there was simply nobody to find.
+        <div className="flex flex-col gap-1 text-amber-900">
+          <span className="font-medium">No leads were saved.</span>
+          <span className="text-xs leading-relaxed">
+            {summary.stopReason === "no companies matched the ICP"
+              ? "No companies matched this ICP in the contact database. Try broadening the industries or geographies."
+              : summary.stopReason === "no more companies matched"
+                ? "The companies found don't have a listed decision maker matching your target titles. Try broader personas."
+                : `The run stopped: ${summary.stopReason ?? "no reason reported"}.`}
+          </span>
+        </div>
+      ) : (
+        <span>
+          Found {summary.found} compan{summary.found === 1 ? "y" : "ies"} · {summary.contactCount} contact
+          {summary.contactCount === 1 ? "" : "s"}
+          {summary.warnings > 0 ? ` · ${summary.warnings} skipped` : ""}
+        </span>
+      )
+    ) : undefined;
 
   return (
     <div className="flex h-full flex-col">
@@ -279,52 +299,18 @@ export function NewProspectingRun({
         )}
       </div>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="flex flex-col gap-2.5 px-4 py-4">
-          {phase === "running" && (
-            <ScanOverlay
-              state={{ phase: "scanning", progress, logs }}
-              kicker="Enriching prospects"
-              title="Finding qualified leads"
-              runningLabel="Working"
-              detail={detail}
-            />
-          )}
-
-          {items.map((item) =>
-            item.kind === "tool" ? (
-              <AgentActivityItem key={item.id} item={item} />
-            ) : (
-              <div key={item.id} className="py-1">
-                <CopilotMarkdown content={item.text} />
-              </div>
-            )
-          )}
-
-          {error && <p className="text-sm text-red-600">{error}</p>}
-
-          {summary &&
-            (summary.found === 0 ? (
-              // A run that saves nothing is not a success. Say what stopped it
-              // and what to change — "finished" alone reads as though it
-              // worked and there was simply nobody to find.
-              <div className="mt-2 flex flex-col gap-1 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                <span className="font-medium">No leads were saved.</span>
-                <span className="text-xs leading-relaxed">
-                  {summary.stopReason === "time budget reached"
-                    ? "The run ran out of time before it could qualify anyone. This usually means the targets it found don't publish named contacts — try narrower industries, or personas that appear on company websites."
-                    : summary.stopReason === "model finished"
-                      ? "The agent stopped early without saving anyone. Try broadening the industries or geographies."
-                      : `The run stopped: ${summary.stopReason ?? "no reason reported"}.`}
-                </span>
-              </div>
-            ) : (
-              <div className="mt-2 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-700">
-                Found {summary.found} compan{summary.found === 1 ? "y" : "ies"} · {summary.contactCount} contact
-                {summary.contactCount === 1 ? "" : "s"}
-                {summary.warnings > 0 ? ` · ${summary.warnings} skipped` : ""}
-              </div>
-            ))}
+          <ScanOverlay
+            state={{ phase: scanPhase, progress, logs, error }}
+            kicker="Enriching prospects"
+            title={phase === "running" ? "Finding qualified leads" : phase === "error" ? "Prospecting run" : "Prospecting complete"}
+            runningLabel="Working"
+            detail={detail}
+            summary={doneSummary}
+            onRestart={phase === "done" ? runAgain : undefined}
+            onRetry={phase === "error" ? runAgain : undefined}
+          />
         </div>
       </div>
     </div>
