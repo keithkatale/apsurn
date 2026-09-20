@@ -21,12 +21,18 @@ interface ResolvedAccount {
 }
 
 /**
- * Upserts the author of a discovered mention into market_accounts. If
- * neither the AI search nor the existing row already has a profile picture,
- * this opportunistically fetches one via a real, keyless lookup per
- * platform (see avatars.ts) rather than relying only on what the search
- * happened to surface — avatars matter for anyone tracking a specific
- * account, so we try harder for those than for a one-off mention.
+ * Looks up an already-known account for the author of a discovered mention.
+ *
+ * Deliberately read-only. This used to upsert every author it saw, which
+ * meant a single scan inserted a row per discovered post — dozens per keyword
+ * per run — filling market_accounts and swamping the "From" filter with
+ * accounts the user had never chosen to track. Accounts are now only created
+ * when the user explicitly follows one; a mention by anyone else simply
+ * carries its author's name and handle on the mention row itself.
+ *
+ * A profile picture is only fetched for accounts already being tracked: it
+ * costs a network round trip per author, which is not worth spending on a
+ * one-off mention that stores the handle anyway.
  */
 async function resolveAccount(db: SupabaseClient, companyId: string, mention: DiscoveredMention): Promise<ResolvedAccount> {
   if (!mention.authorHandle) return { id: null, avatarUrl: mention.authorAvatarUrl };
@@ -39,26 +45,15 @@ async function resolveAccount(db: SupabaseClient, companyId: string, mention: Di
     .eq("handle", mention.authorHandle)
     .maybeSingle();
 
-  let avatarUrl = mention.authorAvatarUrl || existing?.avatar_url || null;
-  if (!avatarUrl) avatarUrl = await resolveAvatarUrl(mention.platform, mention.authorHandle);
+  if (!existing) return { id: null, avatarUrl: mention.authorAvatarUrl };
 
-  const { data, error } = await db
-    .from("market_accounts")
-    .upsert(
-      {
-        company_id: companyId,
-        platform: mention.platform,
-        handle: mention.authorHandle,
-        name: mention.authorName,
-        avatar_url: avatarUrl,
-      },
-      { onConflict: "company_id,platform,handle" }
-    )
-    .select("id")
-    .single();
+  let avatarUrl = mention.authorAvatarUrl || existing.avatar_url || null;
+  if (!avatarUrl) {
+    avatarUrl = await resolveAvatarUrl(mention.platform, mention.authorHandle);
+    if (avatarUrl) await db.from("market_accounts").update({ avatar_url: avatarUrl }).eq("id", existing.id);
+  }
 
-  if (error || !data) return { id: null, avatarUrl };
-  return { id: data.id as string, avatarUrl };
+  return { id: existing.id as string, avatarUrl };
 }
 
 function toMentionRow(companyId: string, m: DiscoveredMention, account: ResolvedAccount, keywordId: string | null) {

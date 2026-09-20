@@ -26,6 +26,11 @@ function nextScanLogId(): string {
   return `scan-log-${Date.now()}-${scanLogUid}`;
 }
 
+/** Stable identity for a post author across scans: accounts are no longer stored per discovered author. */
+function authorKeyOf(platform: string, handle: string | null | undefined): string | null {
+  return handle ? `${platform}:${handle}` : null;
+}
+
 export function MarketInsightsWorkspace({
   initialKeywords,
   initialAccounts,
@@ -50,7 +55,12 @@ export function MarketInsightsWorkspace({
   const [savingKeyword, setSavingKeyword] = useState(false);
   const [keywordFilter, setKeywordFilter] = useState<Set<string>>(new Set());
   const [platformFilter, setPlatformFilter] = useState<Set<MarketPlatform>>(new Set());
+  // Keyed by "<platform>:<handle>" rather than by a market_accounts id, so
+  // the filter covers every author in the feed, not just stored accounts.
   const [accountFilter, setAccountFilter] = useState<Set<string>>(new Set());
+  const [followedKeys, setFollowedKeys] = useState<Set<string>>(
+    () => new Set(initialAccounts.filter((a) => a.is_followed).map((a) => `${a.platform}:${a.handle}`))
+  );
   const [followingOnly, setFollowingOnly] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
@@ -98,7 +108,11 @@ export function MarketInsightsWorkspace({
     const [keywordsRes, accountsRes] = await Promise.all([fetch("/api/market/keywords"), fetch("/api/market/accounts")]);
     const [keywordsData, accountsData] = await Promise.all([keywordsRes.json(), accountsRes.json()]);
     if (Array.isArray(keywordsData.keywords)) setKeywords(keywordsData.keywords);
-    if (Array.isArray(accountsData.accounts)) setAccounts(accountsData.accounts);
+    if (Array.isArray(accountsData.accounts)) {
+      const rows = accountsData.accounts as MarketAccountRow[];
+      setAccounts(rows);
+      setFollowedKeys(new Set(rows.filter((a) => a.is_followed).map((a) => `${a.platform}:${a.handle}`)));
+    }
   }, []);
 
   const refetchFirstPage = useCallback(async () => {
@@ -273,16 +287,57 @@ export function MarketInsightsWorkspace({
     setSaveTargetId(null);
   }
 
-  async function toggleFollowAccount(accountId: string) {
-    const account = accountById.get(accountId);
-    if (!account) return;
-    const nextFollowed = !account.is_followed;
-    setAccounts((prev) => prev.map((a) => (a.id === accountId ? { ...a, is_followed: nextFollowed } : a)));
-    await fetch(`/api/market/accounts/${accountId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ is_followed: nextFollowed }),
+  /**
+   * `authorKey` is "<platform>:<handle>". Following creates the account row
+   * if there isn't one yet, since scans no longer create them.
+   */
+  async function toggleFollowAccount(authorKey: string) {
+    const separator = authorKey.indexOf(":");
+    if (separator < 0) return;
+    const platform = authorKey.slice(0, separator) as MarketPlatform;
+    const handle = authorKey.slice(separator + 1);
+
+    const existing = accounts.find((a) => authorKeyOf(a.platform, a.handle) === authorKey);
+    const nextFollowed = !(existing?.is_followed ?? false);
+    const source = mentions.find((m) => authorKeyOf(m.platform, m.author_handle) === authorKey);
+
+    setFollowedKeys((prev) => {
+      const next = new Set(prev);
+      if (nextFollowed) next.add(authorKey);
+      else next.delete(authorKey);
+      return next;
     });
+
+    const res = await fetch("/api/market/accounts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        platform,
+        handle,
+        name: source?.author_name ?? existing?.name ?? null,
+        avatarUrl: source?.author_avatar_url ?? existing?.avatar_url ?? null,
+        is_followed: nextFollowed,
+      }),
+    });
+
+    if (!res.ok) {
+      // Put the toggle back rather than leaving the UI claiming a follow that did not happen.
+      setFollowedKeys((prev) => {
+        const next = new Set(prev);
+        if (nextFollowed) next.delete(authorKey);
+        else next.add(authorKey);
+        return next;
+      });
+      return;
+    }
+
+    const { account } = (await res.json()) as { account?: MarketAccountRow };
+    if (account) {
+      setAccounts((prev) => {
+        const rest = prev.filter((a) => a.id !== account.id);
+        return [account, ...rest];
+      });
+    }
   }
 
   function toggleSetValue<T>(set: Set<T>, value: T, setState: (next: Set<T>) => void) {
@@ -297,16 +352,18 @@ export function MarketInsightsWorkspace({
   const visibleMentions = useMemo(
     () =>
       mentions.filter((m) => {
+        const authorKey = authorKeyOf(m.platform, m.author_handle);
         const account = m.account_id ? accountById.get(m.account_id) : null;
+        const followed = account?.is_followed ?? (authorKey ? followedKeys.has(authorKey) : false);
         return (
           (keywordFilter.size === 0 || (m.market_keywords && keywordFilter.has(m.market_keywords.keyword))) &&
           (platformFilter.size === 0 || platformFilter.has(m.platform)) &&
-          (accountFilter.size === 0 || (m.account_id && accountFilter.has(m.account_id))) &&
-          (!followingOnly || account?.is_followed) &&
+          (accountFilter.size === 0 || (authorKey !== null && accountFilter.has(authorKey))) &&
+          (!followingOnly || followed) &&
           (!savedOnly || m.is_saved)
         );
       }),
-    [mentions, keywordFilter, platformFilter, accountFilter, followingOnly, savedOnly, accountById]
+    [mentions, keywordFilter, platformFilter, accountFilter, followingOnly, savedOnly, accountById, followedKeys]
   );
 
   const activeFilterCount = keywordFilter.size + platformFilter.size + accountFilter.size + (followingOnly ? 1 : 0) + (savedOnly ? 1 : 0);
@@ -319,12 +376,33 @@ export function MarketInsightsWorkspace({
     setSavedOnly(false);
   }
 
-  const accountOptions: FilterOption[] = accounts.map((a) => ({
-    id: a.id,
-    label: a.name || a.handle,
-    avatarUrl: a.avatar_url,
-    isFollowed: a.is_followed,
-  }));
+  // Built from the authors actually present in the feed, not from the
+  // market_accounts table. Scans no longer store a row per discovered author
+  // (that filled the database and listed everyone here), so the accounts
+  // table now holds only what the user chose to follow.
+  const accountOptions: FilterOption[] = useMemo(() => {
+    const byKey = new Map<string, FilterOption>();
+    for (const m of mentions) {
+      const key = authorKeyOf(m.platform, m.author_handle);
+      if (!key || byKey.has(key)) continue;
+      byKey.set(key, {
+        id: key,
+        label: m.author_name || m.author_handle || key,
+        avatarUrl: m.author_avatar_url,
+        isFollowed: followedKeys.has(key),
+      });
+    }
+    // Followed accounts stay listed even when nothing of theirs is in view,
+    // so the follow can still be undone from here.
+    for (const a of accounts) {
+      const key = authorKeyOf(a.platform, a.handle);
+      if (!key) continue;
+      const existing = byKey.get(key);
+      if (existing) existing.isFollowed = a.is_followed;
+      else if (a.is_followed) byKey.set(key, { id: key, label: a.name || a.handle, avatarUrl: a.avatar_url, isFollowed: true });
+    }
+    return [...byKey.values()].sort((a, b) => Number(b.isFollowed) - Number(a.isFollowed) || a.label.localeCompare(b.label));
+  }, [mentions, accounts, followedKeys]);
 
   function openMentionPanel(id: string) {
     setAiOpen(false);
@@ -355,7 +433,7 @@ export function MarketInsightsWorkspace({
     ];
     if (activeFilterCount > 0) {
       const platformNames = [...platformFilter].map((p) => PLATFORM_LABEL[p]);
-      const accountNames = [...accountFilter].map((id) => accountById.get(id)?.handle || id);
+      const accountNames = [...accountFilter].map((key) => key.slice(key.indexOf(":") + 1));
       lines.push(
         `Active filters — platforms: ${platformNames.join(", ") || "none"}; accounts: ${accountNames.join(", ") || "none"}; keywords: ${[...keywordFilter].join(", ") || "none"}; following only: ${followingOnly}.`
       );
@@ -367,7 +445,7 @@ export function MarketInsightsWorkspace({
       }
     }
     return lines.join("\n");
-  }, [keywords, mentions, visibleMentions, activeFilterCount, platformFilter, accountFilter, keywordFilter, followingOnly, accountById, pinnedMentions]);
+  }, [keywords, mentions, visibleMentions, activeFilterCount, platformFilter, accountFilter, keywordFilter, followingOnly, pinnedMentions]);
 
   const rightPanelOpen = selectedMention !== null || aiOpen;
 
@@ -579,6 +657,7 @@ export function MarketInsightsWorkspace({
             <div className="flex flex-col gap-3">
               {visibleMentions.map((mention) => {
                 const account = mention.account_id ? (accountById.get(mention.account_id) ?? null) : null;
+                const mentionAuthorKey = authorKeyOf(mention.platform, mention.author_handle);
                 return (
                   <MentionCard
                     key={mention.id}
@@ -594,8 +673,10 @@ export function MarketInsightsWorkspace({
                       })
                     }
                     onToggleFollowUp={() => patchMention(mention.id, { needs_follow_up: !mention.needs_follow_up })}
-                    isFollowed={account ? account.is_followed : null}
-                    onToggleFollow={() => mention.account_id && toggleFollowAccount(mention.account_id)}
+                    isFollowed={
+                      account ? account.is_followed : mentionAuthorKey ? followedKeys.has(mentionAuthorKey) : null
+                    }
+                    onToggleFollow={() => mentionAuthorKey && toggleFollowAccount(mentionAuthorKey)}
                     isPinned={pinnedIds.has(mention.id)}
                     onTogglePin={() => togglePin(mention.id)}
                   />
@@ -630,9 +711,16 @@ export function MarketInsightsWorkspace({
                 }
                 onToggleFollowUp={() => patchMention(selectedMention.id, { needs_follow_up: !selectedMention.needs_follow_up })}
                 isFollowed={
-                  selectedMention.account_id ? (accountById.get(selectedMention.account_id)?.is_followed ?? null) : null
+                  selectedMention.account_id
+                    ? (accountById.get(selectedMention.account_id)?.is_followed ?? null)
+                    : (authorKeyOf(selectedMention.platform, selectedMention.author_handle) &&
+                        followedKeys.has(authorKeyOf(selectedMention.platform, selectedMention.author_handle)!)) ||
+                      null
                 }
-                onToggleFollow={() => selectedMention.account_id && toggleFollowAccount(selectedMention.account_id)}
+                onToggleFollow={() => {
+                  const key = authorKeyOf(selectedMention.platform, selectedMention.author_handle);
+                  if (key) toggleFollowAccount(key);
+                }}
               />
             </div>
           ) : aiOpen ? (
