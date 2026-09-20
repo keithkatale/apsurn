@@ -14,3 +14,7 @@ export default function SignupPage() {
     </AuthShell>
   );
 }
+
+// Rendered per request so the runtime Supabase config injected by the root
+// layout reflects the running service env, not build-time values.
+export const dynamic = "force-dynamic";
