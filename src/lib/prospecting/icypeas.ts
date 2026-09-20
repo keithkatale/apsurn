@@ -325,9 +325,9 @@ export async function findCompaniesByIcp(opts: {
   minHeadcount?: number;
   maxHeadcount?: number;
   limit?: number;
-}): Promise<FoundCompany[] | null> {
+}): Promise<FoundCompany[]> {
   const apiKey = process.env.ICYPEAS_API_KEY?.trim();
-  if (!apiKey) return null;
+  if (!apiKey) throw new IcypeasError("ICYPEAS_API_KEY is not set", null);
 
   const query: Record<string, unknown> = {};
   if (opts.industries.length > 0) query["currentCompany.industry"] = { include: opts.industries.slice(0, 200) };
@@ -346,15 +346,16 @@ export async function findCompaniesByIcp(opts: {
   // company (multiple employees indexed at the same place), so the raw page
   // needs to be larger than the number of distinct companies wanted.
   const limit = Math.min(200, Math.max(1, opts.limit ?? 25));
-  const response = await post<{ success?: boolean; leads?: CompanySearchLead[] }>(
+  // Throws with the real reason (a timeout, an HTTP status, an API-reported
+  // validation error) rather than swallowing it into a bare null — a run
+  // that could not search at all is a different failure than one that
+  // searched and matched nobody, and reporting them the same way is what
+  // made a transient timeout here read as a rejected, unfixable query.
+  const response = await postOrThrow<{ success?: boolean; leads?: CompanySearchLead[] }>(
     "/find-people",
     { query, pagination: { size: Math.min(200, limit * 5) } },
     apiKey
   );
-  if (!response?.success) {
-    console.warn("[icypeas] find-companies-by-icp query failed", JSON.stringify(query).slice(0, 300));
-    return null;
-  }
 
   const seen = new Set<string>();
   const out: FoundCompany[] = [];
@@ -426,7 +427,25 @@ interface PollResponse {
   }>;
 }
 
-async function post<T>(path: string, body: unknown, apiKey: string): Promise<T | null> {
+/** Thrown by postOrThrow; carries the real reason a request failed instead of a bare null. */
+export class IcypeasError extends Error {
+  constructor(
+    message: string,
+    readonly status: number | null
+  ) {
+    super(message);
+    this.name = "IcypeasError";
+  }
+}
+
+interface PostAttempt<T> {
+  ok: boolean;
+  value: T | null;
+  status: number | null;
+  reason: string;
+}
+
+async function attempt<T>(path: string, body: unknown, apiKey: string): Promise<PostAttempt<T>> {
   try {
     const response = await fetch(`${BASE_URL}${path}`, {
       method: "POST",
@@ -434,11 +453,58 @@ async function post<T>(path: string, body: unknown, apiKey: string): Promise<T |
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-    if (!response.ok) return null;
-    return (await response.json()) as T;
-  } catch {
-    return null;
+    if (!response.ok) {
+      // The body is where Icypeas puts the actual reason (e.g. a validation
+      // error naming the offending field) — worth capturing even on failure,
+      // since "the search rejected" without it is not actionable.
+      const text = await response.text().catch(() => "");
+      return { ok: false, value: null, status: response.status, reason: text.slice(0, 300) || `HTTP ${response.status}` };
+    }
+    const json = (await response.json()) as T & { success?: boolean; error?: string };
+    if (json && typeof json === "object" && json.success === false) {
+      return { ok: false, value: null, status: response.status, reason: json.error ?? "success:false with no error detail" };
+    }
+    return { ok: true, value: json as T, status: response.status, reason: "" };
+  } catch (error) {
+    // AbortSignal.timeout() throws a DOMException named "TimeoutError"; a
+    // network failure throws TypeError. Neither carries an HTTP status.
+    const reason = error instanceof Error ? `${error.name}: ${error.message}` : "request failed";
+    return { ok: false, value: null, status: null, reason };
   }
+}
+
+/**
+ * POSTs to Icypeas, retrying once on any failure — including a timeout,
+ * which is the failure this exists for: the API was proven to answer this
+ * exact shape of request in under 6 seconds even at the largest page size,
+ * so a single slow/dropped request is far more likely than a genuinely bad
+ * query, and one retry is cheap insurance against it.
+ *
+ * Returns null on total failure, exactly as before, so callers that already
+ * treat any failure as an ordinary miss (findEmail's polling, per-domain
+ * people lookups) are unaffected. Use postOrThrow instead where the caller
+ * needs to tell "the request failed" apart from "genuinely found nothing".
+ */
+async function post<T>(path: string, body: unknown, apiKey: string): Promise<T | null> {
+  const first = await attempt<T>(path, body, apiKey);
+  if (first.ok) return first.value;
+
+  const retry = await attempt<T>(path, body, apiKey);
+  if (retry.ok) return retry.value;
+
+  console.warn(`[icypeas] ${path} failed twice: ${retry.reason}`);
+  return null;
+}
+
+/** Like post, but throws IcypeasError (with the real reason) on total failure instead of returning null. */
+async function postOrThrow<T>(path: string, body: unknown, apiKey: string): Promise<T> {
+  const first = await attempt<T>(path, body, apiKey);
+  if (first.ok) return first.value as T;
+
+  const retry = await attempt<T>(path, body, apiKey);
+  if (retry.ok) return retry.value as T;
+
+  throw new IcypeasError(`${path} failed: ${retry.reason}`, retry.status);
 }
 
 function splitName(fullName: string): { firstname: string; lastname: string } | null {

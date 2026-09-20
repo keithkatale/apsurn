@@ -247,15 +247,17 @@ export async function runDirectoryAgent(opts: {
 
   let companies: FoundCompany[];
   try {
-    const found = await findCompaniesByIcp({
+    // Retries once internally on any failure (network, timeout, a bad
+    // response) before throwing — see icypeas.ts's postOrThrow. The message
+    // on that throw is the real reason, not a guess, so it is passed through
+    // as-is below rather than replaced with something generic.
+    companies = await findCompaniesByIcp({
       industries,
       geographies,
       minHeadcount,
       maxHeadcount,
       limit: targetCount * COMPANY_OVERSAMPLE,
     });
-    if (found === null) throw new Error("The contact database rejected the search.");
-    companies = found;
   } catch (error) {
     const message = error instanceof Error ? error.message : "the company search failed";
     emit({ type: "tool_end", name: "find_companies", result: { count: 0, error: message } });
@@ -363,7 +365,7 @@ export async function runDirectoryAgent(opts: {
 }
 
 /**
- * Full run entry used by Inngest: loads run/list/criteria/blueprint, drives
+ * Full run entry used by background jobs: loads run/list/criteria/blueprint, drives
  * the deterministic pipeline, and maintains prospecting_runs / prospect_lists
  * status + counts.
  */
