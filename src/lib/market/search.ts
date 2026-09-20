@@ -2,12 +2,25 @@ import { getAiClient } from "@/lib/ai/openai";
 import { webSearchResults } from "@/lib/search/web-search";
 import type { MarketComment, MarketEngagement, MarketPlatform, MarketSentiment } from "./types";
 
-const PLATFORM_SITE: Record<MarketPlatform, string> = {
-  twitter: "site:twitter.com OR site:x.com",
-  reddit: "site:reddit.com",
-  youtube: "site:youtube.com",
-  linkedin: "site:linkedin.com",
+// Google Search grounding ignores `site:` operators (a site:-scoped query
+// returns zero sources), so platform scoping is done by filtering the
+// resolved result domains instead. See src/lib/search/web-search.ts.
+const PLATFORM_DOMAINS: Record<MarketPlatform, string[]> = {
+  twitter: ["twitter.com", "x.com"],
+  reddit: ["reddit.com"],
+  youtube: ["youtube.com", "youtu.be"],
+  linkedin: ["linkedin.com"],
 };
+
+const PLATFORM_SITE: Record<MarketPlatform, string> = {
+  twitter: "X/Twitter",
+  reddit: "Reddit",
+  youtube: "YouTube",
+  linkedin: "LinkedIn",
+};
+
+/** Platforms that block search-engine indexing of post content, so Google-backed discovery can never see them. */
+const UNINDEXED_PLATFORMS = new Set<MarketPlatform>(["twitter", "linkedin"]);
 
 const AUTHOR_GUIDANCE: Record<MarketPlatform, string> = {
   reddit:
@@ -76,8 +89,22 @@ async function scanSubjectOnPlatform(subject: string, platform: MarketPlatform, 
   // and the model then answers `[]` — which is exactly why every keyword
   // reported no mentions. The model now only ever sees URLs a search engine
   // actually returned, and its job is narrowed to structuring them.
-  const results = await webSearchResults(`${PLATFORM_SITE[platform]} ${subject}`, 50);
-  if (results.length === 0) return [];
+  const results = await webSearchResults(`${PLATFORM_SITE[platform]} posts ${subject}`, 50, {
+    domains: PLATFORM_DOMAINS[platform],
+  });
+  if (results.length === 0) {
+    // X and LinkedIn block search engines from indexing post content, so
+    // Google-backed discovery returns nothing for them however the query is
+    // phrased (measured: zero x.com sources across every phrasing tried).
+    // That is a platform limitation, not a transient miss — say so, so it
+    // does not read as "nobody is talking about you".
+    if (UNINDEXED_PLATFORMS.has(platform)) {
+      throw new Error(
+        `${PLATFORM_SITE[platform]} does not allow search engines to index post content, so it cannot be scanned this way.`
+      );
+    }
+    return [];
+  }
 
   const sources = results
     .map((r, i) => `${i + 1}. ${r.url}\n   title: ${r.title}\n   snippet: ${r.snippet}`)

@@ -232,6 +232,18 @@ async function* createStreaming(genAI: GoogleGenAI, params: CreateParams, option
   yield { type: "response.completed", response: { output } };
 }
 
+/**
+ * The underlying Gemini client, un-shimmed.
+ *
+ * Web search (src/lib/search/web-search.ts) needs `groundingMetadata` off the
+ * raw response — the real sources Google Search returned — which the
+ * Responses-API shape below deliberately discards. Reading URLs out of the
+ * model's prose instead is what produced fabricated links.
+ */
+export function createVertexAiClientRaw(geminiApiKey: string | null = null, serviceAccountJson: string | null = null): GoogleGenAI {
+  return createGenAI(geminiApiKey, serviceAccountJson);
+}
+
 /** A minimal object shaped like the OpenAI SDK client, backed by Vertex/Gemini, for use anywhere `createAiClient()` is called. */
 export function createVertexAiClient(geminiApiKey: string | null = null, serviceAccountJson: string | null = null) {
   const genAI = createGenAI(geminiApiKey, serviceAccountJson);

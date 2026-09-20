@@ -1,50 +1,41 @@
 /**
- * Real web search returning real URLs.
+ * Real web search returning real URLs, using Vertex AI only.
  *
  * Why this exists: both the prospecting agent and market-insights listening
- * used to "search" by asking the LLM to emit a JSON array of result URLs with
- * a provider web-search tool enabled. That silently does not work on Gemini/
- * Vertex, which is the app's default provider:
+ * used to "search" by asking the model to emit a JSON array of result URLs
+ * with Google Search grounding enabled, then reading the model's TEXT. That
+ * silently does not work, as verified against the live Vertex endpoint:
  *
- *   - Google Search grounding drops `site:` operators, so platform-scoped
- *     searches (site:reddit.com …) came back with zero grounding chunks and
- *     the model answered `[]`.
- *   - With no grounding chunks the model still answers — from memory — so the
- *     agent received confidently-formatted URLs that simply do not exist
- *     (verified: entire result sets returning 404/410/DNS failure).
- *   - Grounded answers cite `vertexaisearch.cloud.google.com/grounding-api-
- *     redirect/…` URLs rather than the underlying page, so even a successful
- *     grounded search cannot supply a source URL worth storing or scraping.
+ *   - Grounding drops `site:` operators, so platform-scoped queries came back
+ *     with zero grounding chunks and the model answered `[]`.
+ *   - With no chunks the model still answers — from memory — so callers got
+ *     confidently-formatted URLs that do not exist (spot-check: 4 of 4 dead).
  *   - Grounding cannot be combined with JSON response formatting at all
- *     (Vertex rejects it: "controlled generation is not supported with Search
- *     tool"), which is what the JSON-shaped search prompts were asking for.
+ *     (Vertex rejects it outright), which is what those prompts asked for.
  *
- * An LLM is the wrong tool for "which URLs exist". This module centralises the
- * search step so the rest of the app only ever receives URLs that a real
- * search engine returned, and leaves the LLM to do what it is good at: reading
- * and structuring pages we hand it.
+ * The fix is to stop reading the model's prose for URLs and read
+ * `groundingMetadata.groundingChunks` instead — the actual sources Google
+ * Search returned. Those are real, but they are expressed as
+ * `vertexaisearch.cloud.google.com/grounding-api-redirect/…` links, so each
+ * one is resolved through its redirect to the underlying page URL before
+ * being handed back (verified: every chunk resolved to a live 200 page).
  *
- * Backends, in order:
- *   1. OpenAI's hosted `web_search` tool. Verified to return real, live,
- *      recent URLs that honour `site:`-style scoping (spot-checked: every
- *      returned thread resolved 200, against 0/4 for the Vertex path). This
- *      is used for search ONLY — it is deliberately independent of the
- *      app's configured reasoning provider, so keeping Vertex selected in
- *      /admin (where the credits are) does not reintroduce fabricated URLs.
- *   2. DuckDuckGo's keyless HTML endpoint, as a no-cost fallback. It works
- *      from residential IPs but answers HTTP 202 with an empty SERP once it
- *      decides it is being automated, which it does quickly from datacenter
- *      ranges like Cloud Run's — so it cannot be the primary.
+ * Because grounding ignores `site:`, platform scoping is done by filtering on
+ * each chunk's `domain` instead of by operator — see the `domains` option.
  *
- * Set SEARCH_BACKEND_URL to prepend a different HTML-shaped engine.
+ * This path needs no credential beyond the Vertex one the app already uses.
  */
 
-const ENDPOINTS = ["https://html.duckduckgo.com/html/", "https://lite.duckduckgo.com/lite/"];
+import { createVertexAiClientRaw, getVertexModel } from "@/lib/ai/vertex";
+
+const REDIRECT_TIMEOUT_MS = 15_000;
+// The redirector throttles bursts: resolving a page of chunks 8-at-a-time
+// made every request in the burst fail, which looked like "search found
+// nothing". Modest concurrency plus one retry resolves them reliably.
+const RESOLVE_CONCURRENCY = 4;
 
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-
-const TIMEOUT_MS = 12_000;
 
 export interface WebSearchResult {
   url: string;
@@ -52,7 +43,12 @@ export interface WebSearchResult {
   snippet: string;
 }
 
-/** Thrown when the search backend itself fails, so callers can surface it instead of reporting "no results". */
+export interface WebSearchOptions {
+  /** Restrict results to these registrable domains, e.g. ["reddit.com"]. Grounding ignores `site:`, so scoping happens here. */
+  domains?: string[];
+}
+
+/** Thrown when search itself fails, so callers can surface that instead of reporting "no results". */
 export class WebSearchError extends Error {
   constructor(message: string) {
     super(message);
@@ -60,201 +56,186 @@ export class WebSearchError extends Error {
   }
 }
 
-function decodeEntities(input: string): string {
-  return input
-    .replace(/<[^>]*>/g, "")
-    .replace(/&quot;/g, '"')
-    .replace(/&#x27;|&#39;/g, "'")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+interface GroundingChunk {
+  web?: { uri?: string; title?: string; domain?: string };
 }
 
-/** DuckDuckGo wraps every result href as /l/?uddg=<percent-encoded target>. */
-function unwrapRedirect(href: string): string | null {
-  const match = href.match(/[?&]uddg=([^&"']+)/);
-  const candidate = match ? safeDecode(match[1]) : href;
-  if (!/^https?:\/\//i.test(candidate)) return null;
-  return candidate;
+interface GroundingSupport {
+  segment?: { text?: string };
+  groundingChunkIndices?: number[];
 }
 
-function safeDecode(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
+function hostMatches(host: string, domain: string): boolean {
+  const h = host.toLowerCase().replace(/^www\./, "");
+  const d = domain.toLowerCase().replace(/^www\./, "");
+  return h === d || h.endsWith(`.${d}`);
 }
 
 /**
- * Parses result blocks out of the HTML SERP. Titles and snippets are
- * best-effort: a missing snippet is not a reason to drop an otherwise valid
- * result, since the URL is the part callers actually depend on.
+ * Follows a grounding redirect to the page it points at.
+ *
+ * The target's status is deliberately ignored: sites that block automated
+ * clients (Reddit answers 403 to a non-browser request) still redirect
+ * correctly, and the URL is what callers need — the agent fetches pages
+ * through its own hardened fetcher afterwards.
  */
-function parseResults(html: string): WebSearchResult[] {
-  const results: WebSearchResult[] = [];
-  const seen = new Set<string>();
-
-  const linkPattern = /<a\b[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
-  for (const match of html.matchAll(linkPattern)) {
-    const url = unwrapRedirect(match[1]);
-    if (!url || seen.has(url)) continue;
-    seen.add(url);
-    results.push({ url, title: decodeEntities(match[2]).slice(0, 300), snippet: "" });
-  }
-
-  // The lite endpoint has no result__a class; fall back to any redirect link.
-  if (results.length === 0) {
-    for (const match of html.matchAll(/href="(\/l\/\?[^"]*uddg=[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)) {
-      const url = unwrapRedirect(match[1]);
-      if (!url || seen.has(url)) continue;
-      seen.add(url);
-      results.push({ url, title: decodeEntities(match[2]).slice(0, 300), snippet: "" });
-    }
-  }
-
-  const snippets = [...html.matchAll(/class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)].map((m) =>
-    decodeEntities(m[1]).slice(0, 600)
-  );
-  for (let i = 0; i < results.length; i++) {
-    if (snippets[i]) results[i].snippet = snippets[i];
-  }
-
-  return results;
-}
-
-async function fetchSerp(endpoint: string, query: string): Promise<string> {
+async function resolveRedirect(uri: string): Promise<string | null> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), REDIRECT_TIMEOUT_MS);
   try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "User-Agent": USER_AGENT,
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "text/html,application/xhtml+xml",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-      body: new URLSearchParams({ q: query }).toString(),
+    const response = await fetch(uri, {
+      redirect: "follow",
+      headers: { "User-Agent": USER_AGENT, Accept: "text/html,application/xhtml+xml" },
       signal: controller.signal,
     });
-    if (!response.ok) throw new WebSearchError(`search backend returned HTTP ${response.status}`);
-    return await response.text();
+    await response.body?.cancel();
+    const finalUrl = response.url;
+    if (!finalUrl || !/^https?:\/\//i.test(finalUrl)) return null;
+    // Never hand back the redirector itself as though it were a source.
+    if (new URL(finalUrl).hostname.endsWith("vertexaisearch.cloud.google.com")) return null;
+    return finalUrl;
+  } catch {
+    return null;
   } finally {
     clearTimeout(timer);
   }
 }
 
-function extractJsonArray(text: string): unknown[] {
-  const cleaned = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
-  const attempt = (value: string): unknown[] => {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : [];
-  };
-  try {
-    return attempt(cleaned);
-  } catch {
-    const start = cleaned.indexOf("[");
-    const end = cleaned.lastIndexOf("]");
-    if (start >= 0 && end > start) {
-      try {
-        return attempt(cleaned.slice(start, end + 1));
-      } catch {
-        return [];
+async function resolveAll(uris: (string | null)[]): Promise<(string | null)[]> {
+  const out: (string | null)[] = new Array(uris.length).fill(null);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(RESOLVE_CONCURRENCY, uris.length) }, async () => {
+    for (;;) {
+      const index = cursor++;
+      if (index >= uris.length) return;
+      const uri = uris[index];
+      if (!uri) continue;
+      let resolvedUrl = await resolveRedirect(uri);
+      if (!resolvedUrl) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        resolvedUrl = await resolveRedirect(uri);
       }
+      out[index] = resolvedUrl;
     }
-    return [];
-  }
-}
-
-/** OpenAI's hosted web_search tool. Returns real URLs; used for search regardless of the configured reasoning provider. */
-async function searchViaOpenAi(query: string, limit: number): Promise<WebSearchResult[]> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) throw new WebSearchError("OPENAI_API_KEY is not set (required for web search)");
-
-  const { default: OpenAI } = await import("openai");
-  const client = new OpenAI({ apiKey });
-
-  const response = await client.responses.create({
-    model: process.env.OPENAI_SEARCH_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || "gpt-5.6-luna",
-    input: `Using web search, find up to ${limit} results for this query: ${query}
-
-Return ONLY a JSON array (no markdown fences, no commentary):
-[{"url": string, "title": string, "snippet": string}]
-
-Every URL must be one you actually found via web search — never construct, guess, or recall a URL from memory. If the query uses a site: restriction, only return URLs on that site. If you find nothing, return [].`,
-    tools: [{ type: "web_search" }],
   });
-
-  const out: WebSearchResult[] = [];
-  const seen = new Set<string>();
-  for (const raw of extractJsonArray(response.output_text ?? "[]")) {
-    if (!raw || typeof raw !== "object") continue;
-    const o = raw as Record<string, unknown>;
-    const url = typeof o.url === "string" ? o.url.trim() : "";
-    if (!/^https?:\/\//i.test(url) || seen.has(url)) continue;
-    seen.add(url);
-    out.push({
-      url: url.slice(0, 1000),
-      title: typeof o.title === "string" ? o.title.slice(0, 300) : "",
-      snippet: typeof o.snippet === "string" ? o.snippet.slice(0, 600) : "",
-    });
-    if (out.length >= limit) break;
-  }
+  await Promise.all(workers);
   return out;
 }
 
-async function searchViaHtmlEndpoints(query: string, limit: number, failures: string[]): Promise<WebSearchResult[]> {
-  const endpoints = process.env.SEARCH_BACKEND_URL?.trim()
-    ? [process.env.SEARCH_BACKEND_URL.trim(), ...ENDPOINTS]
-    : ENDPOINTS;
-
-  for (const endpoint of endpoints) {
-    try {
-      const results = parseResults(await fetchSerp(endpoint, query));
-      if (results.length > 0) return results.slice(0, limit);
-      failures.push(`${endpoint}: no parsable results (likely rate-limited)`);
-    } catch (error) {
-      failures.push(`${endpoint}: ${error instanceof Error ? error.message : "request failed"}`);
-    }
-  }
-  return [];
+/**
+ * Grounding ignores search operators, and a bare `site:` query makes it return
+ * nothing at all, so operators are stripped and expressed as prose instead.
+ */
+function naturalizeQuery(query: string): string {
+  return query
+    .replace(/\bsite:(\S+)/gi, "")
+    .replace(/\bOR\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
- * Runs `query` and returns up to `limit` real results.
+ * Runs `query` through Google Search (via Vertex grounding) and returns up to
+ * `limit` real, redirect-resolved results.
  *
- * Throws WebSearchError when every backend fails — an empty array from this
- * function means "the engines genuinely found nothing", never "the search
- * broke". Callers rely on that distinction to report failures honestly
- * instead of silently reporting zero leads/mentions.
+ * Throws WebSearchError when the search itself fails — an empty array means
+ * "the search genuinely found nothing", never "search is broken". Callers
+ * depend on that distinction to report failures honestly rather than
+ * silently reporting zero leads or zero mentions.
  */
-export async function webSearchResults(query: string, limit = 10): Promise<WebSearchResult[]> {
-  const trimmed = query.trim();
-  if (!trimmed) return [];
+export async function webSearchResults(
+  query: string,
+  limit = 10,
+  options: WebSearchOptions = {}
+): Promise<WebSearchResult[]> {
+  const naturalQuery = naturalizeQuery(query);
+  if (!naturalQuery) return [];
 
-  const failures: string[] = [];
+  const domains = options.domains ?? [];
+  // Asking for many *individual* pages, with an explicit count, is what makes
+  // grounding cite a page of distinct on-topic sources rather than a handful
+  // of round-up articles about the topic. Measured on a platform-scoped
+  // query: this phrasing cites 15/15 on-domain sources where a generic
+  // "list relevant pages" phrasing cited 5.
+  const scope =
+    domains.length > 0
+      ? ` Only include pages hosted on ${domains.join(" or ")} — link to the actual posts themselves, not to articles written about them.`
+      : "";
 
+  let response;
   try {
-    const results = await searchViaOpenAi(trimmed, limit);
-    if (results.length > 0) return results;
-    failures.push("openai web_search: no results");
+    const genAI = createVertexAiClientRaw();
+    response = await genAI.models.generateContent({
+      model: getVertexModel(),
+      // The prose answer is discarded; this call exists to make Google Search
+      // run and attach its sources. Asking for a list simply maximises how
+      // many distinct sources get cited.
+      contents: `Find as many individual, distinct, recent pages as you can for: ${naturalQuery}.${scope} List at least ${Math.max(15, limit)} separate results, each as its own entry with its title and a one-sentence description of what is on that page.`,
+      config: { tools: [{ googleSearch: {} }] },
+    });
   } catch (error) {
-    failures.push(`openai web_search: ${error instanceof Error ? error.message : "request failed"}`);
+    throw new WebSearchError(
+      `Web search failed for "${naturalQuery.slice(0, 80)}": ${error instanceof Error ? error.message : "Vertex request failed"}`
+    );
   }
 
-  const fallback = await searchViaHtmlEndpoints(trimmed, limit, failures);
-  if (fallback.length > 0) return fallback;
+  const metadata = response?.candidates?.[0]?.groundingMetadata as
+    | { groundingChunks?: GroundingChunk[]; groundingSupports?: GroundingSupport[] }
+    | undefined;
 
-  throw new WebSearchError(`Web search failed for "${trimmed.slice(0, 80)}" — ${failures.join("; ")}`);
+  const chunks = metadata?.groundingChunks ?? [];
+  if (chunks.length === 0) return [];
+
+  // Stitch each cited text segment onto the source it cites, so results carry
+  // a usable description rather than just a bare link.
+  const snippets = new Map<number, string[]>();
+  for (const support of metadata?.groundingSupports ?? []) {
+    const text = support.segment?.text?.trim();
+    if (!text) continue;
+    for (const index of support.groundingChunkIndices ?? []) {
+      const list = snippets.get(index) ?? [];
+      if (list.length < 4) list.push(text);
+      snippets.set(index, list);
+    }
+  }
+
+  const resolved = await resolveAll(chunks.map((chunk) => chunk.web?.uri ?? null));
+
+  const results: WebSearchResult[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < chunks.length; i++) {
+    const url = resolved[i];
+    if (!url || seen.has(url)) continue;
+
+    let hostname: string;
+    try {
+      hostname = new URL(url).hostname;
+    } catch {
+      continue;
+    }
+    if (domains.length > 0 && !domains.some((domain) => hostMatches(hostname, domain))) continue;
+
+    seen.add(url);
+    const chunkTitle = chunks[i].web?.title?.trim() ?? "";
+    // Grounding often reports the bare domain as the title, which is useless
+    // on its own; the cited segment is more informative when that happens.
+    const snippet = (snippets.get(i) ?? []).join(" ").slice(0, 600);
+    const title = chunkTitle && chunkTitle !== hostname ? chunkTitle : snippet.slice(0, 160) || hostname;
+
+    results.push({ url: url.slice(0, 1000), title: title.slice(0, 300), snippet });
+    if (results.length >= limit) break;
+  }
+
+  return results;
 }
 
 /** Runs several queries concurrently and merges them, de-duplicated, preserving per-query order. */
-export async function webSearchMany(queries: string[], limitPerQuery = 10): Promise<WebSearchResult[]> {
-  const settled = await Promise.allSettled(queries.map((query) => webSearchResults(query, limitPerQuery)));
+export async function webSearchMany(
+  queries: string[],
+  limitPerQuery = 10,
+  options: WebSearchOptions = {}
+): Promise<WebSearchResult[]> {
+  const settled = await Promise.allSettled(queries.map((query) => webSearchResults(query, limitPerQuery, options)));
 
   const merged: WebSearchResult[] = [];
   const seen = new Set<string>();

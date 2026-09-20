@@ -8,7 +8,11 @@ import { MARKET_PLATFORMS } from "@/lib/market/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+// A grounded search plus redirect resolution runs ~20-100s per source, and
+// sources are scanned concurrently, so the ceiling needs headroom well past
+// the old 120s — otherwise the request dies mid-scan and the browser is left
+// holding a stream that never reaches a terminal event.
+export const maxDuration = 300;
 
 const requestSchema = z.object({
   platforms: z.array(z.enum(MARKET_PLATFORMS)).min(1).max(4).optional(),
