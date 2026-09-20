@@ -38,17 +38,24 @@ export async function POST(request: NextRequest) {
   const { data: company } = await db.from("companies").select("id").eq("user_id", userId).maybeSingle();
   if (!company) return NextResponse.json({ error: "Build and approve your company blueprint first" }, { status: 400 });
 
+  let closed = false;
   const stream = new ReadableStream({
     async start(controller) {
-      let closed = false;
-      const send = (payload: Record<string, unknown>) => {
-        if (!closed) controller.enqueue(sseEncode(payload));
+      // A disconnected browser closes the controller underneath us, after
+      // which enqueue throws "Invalid state: Controller is already closed" —
+      // which would otherwise be recorded as a scan failure.
+      const write = (chunk: Uint8Array) => {
+        if (closed) return;
+        try {
+          controller.enqueue(chunk);
+        } catch {
+          closed = true;
+        }
       };
+      const send = (payload: Record<string, unknown>) => write(sseEncode(payload));
       // Keeps the socket alive across long per-source searches so the browser
       // never sits on a stream that has silently stopped producing bytes.
-      const heartbeat = setInterval(() => {
-        if (!closed) controller.enqueue(new TextEncoder().encode(": keepalive\n\n"));
-      }, 15_000);
+      const heartbeat = setInterval(() => write(new TextEncoder().encode(": keepalive\n\n")), 15_000);
       try {
         const result = await runMarketScanWithProgress(db, company.id, (event) => send({ type: "progress", ...event }), platforms);
         send({ type: "done", ...result });
@@ -64,9 +71,18 @@ export async function POST(request: NextRequest) {
         send({ type: "error", error: message });
       } finally {
         clearInterval(heartbeat);
-        closed = true;
-        controller.close();
+        if (!closed) {
+          closed = true;
+          try {
+            controller.close();
+          } catch {
+            // Already closed by the client disconnecting.
+          }
+        }
       }
+    },
+    cancel() {
+      closed = true;
     },
   });
 

@@ -34,7 +34,7 @@ export function NewProspectingRun({
   const [phase, setPhase] = useState<"running" | "done" | "error">("running");
   const [items, setItems] = useState<Item[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [summary, setSummary] = useState<{ found: number; contactCount: number; warnings: number } | null>(null);
+  const [summary, setSummary] = useState<{ found: number; contactCount: number; warnings: number; stopReason?: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const startedRef = useRef(false);
@@ -122,7 +122,12 @@ export function NewProspectingRun({
             }
             case "done": {
               sawTerminalEvent = true;
-              setSummary({ found: event.found, contactCount: event.contactCount, warnings: event.warnings });
+              setSummary({
+                found: event.found,
+                contactCount: event.contactCount,
+                warnings: event.warnings,
+                stopReason: event.stopReason,
+              });
               setPhase("done");
               onRunFinished?.();
               break;
@@ -203,13 +208,28 @@ export function NewProspectingRun({
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
-          {summary && (
-            <div className="mt-2 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-700">
-              Found {summary.found} compan{summary.found === 1 ? "y" : "ies"} · {summary.contactCount} contact
-              {summary.contactCount === 1 ? "" : "s"}
-              {summary.warnings > 0 ? ` · ${summary.warnings} skipped` : ""}
-            </div>
-          )}
+          {summary &&
+            (summary.found === 0 ? (
+              // A run that saves nothing is not a success. Say what stopped it
+              // and what to change — "finished" alone reads as though it
+              // worked and there was simply nobody to find.
+              <div className="mt-2 flex flex-col gap-1 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <span className="font-medium">No leads were saved.</span>
+                <span className="text-xs leading-relaxed">
+                  {summary.stopReason === "time budget reached"
+                    ? "The run ran out of time before it could qualify anyone. This usually means the targets it found don't publish named contacts — try narrower industries, or personas that appear on company websites."
+                    : summary.stopReason === "model finished"
+                      ? "The agent stopped early without saving anyone. Try broadening the industries or geographies."
+                      : `The run stopped: ${summary.stopReason ?? "no reason reported"}.`}
+                </span>
+              </div>
+            ) : (
+              <div className="mt-2 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-700">
+                Found {summary.found} compan{summary.found === 1 ? "y" : "ies"} · {summary.contactCount} contact
+                {summary.contactCount === 1 ? "" : "s"}
+                {summary.warnings > 0 ? ` · ${summary.warnings} skipped` : ""}
+              </div>
+            ))}
         </div>
       </div>
     </div>

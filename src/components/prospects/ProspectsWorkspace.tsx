@@ -9,7 +9,8 @@ import { ContactProfilePanel } from "@/components/prospects/ContactProfilePanel"
 import { ContactsTable, type FlatRow } from "@/components/prospects/ContactsTable";
 import { NewProspectingRun } from "@/components/prospects/NewProspectingRun";
 import { ProspectChatPanel } from "@/components/prospects/ProspectChatPanel";
-import { ProspectComposeModal, type ProspectSearchCriteria } from "@/components/prospects/ProspectComposeModal";
+import type { ProspectSearchCriteria } from "@/components/prospects/ProspectComposeModal";
+import { ProspectPlanPanel } from "@/components/prospects/ProspectPlanPanel";
 import { WeeklyScheduleForm } from "@/components/prospects/WeeklyScheduleForm";
 import { LEAD_STATUSES, type LeadStatus, type ProspectRow } from "@/components/prospects/types";
 
@@ -93,8 +94,8 @@ export function ProspectsWorkspace({ initialCompanies }: { initialCompanies: Pro
           </button>
 
           {leftMode === "form" ? (
-            <ProspectComposeModal
-              onSubmit={(criteria) => {
+            <ProspectPlanPanel
+              onApprove={(criteria) => {
                 setActiveCriteria(criteria);
                 setLeftMode("structured-run");
               }}

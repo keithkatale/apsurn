@@ -79,21 +79,30 @@ export async function POST(request: NextRequest) {
     ]);
   };
 
+  let closed = false;
   const stream = new ReadableStream({
     async start(controller) {
-      let closed = false;
-      const send = (payload: Record<string, unknown>) => {
-        if (!closed) controller.enqueue(sseEncode(payload));
+      // When the browser disconnects, the controller closes underneath us and
+      // any further enqueue throws "Invalid state: Controller is already
+      // closed". That surfaced as runs recorded as failed with that message,
+      // so every write is guarded and a failed write stops the stream rather
+      // than being treated as a run failure.
+      const write = (chunk: Uint8Array) => {
+        if (closed) return;
+        try {
+          controller.enqueue(chunk);
+        } catch {
+          closed = true;
+        }
       };
+      const send = (payload: Record<string, unknown>) => write(sseEncode(payload));
 
       // The agent can legitimately go a long time between events while it
       // fetches and renders pages. Without traffic on the socket a proxy can
       // hold the connection open indefinitely after the worker is gone,
       // leaving the browser waiting on a stream that will never produce
       // another byte — which is what "it runs forever" looked like.
-      const heartbeat = setInterval(() => {
-        if (!closed) controller.enqueue(new TextEncoder().encode(": keepalive\n\n"));
-      }, 15_000);
+      const heartbeat = setInterval(() => write(new TextEncoder().encode(": keepalive\n\n")), 15_000);
 
       try {
         send({ type: "meta", runId, listId });
@@ -152,9 +161,19 @@ export async function POST(request: NextRequest) {
         send({ type: "error", error: message });
       } finally {
         clearInterval(heartbeat);
-        closed = true;
-        controller.close();
+        if (!closed) {
+          closed = true;
+          try {
+            controller.close();
+          } catch {
+            // Already closed by the client disconnecting.
+          }
+        }
       }
+    },
+    cancel() {
+      // Browser navigated away or aborted: stop writing immediately.
+      closed = true;
     },
   });
 
