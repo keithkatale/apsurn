@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Bookmark, ExternalLink, Flag, Heart, MessageCircle, Repeat2, Eye, UserCheck, UserPlus, UserRound, X } from "lucide-react";
+import { Bookmark, ExternalLink, Flag, Heart, MessageCircle, Repeat2, Eye, UserCheck, UserPlus, X } from "lucide-react";
+import { AuthorAvatar } from "./AuthorAvatar";
 import { PlatformBadge, PlatformIcon } from "./PlatformBadge";
 import type { MarketMentionWithKeyword } from "./types";
 
@@ -22,21 +23,6 @@ function highlightKeyword(text: string, keyword: string | null | undefined): Rea
     ) : (
       <span key={i}>{part}</span>
     )
-  );
-}
-
-function Avatar({ url }: { url: string | null }) {
-  const [failed, setFailed] = useState(false);
-  if (!url || failed) {
-    return (
-      <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-400">
-        <UserRound className="size-4" />
-      </span>
-    );
-  }
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={url} alt="" className="size-9 shrink-0 rounded-full object-cover" onError={() => setFailed(true)} />
   );
 }
 
@@ -81,7 +67,7 @@ export function MentionPanel({
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5">
-              <Avatar url={mention.author_avatar_url} />
+              <AuthorAvatar url={mention.author_avatar_url} name={mention.author_name || mention.author_handle} />
               <div>
                 <p className="text-sm font-medium text-neutral-900">
                   {mention.author_name || mention.author_handle || "Unknown author"}

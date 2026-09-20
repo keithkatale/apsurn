@@ -1,5 +1,13 @@
-export const MARKET_PLATFORMS = ["twitter", "reddit", "youtube", "linkedin"] as const;
+/**
+ * Ordered by priority, and this order is what the UI renders. Reddit, X and
+ * LinkedIn are the platforms worth listening to for buying signals; YouTube
+ * is supporting material rather than a primary source.
+ */
+export const MARKET_PLATFORMS = ["reddit", "twitter", "linkedin", "youtube"] as const;
 export type MarketPlatform = (typeof MARKET_PLATFORMS)[number];
+
+/** Pre-selected platforms for a new keyword or a scan. YouTube is opt-in: it is supporting material, not a priority source. */
+export const DEFAULT_MARKET_PLATFORMS: MarketPlatform[] = ["reddit", "twitter", "linkedin"];
 
 export const MARKET_SENTIMENTS = ["positive", "neutral", "negative"] as const;
 export type MarketSentiment = (typeof MARKET_SENTIMENTS)[number];

@@ -15,8 +15,8 @@ import {
   Repeat2,
   UserCheck,
   UserPlus,
-  UserRound,
 } from "lucide-react";
+import { AuthorAvatar } from "./AuthorAvatar";
 import { PlatformCorner } from "./PlatformBadge";
 import type { MarketMentionWithKeyword } from "./types";
 
@@ -55,23 +55,6 @@ function highlightKeyword(text: string, keyword: string | null | undefined): Rea
     ) : (
       <span key={i}>{part}</span>
     )
-  );
-}
-
-function Avatar({ url, platform, className = "size-9" }: { url: string | null; platform: MarketMentionWithKeyword["platform"]; className?: string }) {
-  const [failed, setFailed] = useState(false);
-  return (
-    <span className={`relative inline-flex ${className} shrink-0`}>
-      {!url || failed ? (
-        <span className="flex size-full items-center justify-center rounded-full bg-neutral-100 text-neutral-400">
-          <UserRound className="size-4" />
-        </span>
-      ) : (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt="" className="size-full rounded-full object-cover" onError={() => setFailed(true)} />
-      )}
-      <PlatformCorner platform={platform} />
-    </span>
   );
 }
 
@@ -247,7 +230,10 @@ export function MentionCard({
       )}
 
       <div className="flex items-center gap-2.5 pr-14">
-        <Avatar url={mention.author_avatar_url} platform={mention.platform} />
+        <span className="relative inline-flex size-9 shrink-0">
+          <AuthorAvatar url={mention.author_avatar_url} name={mention.author_name || mention.author_handle} />
+          <PlatformCorner platform={mention.platform} />
+        </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-1.5">
             <span className="truncate text-sm font-semibold text-neutral-900">

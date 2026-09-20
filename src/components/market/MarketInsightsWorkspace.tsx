@@ -12,7 +12,13 @@ import { MarketScanOverlay, type ScanState } from "./MarketScanOverlay";
 import { PLATFORM_LABEL } from "./PlatformBadge";
 import { SaveLeadModal } from "./SaveLeadModal";
 import type { MarketMentionWithKeyword } from "./types";
-import { MARKET_PLATFORMS, type MarketAccountRow, type MarketKeywordRow, type MarketPlatform } from "@/lib/market/types";
+import {
+  DEFAULT_MARKET_PLATFORMS,
+  MARKET_PLATFORMS,
+  type MarketAccountRow,
+  type MarketKeywordRow,
+  type MarketPlatform,
+} from "@/lib/market/types";
 
 let scanLogUid = 0;
 function nextScanLogId(): string {
@@ -40,7 +46,7 @@ export function MarketInsightsWorkspace({
   const [scanState, setScanState] = useState<ScanState | null>(null);
   const [addingKeyword, setAddingKeyword] = useState(false);
   const [newKeyword, setNewKeyword] = useState("");
-  const [newPlatforms, setNewPlatforms] = useState<MarketPlatform[]>([...MARKET_PLATFORMS]);
+  const [newPlatforms, setNewPlatforms] = useState<MarketPlatform[]>([...DEFAULT_MARKET_PLATFORMS]);
   const [savingKeyword, setSavingKeyword] = useState(false);
   const [keywordFilter, setKeywordFilter] = useState<Set<string>>(new Set());
   const [platformFilter, setPlatformFilter] = useState<Set<MarketPlatform>>(new Set());
@@ -50,7 +56,7 @@ export function MarketInsightsWorkspace({
   const [aiOpen, setAiOpen] = useState(false);
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
   const [scanPlatformsOpen, setScanPlatformsOpen] = useState(false);
-  const [scanPlatforms, setScanPlatforms] = useState<Set<MarketPlatform>>(new Set(MARKET_PLATFORMS));
+  const [scanPlatforms, setScanPlatforms] = useState<Set<MarketPlatform>>(new Set(DEFAULT_MARKET_PLATFORMS));
   const [saveTargetId, setSaveTargetId] = useState<string | null>(null);
   const [savedOnly, setSavedOnly] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);

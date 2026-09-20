@@ -1,5 +1,13 @@
 import { getAiClient } from "@/lib/ai/openai";
 import { webSearchResults } from "@/lib/search/web-search";
+import {
+  enrichRedditPost,
+  redditFeedsCoolingDown,
+  redditUserPosts,
+  searchRedditPosts,
+  subredditFromUrl,
+  type RedditPost,
+} from "./reddit";
 import type { MarketComment, MarketEngagement, MarketPlatform, MarketSentiment } from "./types";
 
 // Google Search grounding ignores `site:` operators (a site:-scoped query
@@ -150,7 +158,7 @@ Include one object per search result above. Never invent posts, authors, or numb
     const parsed = extractJsonArray(response.output_text ?? "[]");
     if (!Array.isArray(parsed)) return [];
 
-    return parsed.flatMap((raw): DiscoveredMention[] => {
+    const mentions = parsed.flatMap((raw): DiscoveredMention[] => {
       if (!raw || typeof raw !== "object") return [];
       const o = raw as Record<string, unknown>;
       const url = typeof o.url === "string" ? o.url.trim() : "";
@@ -206,10 +214,116 @@ Include one object per search result above. Never invent posts, authors, or numb
         },
       ];
     });
+
+    return platform === "reddit" ? repairRedditBylines(mentions) : mentions;
   }
 }
 
+/**
+ * Replaces missing Reddit bylines with real ones from each post's own feed.
+ *
+ * Search grounding supplies a URL but no trustworthy poster, and asking the
+ * model for one produces plausible-looking usernames it cannot actually see.
+ * Where the feed is unavailable, the subreddit is used as the attribution —
+ * it is recoverable from the URL and is true — rather than "Unknown author".
+ */
+async function repairRedditBylines(mentions: DiscoveredMention[]): Promise<DiscoveredMention[]> {
+  for (const mention of mentions) {
+    if (mention.authorHandle) continue;
+
+    if (!redditFeedsCoolingDown()) {
+      const post = await enrichRedditPost(mention.url);
+      if (post?.authorHandle) {
+        mention.authorHandle = post.authorHandle;
+        mention.authorName = post.authorHandle;
+        if (post.content) mention.content = post.content.slice(0, 2000);
+        if (post.postedAt) mention.postedAt = post.postedAt;
+        if (post.comments.length > 0) mention.comments = post.comments;
+        continue;
+      }
+    }
+
+    const subreddit = subredditFromUrl(mention.url);
+    if (subreddit) mention.authorName = subreddit;
+  }
+  return mentions;
+}
+
+/**
+ * Turns Reddit's own feed data into mentions. Preferred over search
+ * grounding for Reddit because the feed carries the real poster, body,
+ * timestamp and comment authors, where grounding supplies only a URL — which
+ * is why every Reddit mention used to read "Unknown author".
+ */
+async function redditPostsToMentions(posts: RedditPost[]): Promise<DiscoveredMention[]> {
+  const mentions: DiscoveredMention[] = posts.map((post) => ({
+    platform: "reddit" as const,
+    url: post.url,
+    authorName: post.authorHandle,
+    authorHandle: post.authorHandle,
+    authorAvatarUrl: null,
+    mediaUrl: null,
+    content: (post.content || post.title).slice(0, 2000),
+    postedAt: post.postedAt,
+    engagement: {},
+    comments: post.comments,
+    sentiment: null,
+  }));
+
+  return withSentiment(mentions);
+}
+
+/**
+ * One cheap, non-grounded pass to label tone, kept separate from discovery so
+ * real post data is never round-tripped through a model that might rewrite it.
+ *
+ * Batched: Gemini counts thinking tokens against max_output_tokens, so a
+ * single prompt covering a full scan's worth of posts exhausted the cap and
+ * returned nothing, leaving every mention unlabelled.
+ */
+const SENTIMENT_BATCH_SIZE = 20;
+
+async function withSentiment(mentions: DiscoveredMention[]): Promise<DiscoveredMention[]> {
+  if (mentions.length === 0) return mentions;
+
+  const { ai, model } = await getAiClient();
+
+  for (let offset = 0; offset < mentions.length; offset += SENTIMENT_BATCH_SIZE) {
+    const batch = mentions.slice(offset, offset + SENTIMENT_BATCH_SIZE);
+    try {
+      const response = await ai.responses.create({
+        model,
+        input: `Classify the tone of each numbered post as "positive", "neutral" or "negative".
+
+${batch.map((m, i) => `${i + 1}. ${m.content.slice(0, 300)}`).join("\n")}
+
+Return ONLY a JSON array of exactly ${batch.length} strings, in order, no markdown fences.`,
+        max_output_tokens: 8192,
+      });
+      const parsed = extractJsonArray(response.output_text ?? "[]");
+      if (Array.isArray(parsed)) {
+        parsed.forEach((value, index) => {
+          if (batch[index] && typeof value === "string" && SENTIMENTS.includes(value as MarketSentiment)) {
+            batch[index].sentiment = value as MarketSentiment;
+          }
+        });
+      }
+    } catch (error) {
+      // Tone is a nice-to-have — a real mention without it beats no mention —
+      // but log it, because silently unlabelled posts look like a UI bug.
+      console.warn("[market] sentiment pass failed:", error instanceof Error ? error.message : error);
+    }
+  }
+  return mentions;
+}
+
 export async function scanKeywordOnPlatform(keyword: string, platform: MarketPlatform, depth: ScanDepth = "broad"): Promise<DiscoveredMention[]> {
+  if (platform === "reddit") {
+    const posts = await searchRedditPosts(keyword, 50);
+    if (posts && posts.length > 0) return redditPostsToMentions(posts);
+    // Feed unavailable (rate-limited): fall through to grounding, which still
+    // finds real URLs, and repair the bylines afterwards where possible.
+  }
   return scanSubjectOnPlatform(`that mention "${keyword}"`, platform, depth);
 }
 
@@ -220,5 +334,9 @@ export async function scanKeywordAllPlatforms(keyword: string, platforms: Market
 
 /** For a followed account: recent posts BY that handle, not just mentions of it. */
 export async function scanAccountOnPlatform(handle: string, platform: MarketPlatform, depth: ScanDepth = "broad"): Promise<DiscoveredMention[]> {
+  if (platform === "reddit") {
+    const posts = await redditUserPosts(handle, 50);
+    if (posts && posts.length > 0) return redditPostsToMentions(posts);
+  }
   return scanSubjectOnPlatform(`posted by the account "${handle}" (their own posts, not just replies to them)`, platform, depth);
 }

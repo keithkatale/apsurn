@@ -3,13 +3,13 @@
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
-import { MARKET_PLATFORMS, type MarketPlatform } from "@/lib/market/types";
+import { DEFAULT_MARKET_PLATFORMS, MARKET_PLATFORMS, type MarketPlatform } from "@/lib/market/types";
 import { PLATFORM_LABEL } from "./PlatformBadge";
 
 export function KeywordOnboarding({ onAdded }: { onAdded: () => void }) {
   const [keywords, setKeywords] = useState<string[]>([]);
   const [draft, setDraft] = useState("");
-  const [platforms, setPlatforms] = useState<MarketPlatform[]>([...MARKET_PLATFORMS]);
+  const [platforms, setPlatforms] = useState<MarketPlatform[]>([...DEFAULT_MARKET_PLATFORMS]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
