@@ -30,7 +30,11 @@ function timeAgo(iso: string | null): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   if (days < 30) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
+  // Pinned locale and time zone: bare toLocaleDateString() formats with the
+  // server's locale during SSR and the browser's on hydration ("02/03/2026"
+  // vs "3/2/2026"), which React reports as a hydration mismatch and repairs
+  // by throwing away and re-rendering the tree.
+  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
 }
 
 function formatCount(n: number | undefined): string {

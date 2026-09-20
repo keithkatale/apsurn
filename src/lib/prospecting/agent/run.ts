@@ -14,6 +14,7 @@ import type { ResponseFunctionToolCall, ResponseInputItem, ResponseOutputItem } 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAiClient, toFunctionTool } from "@/lib/ai/openai";
 import { safeAiErrorMessage } from "@/lib/ai/errors";
+import { WebSearchError } from "@/lib/search/web-search";
 import type { ProspectCriteria, RunStatus } from "../types";
 import { budgetExhausted, type AgentRunContext } from "./context";
 import { knownDirectories, seedDirectoryQueries } from "./directories";
@@ -26,7 +27,15 @@ export type AgentStreamEvent =
 
 const DEFAULT_MAX_STEPS = 40;
 const DEFAULT_MAX_PAGES = 60;
-const DEFAULT_WALLCLOCK_MS = 8 * 60_000;
+
+// Must stay comfortably under the interactive route's `maxDuration` (300s) so
+// the agent finishes and reports a result while the response is still open.
+// At 8 minutes the run was guaranteed to outlive its own request: the platform
+// cut the connection mid-stream ("Truncated response body" in Cloud Run logs)
+// and the browser was left with a run that never reached a terminal event.
+// The Inngest path has no such ceiling and passes a longer budget explicitly.
+const DEFAULT_WALLCLOCK_MS = 4 * 60_000;
+const BACKGROUND_WALLCLOCK_MS = 8 * 60_000;
 
 function num(name: string, fallback: number): number {
   const v = Number(process.env[name] ?? "");
@@ -89,6 +98,7 @@ export async function runDirectoryAgent(opts: {
   targetCount: number;
   onEvent?: (event: AgentStreamEvent) => void;
   abortSignal?: AbortSignal;
+  wallclockMs?: number;
 }): Promise<AgentRunResult> {
   const { db, runId, listId, userId, listCompanyId, criteria, productSummary, targetCount, onEvent, abortSignal } = opts;
 
@@ -104,7 +114,7 @@ export async function runDirectoryAgent(opts: {
       maxSteps: num("SCRAPER_MAX_STEPS", DEFAULT_MAX_STEPS),
       maxPages: num("SCRAPER_MAX_PAGES", DEFAULT_MAX_PAGES),
       maxCompanies: targetCount,
-      deadlineMs: Date.now() + num("SCRAPER_WALLCLOCK_MS", DEFAULT_WALLCLOCK_MS),
+      deadlineMs: Date.now() + (opts.wallclockMs ?? num("SCRAPER_WALLCLOCK_MS", DEFAULT_WALLCLOCK_MS)),
     },
     counters: { steps: 0, pagesFetched: 0, companiesSaved: 0, contactsSaved: 0, warnings: 0 },
     savedDomains: new Set(),
@@ -169,8 +179,16 @@ export async function runDirectoryAgent(opts: {
         }
       }
     } catch (error) {
-      console.error("[agent] generation failed", safeAiErrorMessage(error));
-      stopReason = "generation error";
+      // A model/provider failure is a failed run, not a run that found
+      // nothing. Swallowing it here made a dead AI provider look identical to
+      // "your ICP has no matches", with no way to tell them apart from the UI.
+      const message = safeAiErrorMessage(error);
+      console.error("[agent] generation failed:", message);
+      if (round === 0 || ctx.counters.companiesSaved === 0) {
+        throw new Error(`The AI provider failed: ${message}`);
+      }
+      // Mid-run failure with leads already saved: keep them, but say why we stopped.
+      stopReason = `stopped early — the AI provider failed: ${message}`;
       break;
     }
 
@@ -196,6 +214,10 @@ export async function runDirectoryAgent(opts: {
           try {
             return await runAgentTool(ctx, toolName, args);
           } catch (error) {
+            // A broken search backend can't be recovered from by retrying with
+            // a different query, and letting the agent keep trying just burns
+            // the whole budget before reporting "no leads". Fail loudly instead.
+            if (error instanceof WebSearchError) throw error;
             return { error: error instanceof Error ? error.message : "tool failed" };
           }
         };
@@ -264,6 +286,8 @@ export async function executeAgentProspectingRun(runId: string, listId: string) 
     criteria,
     productSummary: (blueprint?.product_summary as string | undefined) ?? null,
     targetCount,
+    // Not bounded by an HTTP response, so it can afford the full budget.
+    wallclockMs: BACKGROUND_WALLCLOCK_MS,
   });
 
   if (result.cancelled) {

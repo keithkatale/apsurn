@@ -129,6 +129,7 @@ export function MarketInsightsWorkspace({
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let sawTerminalEvent = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -147,13 +148,37 @@ export function MarketInsightsWorkspace({
             localLogs.push({ id: nextScanLogId(), text: event.label });
             setScanState({ phase: "scanning", progress: event.progress, logs: localLogs.slice(-18) });
           } else if (event.type === "done") {
-            setScanState({ phase: "done", progress: 100, logs: localLogs.slice(-18) });
+            sawTerminalEvent = true;
+            // Partial failures still return `done` — surface them rather than
+            // letting a half-empty scan look like a clean one.
+            const failures: string[] = Array.isArray(event.failures) ? event.failures : [];
+            for (const failure of failures) localLogs.push({ id: nextScanLogId(), text: failure });
+            setScanState({
+              phase: failures.length > 0 ? "error" : "done",
+              progress: 100,
+              logs: localLogs.slice(-18),
+              error:
+                failures.length > 0
+                  ? `${failures.length} source${failures.length === 1 ? "" : "s"} failed to scan.`
+                  : undefined,
+            });
             await Promise.all([refetchFirstPage(), refetchKeywordsAndAccounts()]);
-            setTimeout(() => setScanState(null), 700);
+            if (failures.length === 0) setTimeout(() => setScanState(null), 700);
           } else if (event.type === "error") {
+            sawTerminalEvent = true;
             setScanState({ phase: "error", progress: 0, logs: localLogs.slice(-18), error: event.error });
           }
         }
+      }
+
+      // Stream ended with no terminal event: the connection dropped mid-scan.
+      if (!sawTerminalEvent) {
+        setScanState({
+          phase: "error",
+          progress: 0,
+          logs: localLogs.slice(-18),
+          error: "The connection to the server was lost before the scan finished.",
+        });
       }
     } catch (err) {
       setScanState({

@@ -8,8 +8,7 @@
  */
 
 import type { AiToolDeclaration } from "@/lib/ai/openai";
-import { getAiClient } from "@/lib/ai/openai";
-import { safeAiErrorMessage } from "@/lib/ai/errors";
+import { webSearchResults } from "@/lib/search/web-search";
 import { fetchPage, type FetchedPage } from "@/lib/scraper/fetch-page";
 import type { CandidateCompany, CandidateContact, ContactStatus, ExtractedPerson } from "../types";
 import { isExcludedHost } from "./directories";
@@ -149,56 +148,37 @@ export const AGENT_TOOL_DECLARATIONS: AiToolDeclaration[] = [
   },
 ];
 
-// ── grounded web search ──────────────────────────────────────────────────
-function jsonArray(text: string): unknown[] {
-  const cleaned = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
-  try {
-    const v = JSON.parse(cleaned);
-    return Array.isArray(v) ? v : [];
-  } catch {
-    const s = cleaned.indexOf("[");
-    const e = cleaned.lastIndexOf("]");
-    if (s < 0 || e <= s) return [];
-    try {
-      const v = JSON.parse(cleaned.slice(s, e + 1));
-      return Array.isArray(v) ? v : [];
-    } catch {
-      return [];
-    }
-  }
-}
-
+/**
+ * Real search, via src/lib/search/web-search.ts.
+ *
+ * This used to ask the configured AI provider for a JSON array of result
+ * URLs with a provider search tool enabled. On Vertex (the default provider)
+ * that returned fabricated URLs — grounding supplied zero sources and the
+ * model answered from memory, so every link 404'd and the agent burned its
+ * whole step budget fetching dead pages and saved nothing. Search now goes
+ * through a real search engine and only the URLs it actually returns are
+ * handed to the agent.
+ *
+ * A search-backend failure is rethrown rather than swallowed into an empty
+ * array, so the run reports "search is broken" instead of "no leads found".
+ */
 async function webSearch(query: string): Promise<Array<{ url: string; title: string }>> {
-  const prompt = `Using web search, return up to 10 results most useful for finding B2B companies matching this need: "${query}".
-Prefer public directories, industry association member lists, chambers of commerce, and company listing pages. Exclude social networks (LinkedIn, Facebook, X), review aggregators, and data-broker sites.
-Return ONLY a JSON array: [{"url":string,"title":string}]. Never invent URLs.`;
-  try {
-    const { ai, model } = await getAiClient();
-    const response = await ai.responses.create({
-      model,
-      input: prompt,
-      max_output_tokens: 2048,
-      tools: [{ type: "web_search" }],
-    });
-    const out: Array<{ url: string; title: string }> = [];
-    for (const raw of jsonArray(response.output_text ?? "[]")) {
-      if (!raw || typeof raw !== "object") continue;
-      const o = raw as Record<string, unknown>;
-      const url = typeof o.url === "string" ? o.url.trim() : "";
-      if (!/^https?:\/\//i.test(url)) continue;
-      try {
-        if (isExcludedHost(new URL(url).hostname)) continue;
-      } catch {
-        continue;
-      }
-      out.push({ url: url.slice(0, 1000), title: typeof o.title === "string" ? o.title.slice(0, 200) : "" });
-      if (out.length >= 10) break;
+  const results = await webSearchResults(
+    `${query} — public business directory, industry association member list, chamber of commerce, or company listing page`,
+    10
+  );
+
+  const out: Array<{ url: string; title: string }> = [];
+  for (const result of results) {
+    try {
+      if (isExcludedHost(new URL(result.url).hostname)) continue;
+    } catch {
+      continue;
     }
-    return out;
-  } catch (error) {
-    console.error(`[agent] web_search failed: ${safeAiErrorMessage(error)}`);
-    return [];
+    out.push({ url: result.url.slice(0, 1000), title: result.title.slice(0, 200) });
+    if (out.length >= 10) break;
   }
+  return out;
 }
 
 // ── fetch with cache + budget ────────────────────────────────────────────

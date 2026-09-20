@@ -1,5 +1,5 @@
 import { getAiClient } from "@/lib/ai/openai";
-import { safeAiErrorMessage } from "@/lib/ai/errors";
+import { webSearchResults } from "@/lib/search/web-search";
 import type { MarketComment, MarketEngagement, MarketPlatform, MarketSentiment } from "./types";
 
 const PLATFORM_SITE: Record<MarketPlatform, string> = {
@@ -70,7 +70,25 @@ async function scanSubjectOnPlatform(subject: string, platform: MarketPlatform, 
       ? " Specifically look past the first page of obvious top results — check older posts, smaller/less-viral accounts, and secondary search phrasings. Avoid returning posts that are typically the single most-shared or most-cited result for this topic; prioritize variety and coverage over popularity."
       : " Include a mix of highly-engaged and lower-engagement posts — don't only return the single most popular/viral result.";
 
-  const prompt = `Using web search restricted to ${PLATFORM_SITE[platform]}, find up to 50 recent public posts/threads/videos ${subject}.${depthClause}
+  // Search with a real engine first. Asking the model to produce result URLs
+  // itself does not work on the default provider (Vertex): Google Search
+  // grounding silently drops the `site:` restriction, returns zero sources,
+  // and the model then answers `[]` — which is exactly why every keyword
+  // reported no mentions. The model now only ever sees URLs a search engine
+  // actually returned, and its job is narrowed to structuring them.
+  const results = await webSearchResults(`${PLATFORM_SITE[platform]} ${subject}`, 50);
+  if (results.length === 0) return [];
+
+  const sources = results
+    .map((r, i) => `${i + 1}. ${r.url}\n   title: ${r.title}\n   snippet: ${r.snippet}`)
+    .join("\n");
+
+  const prompt = `Below are real ${PLATFORM_SITE[platform]} search results for posts ${subject}.${depthClause}
+
+SEARCH RESULTS:
+${sources}
+
+Turn these into structured records. Use ONLY the URLs listed above, exactly as written — do not add, invent, alter, or recall any other URL.
 
 Return ONLY a JSON array (no markdown fences, no commentary) of objects:
 [{
@@ -86,16 +104,21 @@ Return ONLY a JSON array (no markdown fences, no commentary) of objects:
   "comments": [{ "author": string|null, "content": string }] (up to 3 top comments/replies if visible, else [])
 }]
 
-Only include real posts you found via search on ${PLATFORM_SITE[platform]}. Never invent posts, authors, or numbers — use null for anything you can't verify. Return as many distinct real posts as you can actually find, up to 50 — do not stop at just the first few. If you find none, return [].`;
+Include one object per search result above. Never invent posts, authors, or numbers — use null for anything the title and snippet don't tell you. If none of the results are usable posts, return [].`;
 
-  try {
-    const { ai, model } = await getAiClient();
-    const response = await ai.responses.create({
-      model,
-      input: prompt,
-      max_output_tokens: 8192,
-      tools: [{ type: "web_search" }],
-    });
+  // No search tool here: the searching is already done, and Vertex rejects
+  // JSON response formatting outright when a search tool is attached
+  // ("controlled generation is not supported with Search tool"). The output
+  // cap is generous because 50 records of this shape is a lot of JSON, and a
+  // truncated array parses as zero mentions.
+  const { ai, model } = await getAiClient();
+  const response = await ai.responses.create({
+    model,
+    input: prompt,
+    max_output_tokens: 32768,
+  });
+
+  {
 
     const parsed = extractJsonArray(response.output_text ?? "[]");
     if (!Array.isArray(parsed)) return [];
@@ -156,9 +179,6 @@ Only include real posts you found via search on ${PLATFORM_SITE[platform]}. Neve
         },
       ];
     });
-  } catch (error) {
-    console.error(`[market] scan failed (${platform}, "${subject}"): ${safeAiErrorMessage(error)}`);
-    return [];
   }
 }
 

@@ -36,7 +36,15 @@ export async function POST(request: NextRequest) {
 
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (payload: Record<string, unknown>) => controller.enqueue(sseEncode(payload));
+      let closed = false;
+      const send = (payload: Record<string, unknown>) => {
+        if (!closed) controller.enqueue(sseEncode(payload));
+      };
+      // Keeps the socket alive across long per-source searches so the browser
+      // never sits on a stream that has silently stopped producing bytes.
+      const heartbeat = setInterval(() => {
+        if (!closed) controller.enqueue(new TextEncoder().encode(": keepalive\n\n"));
+      }, 15_000);
       try {
         const result = await runMarketScanWithProgress(db, company.id, (event) => send({ type: "progress", ...event }), platforms);
         send({ type: "done", ...result });
@@ -47,8 +55,12 @@ export async function POST(request: NextRequest) {
           console.error("[market] failed to enqueue deep scan:", error instanceof Error ? error.message : error);
         });
       } catch (error) {
-        send({ type: "error", error: error instanceof Error ? error.message : "Scan failed" });
+        const message = error instanceof Error ? error.message : "Scan failed";
+        console.error("[market] scan failed:", message);
+        send({ type: "error", error: message });
       } finally {
+        clearInterval(heartbeat);
+        closed = true;
         controller.close();
       }
     },

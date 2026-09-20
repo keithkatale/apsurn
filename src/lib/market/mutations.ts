@@ -210,7 +210,7 @@ export async function runMarketScanWithProgress(
   companyId: string,
   onProgress: (event: ScanProgressEvent) => void,
   platforms?: MarketPlatform[]
-): Promise<{ scanned: number; saved: number }> {
+): Promise<{ scanned: number; saved: number; failures: string[] }> {
   const [{ data: keywords }, { data: accounts }] = await Promise.all([
     db.from("market_keywords").select("*").eq("company_id", companyId).eq("is_active", true),
     db.from("market_accounts").select("*").eq("company_id", companyId).eq("is_followed", true),
@@ -225,7 +225,7 @@ export async function runMarketScanWithProgress(
 
   if (activeKeywords.length === 0 && followedAccounts.length === 0) {
     onProgress({ label: "No keywords or followed accounts to scan for the selected platforms.", progress: 100 });
-    return { scanned: 0, saved: 0 };
+    return { scanned: 0, saved: 0, failures: [] };
   }
 
   onProgress({ label: "Clearing stale results before this scan…", progress: 2 });
@@ -256,25 +256,52 @@ export async function runMarketScanWithProgress(
 
   onProgress({ label: `Starting scan across ${total} source${total === 1 ? "" : "s"}…`, progress: 4 });
 
+  // One broken source must not take down the whole scan, but it must also not
+  // pass silently: a failure here used to be swallowed into "0 mentions",
+  // which is indistinguishable from "nothing was being said about you".
+  const failures: string[] = [];
+
   await Promise.all(
     tasks.map(async (task) => {
       onProgress({ label: `${task.label}…`, progress: Math.min(95, 5 + (completed / total) * 88) });
-      const count = await task.run();
-      savedTotal += count;
-      completed += 1;
-      onProgress({
-        label: `${task.label} — ${count} new mention${count === 1 ? "" : "s"}`,
-        progress: Math.min(97, 5 + (completed / total) * 88),
-      });
+      try {
+        const count = await task.run();
+        savedTotal += count;
+        completed += 1;
+        onProgress({
+          label: `${task.label} — ${count} new mention${count === 1 ? "" : "s"}`,
+          progress: Math.min(97, 5 + (completed / total) * 88),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "scan failed";
+        failures.push(`${task.label}: ${message}`);
+        completed += 1;
+        console.error(`[market] ${task.label} failed:`, message);
+        onProgress({
+          label: `${task.label} — failed: ${message}`,
+          progress: Math.min(97, 5 + (completed / total) * 88),
+        });
+      }
     })
   );
+
+  // Every source failing is a broken scan, not an empty one — say so.
+  if (failures.length === total) {
+    throw new Error(`Scan failed for all ${total} source${total === 1 ? "" : "s"}. ${failures[0]}`);
+  }
 
   await Promise.all(activeKeywords.map((keyword) => db.from("market_keywords").update({ last_scanned_at: new Date().toISOString() }).eq("id", keyword.id)));
   await Promise.all(followedAccounts.map((account) => db.from("market_accounts").update({ last_scanned_at: new Date().toISOString() }).eq("id", account.id)));
 
-  onProgress({ label: `Done — ${savedTotal} new mention${savedTotal === 1 ? "" : "s"} saved.`, progress: 100 });
+  onProgress({
+    label:
+      failures.length > 0
+        ? `Done — ${savedTotal} new mention${savedTotal === 1 ? "" : "s"} saved, ${failures.length} source${failures.length === 1 ? "" : "s"} failed.`
+        : `Done — ${savedTotal} new mention${savedTotal === 1 ? "" : "s"} saved.`,
+    progress: 100,
+  });
 
-  return { scanned: total, saved: savedTotal };
+  return { scanned: total, saved: savedTotal, failures };
 }
 
 /**

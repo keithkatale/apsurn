@@ -136,7 +136,13 @@ export function NewProspectingRun({
           }
         }
       }
-      if (!sawTerminalEvent) setPhase("done");
+      // The stream ended without a "done"/"error" event, so the run did not
+      // finish — the connection was cut (request timeout, instance recycled).
+      // Reporting this as success left a half-finished run looking complete.
+      if (!sawTerminalEvent) {
+        setError("The connection to the server was lost before the run finished. Any leads found so far were saved.");
+        setPhase("error");
+      }
     } catch (err) {
       if ((err as Error)?.name === "AbortError") {
         setPhase("done");

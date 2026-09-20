@@ -81,7 +81,19 @@ export async function POST(request: NextRequest) {
 
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (payload: Record<string, unknown>) => controller.enqueue(sseEncode(payload));
+      let closed = false;
+      const send = (payload: Record<string, unknown>) => {
+        if (!closed) controller.enqueue(sseEncode(payload));
+      };
+
+      // The agent can legitimately go a long time between events while it
+      // fetches and renders pages. Without traffic on the socket a proxy can
+      // hold the connection open indefinitely after the worker is gone,
+      // leaving the browser waiting on a stream that will never produce
+      // another byte — which is what "it runs forever" looked like.
+      const heartbeat = setInterval(() => {
+        if (!closed) controller.enqueue(new TextEncoder().encode(": keepalive\n\n"));
+      }, 15_000);
 
       try {
         send({ type: "meta", runId, listId });
@@ -105,7 +117,14 @@ export async function POST(request: NextRequest) {
 
         if (result.cancelled) {
           await progress("cancelled", { completed_at: new Date().toISOString() });
-          send({ type: "done", found: result.found, contactCount: result.contactCount, warnings: result.warnings, cancelled: true });
+          send({
+            type: "done",
+            found: result.found,
+            contactCount: result.contactCount,
+            warnings: result.warnings,
+            stopReason: result.stopReason,
+            cancelled: true,
+          });
           return;
         }
 
@@ -119,12 +138,21 @@ export async function POST(request: NextRequest) {
         });
         await db.from("prospect_lists").update({ found_count: result.found, completed_at: completedAt }).eq("id", listId);
 
-        send({ type: "done", found: result.found, contactCount: result.contactCount, warnings: result.warnings });
+        send({
+          type: "done",
+          found: result.found,
+          contactCount: result.contactCount,
+          warnings: result.warnings,
+          stopReason: result.stopReason,
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Prospecting failed";
+        console.error("[prospecting] run failed:", message);
         await progress("failed", { error_summary: message, completed_at: new Date().toISOString() });
         send({ type: "error", error: message });
       } finally {
+        clearInterval(heartbeat);
+        closed = true;
         controller.close();
       }
     },
