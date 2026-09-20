@@ -23,11 +23,31 @@ export function safeAiErrorMessage(error: unknown): string {
     );
   }
 
+  // Expired personal ADC. Google returns this as a bare HTTP 400 whose body
+  // is a JSON blob, so without this branch it surfaced as "AI request failed
+  // (HTTP 400)" — which reads like a bad request and sends you looking at the
+  // prompt rather than at the credential that actually expired.
+  if (typeof candidate?.message === "string" && /invalid_rapt|invalid_grant|reauth related/i.test(candidate.message)) {
+    return (
+      "Google credentials have expired and need re-authentication. Locally, run " +
+      "`gcloud auth application-default login` and retry. On a server, attach a service account to the " +
+      "service instead — personal credentials expire like this and cannot be refreshed without a browser."
+    );
+  }
+
   if (typeof candidate?.status === "number") {
     const type = typeof candidate.type === "string" ? candidate.type : null;
     const code = typeof candidate.code === "string" ? candidate.code : null;
     const detail = code ?? type;
-    return detail ? `AI request failed (${candidate.status}: ${detail})` : `AI request failed (HTTP ${candidate.status})`;
+    // A stringified JSON body is the only place Google puts the real reason,
+    // so keep a trimmed copy rather than discarding it.
+    const body =
+      typeof candidate.message === "string" && candidate.message.trim().startsWith("{")
+        ? ` ${candidate.message.slice(0, 200)}`
+        : "";
+    return detail
+      ? `AI request failed (${candidate.status}: ${detail})${body}`
+      : `AI request failed (HTTP ${candidate.status})${body}`;
   }
   if (typeof candidate?.message === "string") {
     return candidate.message.slice(0, 300);
