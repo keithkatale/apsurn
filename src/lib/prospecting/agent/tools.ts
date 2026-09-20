@@ -10,6 +10,8 @@
 import type { AiToolDeclaration } from "@/lib/ai/openai";
 import { webSearchResults } from "@/lib/search/web-search";
 import { LEAD_SOURCES, findAtsBoard, findCompanies, matchRoles, type LeadSourceId } from "../sources";
+import { findCompanyLeads, findPeopleAtCompany, isEmailFinderConfigured, translateIcypeasGeography } from "../icypeas";
+import { matchIcypeasIndustries } from "../icypeas-industries";
 import { fetchPage, type FetchedPage } from "@/lib/scraper/fetch-page";
 import type { CandidateCompany, CandidateContact, ContactStatus, ExtractedPerson } from "../types";
 import { isExcludedHost } from "./directories";
@@ -26,9 +28,34 @@ import {
 
 export const AGENT_TOOL_DECLARATIONS: AiToolDeclaration[] = [
   {
+    name: "find_leads",
+    description:
+      "THE MAIN TOOL. USE THIS FIRST, AND USUALLY ONLY THIS. Searches a paid contact database for companies matching the ICP AND returns a real decision maker at each one in the SAME call — a name, a job title, a LinkedIn URL, and enough company detail (domain, size, location) to save a lead immediately. There is no separate 'find companies' or 'find people' step needed after this: every row it returns already has both.\n\nAfter calling this, for each row: qualify the person, resolve_email, then save_lead. Do not call find_companies, find_people, extract_people, web_search, or open_page unless this tool is unavailable (not configured) or returns nothing after two tries with different wording.",
+    parameters: {
+      type: "object",
+      properties: {
+        industries: {
+          type: "array",
+          items: { type: "string" },
+          description: "Industry/vertical terms from the ICP, in plain English (e.g. \"B2B SaaS\", \"fintech\"). Do not worry about exact wording — they are mapped onto the provider's vocabulary automatically.",
+        },
+        geographies: { type: "array", items: { type: "string" }, description: "Locations from the ICP, e.g. \"United States\", \"North America\", \"Germany\"." },
+        titles: {
+          type: "array",
+          items: { type: "string" },
+          description: "Target job titles/personas to find a decision maker for, e.g. [\"Founder\",\"Head of Sales\",\"VP Sales\"]. Required.",
+        },
+        minHeadcount: { type: "number", description: "Minimum company employee count" },
+        maxHeadcount: { type: "number", description: "Maximum company employee count" },
+        limit: { type: "number", description: "Max company+person rows to return (default 25, one person per company)" },
+      },
+      required: ["titles"],
+    },
+  },
+  {
     name: "find_companies",
     description:
-      "PREFERRED FIRST STEP. Pull companies from a structured, official data source instead of scraping directory pages. Returns clean rows with name, domain, location and — for the registry sources — a named decision maker and phone number. Always try this before web_search.\n\nSources:\n" +
+      "FALLBACK ONLY — use find_leads first. Pull companies from a structured, official data source instead of scraping directory pages. Returns clean rows with name, domain, location and — for the registry sources — a named decision maker and phone number.\n\nSources:\n" +
       LEAD_SOURCES.map((s) => `- "${s.id}" (${s.archetype}): ${s.bestFor}${s.namesAHuman ? " NAMES A HUMAN DIRECTLY." : ""}`).join("\n"),
     parameters: {
       type: "object",
@@ -53,7 +80,7 @@ export const AGENT_TOOL_DECLARATIONS: AiToolDeclaration[] = [
   {
     name: "check_hiring_signal",
     description:
-      "Look up a company's public job board (Greenhouse, Ashby, Lever or Workable) by domain and report open roles with how long each has been open. Use it to prove a company is actively building the function the product replaces — a role open more than 30 days is the strongest buying signal available. Returns no board for roughly half of companies; that is normal, not an error.",
+      "OPTIONAL, LOW PRIORITY. Finding leads comes first — only call this once you already have saved leads and have spare budget left. Looks up a company's public job board (Greenhouse, Ashby, Lever or Workable) by domain and reports open roles with how long each has been open, as extra context for a lead you already found. A role open more than 30 days is a useful buying signal, but its absence is never a reason to skip a company. Returns no board for roughly half of companies; that is normal, not an error.",
     parameters: {
       type: "object",
       properties: {
@@ -102,6 +129,24 @@ export const AGENT_TOOL_DECLARATIONS: AiToolDeclaration[] = [
       type: "object",
       properties: { url: { type: "string" } },
       required: ["url"],
+    },
+  },
+  {
+    name: "find_people",
+    description:
+      "PREFERRED way to find decision makers. Looks up who works at a company by domain, using a paid contact database — no page fetching. Returns real names, job titles and LinkedIn profile URLs. Use this BEFORE extract_people: company websites usually do not publish their team, so extracting from a page normally returns nobody.",
+    parameters: {
+      type: "object",
+      properties: {
+        domain: { type: "string", description: "Company domain, e.g. acme.com" },
+        titles: {
+          type: "array",
+          items: { type: "string" },
+          description: 'Job-title fragments to match, e.g. ["Founder","Head of Sales"]. Leave empty to return anyone.',
+        },
+        limit: { type: "number", description: "Max people to return (default 10)" },
+      },
+      required: ["domain"],
     },
   },
   {
@@ -270,8 +315,79 @@ export async function runAgentTool(
   args: Record<string, unknown>
 ): Promise<unknown> {
   switch (name) {
+    case "find_leads": {
+      if (!isEmailFinderConfigured()) {
+        return {
+          leads: [],
+          error: "The contact database is not configured (ICYPEAS_API_KEY is unset). Use find_companies instead.",
+        };
+      }
+
+      const titles = Array.isArray(args.titles) ? args.titles.map(String) : ctx.criteria.personas ?? [];
+      if (titles.length === 0) {
+        return { leads: [], error: "titles is required and was empty — pass at least one target job title." };
+      }
+
+      const industryWords = Array.isArray(args.industries) ? args.industries.map(String) : ctx.criteria.industries;
+      const industries = matchIcypeasIndustries(industryWords);
+      const geographies = translateIcypeasGeography(
+        Array.isArray(args.geographies) ? args.geographies.map(String) : ctx.criteria.geographies
+      );
+
+      const rawLeads = await findCompanyLeads({
+        industries,
+        geographies,
+        titles,
+        minHeadcount: typeof args.minHeadcount === "number" ? args.minHeadcount : undefined,
+        maxHeadcount: typeof args.maxHeadcount === "number" ? args.maxHeadcount : undefined,
+        limit: typeof args.limit === "number" ? args.limit : 25,
+      });
+
+      if (rawLeads === null) {
+        return { leads: [], error: "The contact-database lookup failed. Try find_companies instead." };
+      }
+
+      // Every lead needs a usable domain to reach qualify/resolve_email/
+      // save_lead — a company the provider named but gave no website for
+      // cannot be saved (the schema requires a domain), so it is dropped
+      // here rather than being handed to the model as something to act on.
+      const leads = rawLeads.flatMap((lead) => {
+        const domain = lead.companyWebsite ? normalizeDomain(lead.companyWebsite) : null;
+        if (!domain) return [];
+        return [
+          {
+            fullName: lead.person.fullName,
+            title: lead.person.title,
+            linkedinUrl: lead.person.profileUrl,
+            companyName: lead.companyName,
+            companyDomain: domain,
+            companySize: lead.companySize,
+            companyLocation: lead.companyLocation,
+          },
+        ];
+      });
+
+      if (leads.length === 0) {
+        return {
+          leads: [],
+          note:
+            rawLeads.length > 0
+              ? "The provider found people but no usable company website among them. Try different titles or broaden the ICP."
+              : "Nobody matched. Try broader industries/geographies, or fewer/different titles — do not repeat the same call unchanged.",
+        };
+      }
+
+      return {
+        count: leads.length,
+        leads,
+        note: "Each row is a real, already-matched decision maker. For each: qualify, resolve_email, save_lead. No page fetching needed.",
+      };
+    }
+
     case "find_companies": {
-      const rows = await findCompanies({
+      let rows: Awaited<ReturnType<typeof findCompanies>>;
+      try {
+        rows = await findCompanies({
         source: String(args.source ?? "") as LeadSourceId,
         industries: Array.isArray(args.industries) ? args.industries.map(String) : undefined,
         geographies: Array.isArray(args.geographies) ? args.geographies.map(String) : undefined,
@@ -282,7 +398,20 @@ export async function runAgentTool(
         minTeamSize: typeof args.minTeamSize === "number" ? args.minTeamSize : undefined,
         maxTeamSize: typeof args.maxTeamSize === "number" ? args.maxTeamSize : undefined,
         limit: typeof args.limit === "number" ? args.limit : 50,
-      });
+        });
+      } catch (error) {
+        // A source that could not be reached is not a source that found
+        // nothing. Saying so stops the agent concluding the ICP is empty and
+        // wandering off to scrape directory pages instead.
+        const message = error instanceof Error ? error.message : "the source could not be reached";
+        console.error(`[agent] find_companies failed: ${message}`);
+        return {
+          count: 0,
+          companies: [],
+          error: `${message}. This is a source outage, not an empty result — retry this same call once, then try a different source.`,
+        };
+      }
+
       const withContact = rows.filter((r) => r.contactName).length;
       const withoutDomain = rows.filter((r) => !r.domain).length;
       const notes: string[] = [];
@@ -330,6 +459,41 @@ export async function runAgentTool(
       return { results };
     }
 
+    case "find_people": {
+      const domain = String(args.domain ?? "").trim();
+      if (!domain) return { error: "domain is required" };
+      if (!isEmailFinderConfigured()) {
+        return { people: [], error: "The contact database is not configured (ICYPEAS_API_KEY is unset)." };
+      }
+
+      const titles = Array.isArray(args.titles) ? args.titles.map(String) : (ctx.criteria.personas ?? []);
+      const people = await findPeopleAtCompany(domain, titles, typeof args.limit === "number" ? args.limit : 10);
+
+      // null means the lookup failed; [] means it ran and nobody matched.
+      // Reporting both as "no people" is what let failures pass as ordinary
+      // empty results and sent the agent off scraping instead.
+      if (people === null) {
+        return { domain, people: [], error: "The contact-database lookup failed for this domain." };
+      }
+      if (people.length === 0) {
+        return {
+          domain,
+          people: [],
+          note:
+            titles.length > 0
+              ? "Nobody at this domain matches those titles. Retry once with an empty titles list before giving up."
+              : "The contact database has nobody at this domain. Move on to the next company.",
+        };
+      }
+
+      return {
+        domain,
+        count: people.length,
+        people: people.map((p) => ({ fullName: p.fullName, title: p.title, location: p.location, linkedinUrl: p.profileUrl })),
+        note: "These are real people. Qualify the best fit, then resolve_email and save_lead. Do not open pages looking for others.",
+      };
+    }
+
     case "open_page": {
       const url = String(args.url ?? "");
       const kind = (args.pageKind as "directory_listing" | "company_detail" | "company_site" | "search" | "unknown") ?? "unknown";
@@ -366,6 +530,25 @@ export async function runAgentTool(
       const page = await fetchWithCache(ctx, url, "company_detail");
       if ("error" in page) return page;
       const people = await extractPeopleFromPage(page, targetTitles);
+
+      // Explain an empty result rather than returning a bare []. Most company
+      // sites never publish their team, and a silent empty list reads as
+      // "this company has nobody", sending the agent to scrape another site
+      // instead of using the contact database that does know.
+      if (people.length === 0) {
+        return {
+          url: page.finalUrl,
+          people: [],
+          reason:
+            page.text.trim().length < 400
+              ? "This page returned almost no readable text (rendered client-side, or blocked)."
+              : "This page does not name anyone.",
+          note: isEmailFinderConfigured()
+            ? "Use find_people with this company's domain instead — it does not depend on the site publishing a team page."
+            : "No contact database is configured, so people can only come from page text. Move on.",
+        };
+      }
+
       return {
         url: page.finalUrl,
         people: people.map((p) => ({

@@ -39,8 +39,16 @@ function describeTool(name: string, args: Record<string, unknown>): string {
       return `Reading ${host(str("url"))}`;
     case "extract_companies":
       return `Pulling companies from ${host(str("url"))}`;
+    case "find_leads":
+      return "Searching the contact database for matching decision makers";
+    case "find_people":
+      return `Looking up decision makers at ${str("domain")}`;
     case "extract_people":
-      return `Looking for decision makers at ${host(str("url"))}`;
+      return `Reading the team page at ${host(str("url"))}`;
+    case "find_companies":
+      return `Pulling companies from ${str("source")}`;
+    case "check_hiring_signal":
+      return `Checking open roles at ${str("domain")}`;
     case "qualify":
       return `Qualifying ${str("fullName") || "a contact"} at ${str("companyName") || "a company"}`;
     case "resolve_email":

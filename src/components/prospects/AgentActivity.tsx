@@ -67,12 +67,51 @@ function describe(item: AgentActivityItemData): { label: string; url: string | n
         url,
       };
     }
+    case "find_people": {
+      const domain = String(args.domain ?? "");
+      const count = Array.isArray(r.people) ? r.people.length : null;
+      if (running) return { label: `Looking up decision makers at ${domain}`, url: null };
+      // A failed lookup and an empty one mean different things, and the
+      // difference is exactly what was invisible before.
+      if (typeof r.error === "string") return { label: `Couldn't look up people at ${domain} — ${r.error}`, url: null };
+      return {
+        label: count ? `Found ${count} decision ${count === 1 ? "maker" : "makers"} at ${domain}` : `No decision makers listed at ${domain}`,
+        url: null,
+      };
+    }
     case "extract_people": {
       const url = String(args.url ?? "");
       const count = Array.isArray(r.people) ? r.people.length : null;
+      if (running) return { label: `Reading people from ${shortUrl(url)}`, url };
+      if (!count && typeof r.reason === "string") {
+        return { label: `No people on ${shortUrl(url)} — ${r.reason}`, url };
+      }
       return {
-        label: running ? `Reading people from ${shortUrl(url)}` : `Found ${count ?? 0} ${count === 1 ? "person" : "people"} on ${shortUrl(url)}`,
+        label: `Found ${count ?? 0} ${count === 1 ? "person" : "people"} on ${shortUrl(url)}`,
         url,
+      };
+    }
+    case "find_leads": {
+      const count = typeof r.count === "number" ? r.count : null;
+      if (running) return { label: "Searching the contact database for matching decision makers", url: null };
+      if (typeof r.error === "string") return { label: r.error, url: null };
+      return { label: count ? `Found ${count} matching ${count === 1 ? "lead" : "leads"}` : "No matching leads found", url: null };
+    }
+    case "find_companies": {
+      const source = String(args.source ?? "");
+      const count = typeof r.count === "number" ? r.count : null;
+      return {
+        label: running ? `Pulling companies from ${source}` : `Pulled ${count ?? 0} companies from ${source}`,
+        url: null,
+      };
+    }
+    case "check_hiring_signal": {
+      const domain = String(args.domain ?? "");
+      const matched = Array.isArray(r.matchingRoles) ? r.matchingRoles.length : null;
+      if (running) return { label: `Checking open roles at ${domain}`, url: null };
+      return {
+        label: matched ? `${domain} has ${matched} matching open ${matched === 1 ? "role" : "roles"}` : `No matching open roles at ${domain}`,
+        url: null,
       };
     }
     case "qualify": {

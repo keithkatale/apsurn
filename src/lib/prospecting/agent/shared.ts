@@ -12,7 +12,7 @@ import type { FetchedPage } from "@/lib/scraper/fetch-page";
 import { extractPeople } from "../contact-extract";
 import { emailCandidates, learnEmailPattern, type Pattern } from "../email-pattern";
 import { verifyEmail } from "../email-verifier";
-import { findEmail } from "../email-finder";
+import { findEmail } from "../icypeas";
 import type { CandidateContact, ContactStatus, ExtractedPerson, ProspectCriteria } from "../types";
 import { isExcludedHost } from "./directories";
 

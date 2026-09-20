@@ -11,7 +11,7 @@
  * Verified live against both APIs while writing this.
  */
 
-import { fetchJson, normalizeDomain, tidyName } from "./client";
+import { fetchJsonOrThrow, normalizeDomain, tidyName } from "./client";
 import type { SourcedCompany } from "./types";
 
 interface NpiAddress {
@@ -61,7 +61,7 @@ export async function npiOrganizations(opts: {
   if (opts.state) params.set("state", opts.state);
   if (opts.city) params.set("city", opts.city);
 
-  const data = await fetchJson<{ results?: NpiResult[] }>(`https://npiregistry.cms.hhs.gov/api/?${params.toString()}`);
+  const data = await fetchJsonOrThrow<{ results?: NpiResult[] }>(`https://npiregistry.cms.hhs.gov/api/?${params.toString()}`);
   if (!data?.results?.length) return [];
 
   return data.results.flatMap((result): SourcedCompany[] => {
@@ -127,7 +127,7 @@ export async function fmcsaCarriers(opts: {
   const params = new URLSearchParams({ $limit: String(Math.min(200, Math.max(1, opts.limit ?? 50))) });
   if (clauses.length > 0) params.set("$where", clauses.join(" AND "));
 
-  const data = await fetchJson<FmcsaCarrier[]>(`https://data.transportation.gov/resource/az4n-8mr2.json?${params.toString()}`);
+  const data = await fetchJsonOrThrow<FmcsaCarrier[]>(`https://data.transportation.gov/resource/az4n-8mr2.json?${params.toString()}`);
   if (!Array.isArray(data)) return [];
 
   return data.flatMap((carrier): SourcedCompany[] => {

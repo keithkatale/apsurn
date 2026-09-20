@@ -8,7 +8,7 @@
  * carry their own recency signal.
  */
 
-import { fetchJson, normalizeDomain } from "./client";
+import { fetchJsonOrThrow, normalizeDomain } from "./client";
 import type { SourcedCompany } from "./types";
 
 interface YcCompany {
@@ -103,7 +103,10 @@ export interface YcFilter {
 }
 
 async function loadYcCompanies(): Promise<YcCompany[]> {
-  const all = await fetchJson<YcCompany[]>("https://yc-oss.github.io/api/companies/all.json");
+  // Throws when the directory is unreachable. Returning [] here would be
+  // reported upstream as "no companies match", which is a different and much
+  // more misleading statement than "the source did not answer".
+  const all = await fetchJsonOrThrow<YcCompany[]>("https://yc-oss.github.io/api/companies/all.json");
   return Array.isArray(all) ? all : [];
 }
 
@@ -231,7 +234,7 @@ interface ArbeitnowJob {
  * email on their Impressum page, making them unusually easy to resolve later.
  */
 export async function arbeitnowCompanies(opts: { keywords?: string[]; limit?: number }): Promise<SourcedCompany[]> {
-  const data = await fetchJson<{ data?: ArbeitnowJob[] }>("https://www.arbeitnow.com/api/job-board-api");
+  const data = await fetchJsonOrThrow<{ data?: ArbeitnowJob[] }>("https://www.arbeitnow.com/api/job-board-api");
   if (!data?.data?.length) return [];
 
   const keywords = (opts.keywords ?? []).filter(Boolean);
@@ -279,7 +282,7 @@ interface RemotiveJob {
 /** Remotive's open API — remote-first companies, which skew software and are usually contactable. */
 export async function remotiveCompanies(opts: { keywords?: string[]; limit?: number }): Promise<SourcedCompany[]> {
   const limit = Math.min(200, Math.max(1, opts.limit ?? 50));
-  const data = await fetchJson<{ jobs?: RemotiveJob[] }>(`https://remotive.com/api/remote-jobs?limit=${limit * 3}`);
+  const data = await fetchJsonOrThrow<{ jobs?: RemotiveJob[] }>(`https://remotive.com/api/remote-jobs?limit=${limit * 3}`);
   if (!data?.jobs?.length) return [];
 
   const keywords = (opts.keywords ?? []).filter(Boolean);
