@@ -9,6 +9,7 @@
 
 import type { AiToolDeclaration } from "@/lib/ai/openai";
 import { webSearchResults } from "@/lib/search/web-search";
+import { LEAD_SOURCES, findAtsBoard, findCompanies, matchRoles, type LeadSourceId } from "../sources";
 import { fetchPage, type FetchedPage } from "@/lib/scraper/fetch-page";
 import type { CandidateCompany, CandidateContact, ContactStatus, ExtractedPerson } from "../types";
 import { isExcludedHost } from "./directories";
@@ -24,6 +25,48 @@ import {
 } from "./shared";
 
 export const AGENT_TOOL_DECLARATIONS: AiToolDeclaration[] = [
+  {
+    name: "find_companies",
+    description:
+      "PREFERRED FIRST STEP. Pull companies from a structured, official data source instead of scraping directory pages. Returns clean rows with name, domain, location and — for the registry sources — a named decision maker and phone number. Always try this before web_search.\n\nSources:\n" +
+      LEAD_SOURCES.map((s) => `- "${s.id}" (${s.archetype}): ${s.bestFor}${s.namesAHuman ? " NAMES A HUMAN DIRECTLY." : ""}`).join("\n"),
+    parameters: {
+      type: "object",
+      properties: {
+        source: { type: "string", enum: [...LEAD_SOURCES.map((s) => s.id)], description: "Which source to pull from" },
+        industries: { type: "array", items: { type: "string" }, description: "Industry/vertical terms to filter on" },
+        geographies: { type: "array", items: { type: "string" }, description: "Locations to filter on" },
+        keywords: { type: "array", items: { type: "string" }, description: "Free-text terms matched against the company pitch" },
+        taxonomy: {
+          type: "string",
+          description: 'npi_healthcare only: the provider type, e.g. "dentist", "physical therapy", "home health", "pharmacy".',
+        },
+        state: { type: "string", description: "Two-letter US state code, for npi_healthcare and fmcsa_trucking" },
+        hiringOnly: { type: "boolean", description: "yc only: keep only companies currently marked as hiring" },
+        minTeamSize: { type: "number" },
+        maxTeamSize: { type: "number" },
+        limit: { type: "number", description: "Max rows to return (default 50)" },
+      },
+      required: ["source"],
+    },
+  },
+  {
+    name: "check_hiring_signal",
+    description:
+      "Look up a company's public job board (Greenhouse, Ashby, Lever or Workable) by domain and report open roles with how long each has been open. Use it to prove a company is actively building the function the product replaces — a role open more than 30 days is the strongest buying signal available. Returns no board for roughly half of companies; that is normal, not an error.",
+    parameters: {
+      type: "object",
+      properties: {
+        domain: { type: "string", description: "Company domain, e.g. acme.com" },
+        roleKeywords: {
+          type: "array",
+          items: { type: "string" },
+          description: 'Title fragments that indicate the buying trigger, e.g. ["sales", "sdr", "revenue", "growth"]',
+        },
+      },
+      required: ["domain"],
+    },
+  },
   {
     name: "web_search",
     description:
@@ -227,6 +270,61 @@ export async function runAgentTool(
   args: Record<string, unknown>
 ): Promise<unknown> {
   switch (name) {
+    case "find_companies": {
+      const rows = await findCompanies({
+        source: String(args.source ?? "") as LeadSourceId,
+        industries: Array.isArray(args.industries) ? args.industries.map(String) : undefined,
+        geographies: Array.isArray(args.geographies) ? args.geographies.map(String) : undefined,
+        keywords: Array.isArray(args.keywords) ? args.keywords.map(String) : undefined,
+        taxonomy: typeof args.taxonomy === "string" ? args.taxonomy : undefined,
+        state: typeof args.state === "string" ? args.state : undefined,
+        hiringOnly: typeof args.hiringOnly === "boolean" ? args.hiringOnly : undefined,
+        minTeamSize: typeof args.minTeamSize === "number" ? args.minTeamSize : undefined,
+        maxTeamSize: typeof args.maxTeamSize === "number" ? args.maxTeamSize : undefined,
+        limit: typeof args.limit === "number" ? args.limit : 50,
+      });
+      const withContact = rows.filter((r) => r.contactName).length;
+      const withoutDomain = rows.filter((r) => !r.domain).length;
+      const notes: string[] = [];
+      notes.push(
+        withContact > 0
+          ? `${withContact} of these already name a decision maker — use that person, do not go looking for someone else.`
+          : "None of these name a person; resolve contacts only for companies that pass qualification."
+      );
+      if (withoutDomain > 0) {
+        // Registries carry no website, and save_lead needs a domain. One
+        // search each is affordable; two is not, and re-searching the same
+        // company is what exhausted the budget before anything got saved.
+        notes.push(
+          `${withoutDomain} have no website. Run ONE web_search per company to find it. If that search does not clearly show the company's own site, skip that company and move to the next one — never search twice for the same company.`
+        );
+      }
+      return { count: rows.length, namedContacts: withContact, missingDomain: withoutDomain, note: notes.join(" "), companies: rows };
+    }
+
+    case "check_hiring_signal": {
+      const domain = String(args.domain ?? "").trim();
+      if (!domain) return { error: "domain is required" };
+      const board = await findAtsBoard(domain);
+      if (!board) return { domain, board: null, note: "No public job board found for this domain." };
+
+      const keywords = Array.isArray(args.roleKeywords) ? args.roleKeywords.map(String) : [];
+      const matched = keywords.length > 0 ? matchRoles(board, keywords) : [];
+      const stale = matched.filter((r) => (r.ageDays ?? 0) > 30);
+      return {
+        domain,
+        provider: board.provider,
+        totalOpenRoles: board.roles.length,
+        matchingRoles: matched.slice(0, 10),
+        staleMatchingRoles: stale.length,
+        note: stale.length > 0
+          ? `${stale.length} matching role(s) open more than 30 days — strong buying signal.`
+          : matched.length > 0
+            ? "Matching roles found, all recently posted."
+            : "No roles matching those keywords.",
+      };
+    }
+
     case "web_search": {
       const results = await webSearch(String(args.query ?? ""));
       return { results };

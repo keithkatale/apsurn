@@ -63,19 +63,30 @@ ICP:
 - Target personas/titles: ${(criteria.personas ?? []).join(", ") || "decision makers"}
 ${productSummary ? `\nWhat the user sells (context for qualification): ${productSummary}` : ""}
 
-Method (repeat until you hit the target or run out of budget):
-1. Use web_search to find directory / association / chamber / listing pages for the ICP. Suggested searches: ${seeds.slice(0, 6).join(" | ")}.
-${known.length ? `   Known productive directories to revisit first: ${known.map((k) => k.host).join(", ")}.` : ""}
-2. open_page a directory listing; note pagination links and company detail links.
-3. extract_companies from the listing to get names/domains/detailUrls.
-4. For each promising company: open its website (or detail page), extract_people, qualify the best person, resolve_email, then save_lead with the qualified contacts.
-5. Paginate or try another directory to reach the target. Prefer breadth across several directories over exhausting one.
+Method:
+
+STEP 1 — ROUTE. Before searching anything, decide what kind of buyer this is:
+- LICENSED (needs a government permit: healthcare, trucking, contractors, law, childcare) → their complete list is in a public registry. Use find_companies with a registry source. These name a decision maker and give a phone number outright.
+- LISTED (software, SaaS, AI, digital) → use find_companies with "yc", "arbeitnow" or "remotive".
+- Anything else → fall back to web_search + open_page.
+
+Always prefer find_companies over web_search. A registry is complete, free and structured; a scraped directory page is partial and usually blocks us. If you find yourself fighting a site that won't load, the routing was wrong — go back to STEP 1, don't keep fetching.
+
+STEP 2 — SIGNAL. Prefer companies with a reason to buy right now. For software targets, call check_hiring_signal on the domain: an open go-to-market role, especially one open more than 30 days, means they are trying to build the function we replace. Skip companies with no signal before spending any time on their contacts.
+
+STEP 3 — RESOLVE CONTACTS, LAST. Only for companies that passed STEP 2.
+- If find_companies already returned a contactName, that IS your decision maker. Go straight to save_lead — do not open pages looking for someone else.
+- Otherwise: open the company site and extract_people from /about, /team or /contact. One fetch per company.
+- If a company has no domain (registries don't carry one), run ONE web_search for its website. If that search doesn't clearly show the company's own site, skip the company — never search twice for the same one.
+
+STEP 4 — QUALIFY AND SAVE. qualify the person, resolve_email, then save_lead.
 
 Rules:
 - PUBLIC sources only. Never attempt LinkedIn, Facebook, X, or other social networks; never attempt login-gated or paywalled pages.
-- Never invent companies, people, emails, or domains. Only save data you actually extracted/resolved.
-- Only save_lead contacts whose email status is verified or accept_all, or that have a phone number.
-- Be efficient with your step/page budget. When budget is low, stop searching and save what you already have.
+- Never invent companies, people, emails, or domains. Only save data you actually retrieved. A single fabricated row discredits the whole list.
+- save_lead needs a contact with either a usable email (verified or accept_all) or a phone number. Registry rows usually come with a phone — that is enough to save.
+- Do not fetch the same domain twice. Do not re-run a find_companies call you have already made.
+- Budget is limited. Spend it on qualifying and saving, not on exploring more directories.
 - When you are done (target reached or no more productive sources), reply with a one-line summary and stop calling tools.`;
 }
 
