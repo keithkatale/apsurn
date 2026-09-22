@@ -27,6 +27,7 @@
  */
 
 import { createVertexAiClientRaw, getVertexModel } from "@/lib/ai/vertex";
+import { safeAiErrorMessage } from "@/lib/ai/errors";
 
 const REDIRECT_TIMEOUT_MS = 15_000;
 // The redirector throttles bursts: resolving a page of chunks 8-at-a-time
@@ -174,9 +175,14 @@ export async function webSearchResults(
       config: { tools: [{ googleSearch: {} }] },
     });
   } catch (error) {
-    throw new WebSearchError(
-      `Web search failed for "${naturalQuery.slice(0, 80)}": ${error instanceof Error ? error.message : "Vertex request failed"}`
-    );
+    // safeAiErrorMessage translates Google's own error shapes (an expired
+    // ADC credential, missing credentials entirely, a bare HTTP status) into
+    // something actionable. Interpolating error.message directly used to
+    // dump the raw {"error":"invalid_grant","error_description":"reauth
+    // related error (invalid_rapt)",...} JSON straight into the UI — a wall
+    // of unreadable text repeated once per keyword/platform, with no hint
+    // that the fix is a `gcloud auth application-default login`.
+    throw new WebSearchError(`Web search failed for "${naturalQuery.slice(0, 80)}": ${safeAiErrorMessage(error)}`);
   }
 
   const metadata = response?.candidates?.[0]?.groundingMetadata as
