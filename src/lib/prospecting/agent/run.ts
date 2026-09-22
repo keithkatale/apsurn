@@ -36,22 +36,28 @@ import { matchIcypeasIndustries } from "../icypeas-industries";
 import { normalizeDomain, resolveEmail } from "./shared";
 import { persistLead } from "./persist";
 import type { CandidateCompany, CandidateContact, ContactStatus, ExtractedPerson, ProspectCriteria, RunStatus } from "../types";
-import { budgetExhausted, type AgentRunContext } from "./context";
+import type { AgentRunContext } from "./context";
 
 export type AgentStreamEvent =
   | { type: "token"; text: string }
   | { type: "tool_start"; name: string; args: Record<string, unknown> }
   | { type: "tool_end"; name: string; result: unknown };
 
-const DEFAULT_MAX_ATTEMPTS = 40;
 const DEFAULT_WALLCLOCK_MS = 4 * 60_000;
 const BACKGROUND_WALLCLOCK_MS = 8 * 60_000;
 
-// How many candidate companies Step 1 pulls per company actually wanted.
+// How many candidate companies to gather per company actually still wanted.
 // Step 2 finds nobody at a real fraction of companies (Icypeas' index is
-// large but not exhaustive), so the input to Step 2 has to be oversampled
-// for the run to reliably reach its target.
+// large but not exhaustive), so each round's input is oversampled — and if
+// one round's oversample still isn't enough, another round gathers more
+// rather than the run giving up (see the while loop in runDirectoryAgent).
 const COMPANY_OVERSAMPLE = 4;
+// A floor on how many companies a round gathers, so that late in a run —
+// when only 1 or 2 leads are still needed — it doesn't fetch a single-digit
+// batch that wastes a whole page walk on almost nothing.
+const MIN_ROUND_SIZE = 20;
+/** Icypeas pages to walk within a single round while gathering that round's batch. */
+const COMPANY_SEARCH_MAX_PAGES = 5;
 // Companies are processed with this many Step 2/3 lookups in flight at once.
 // The dominant per-lead cost is resolve_email's Icypeas poll (up to ~12s
 // worst case), not find_people (typically well under a second), so running
@@ -101,6 +107,16 @@ export interface AgentRunResult {
 async function isCancelled(db: SupabaseClient, runId: string): Promise<boolean> {
   const { data } = await db.from("prospecting_runs").select("status").eq("id", runId).maybeSingle();
   return data?.status === "cancelled";
+}
+
+async function loadKnownDomains(db: SupabaseClient, userId: string): Promise<Set<string>> {
+  const { data } = await db.from("prospect_companies").select("domain").eq("user_id", userId).is("archived_at", null);
+  const known = new Set<string>();
+  for (const row of data ?? []) {
+    const domain = typeof row.domain === "string" ? normalizeDomain(row.domain) : null;
+    if (domain) known.add(domain);
+  }
+  return known;
 }
 
 function candidateCompanyFrom(company: FoundCompany, domain: string, criteria: ProspectCriteria): CandidateCompany {
@@ -211,21 +227,38 @@ export async function runDirectoryAgent(opts: {
     criteria,
     productSummary: opts.productSummary,
     budget: {
-      maxSteps: num("SCRAPER_MAX_STEPS", DEFAULT_MAX_ATTEMPTS),
+      // maxSteps is populated only because AgentRunContext's shape still
+      // requires it — nothing reads it for gating any more (see the comment
+      // above checkStopped). It used to default to 40 and was, in practice,
+      // the actual ceiling on companies attempted per run regardless of the
+      // target requested; a run asking for 20 leads stopped at exactly 40
+      // companies tried (4 saved, 36 skipped) because of this number, not
+      // because 40 was everything available.
+      maxSteps: Number.POSITIVE_INFINITY,
       maxPages: Number.POSITIVE_INFINITY, // No pages are fetched in this pipeline.
       maxCompanies: targetCount,
       deadlineMs: Date.now() + (opts.wallclockMs ?? num("SCRAPER_WALLCLOCK_MS", DEFAULT_WALLCLOCK_MS)),
     },
     counters: { steps: 0, pagesFetched: 0, companiesSaved: 0, contactsSaved: 0, warnings: 0 },
-    savedDomains: new Set(),
+    savedDomains: await loadKnownDomains(db, userId),
     pageCache: new Map(),
   };
 
   const emit = (event: AgentStreamEvent) => onEvent?.(event);
+  // Only the real constraints: an explicit stop, running out of time, or a
+  // cancelled run. This deliberately does not call budgetExhausted() any
+  // more — that included a step-count ceiling (ctx.budget.maxSteps) that
+  // used to be the actual cause of stopping short of the target: a run
+  // asked for 20 leads stopped at exactly 40 companies attempted (4 saved,
+  // 36 skipped) not because 40 was everything available, but because 40 was
+  // an arbitrary fixed default, disconnected from the target, left over
+  // from when "steps" meant LLM planning rounds rather than companies
+  // tried. The only things that should ever stop this run short of its
+  // target now are the wall clock and the ICP genuinely running out of
+  // companies — see the round loop below.
   const checkStopped = async (): Promise<string | null> => {
     if (abortSignal?.aborted) return "cancelled";
-    const exhausted = budgetExhausted(ctx);
-    if (exhausted) return exhausted;
+    if (Date.now() >= ctx.budget.deadlineMs) return "time budget reached";
     if (await isCancelled(db, runId)) return "cancelled";
     return null;
   };
@@ -236,123 +269,184 @@ export async function runDirectoryAgent(opts: {
     );
   }
 
-  // STEP 1 — find companies matching the ICP.
   const industries = matchIcypeasIndustries(criteria.industries);
   const geographies = translateIcypeasGeography(criteria.geographies);
   const { min: minHeadcount, max: maxHeadcount } = parseHeadcountRange(criteria.companySizeRange);
   const titles = criteria.personas && criteria.personas.length > 0 ? criteria.personas : DEFAULT_TITLES;
 
-  const step1Args = { industries: criteria.industries, geographies: criteria.geographies, companySizeRange: criteria.companySizeRange };
-  emit({ type: "tool_start", name: "find_companies", args: step1Args });
+  // STEP 1 and STEP 2 run in rounds: gather a batch of candidate companies,
+  // try to find + save a lead at each, and if the target still isn't met —
+  // and there's still time and more of the source left to search — gather
+  // another batch and keep going. Continuing the same paginationToken across
+  // rounds means a second round picks up exactly where the first left off,
+  // never re-fetching companies already seen this run.
+  let paginationToken: string | null = null;
+  let sourceExhausted = false;
+  let totalSeen = 0;
+  let totalSkippedKnown = 0;
+  const triedThisRun = new Set<string>();
 
-  let companies: FoundCompany[];
-  try {
-    // Retries once internally on any failure (network, timeout, a bad
-    // response) before throwing — see icypeas.ts's postOrThrow. The message
-    // on that throw is the real reason, not a guess, so it is passed through
-    // as-is below rather than replaced with something generic.
-    companies = await findCompaniesByIcp({
-      industries,
-      geographies,
-      minHeadcount,
-      maxHeadcount,
-      limit: targetCount * COMPANY_OVERSAMPLE,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "the company search failed";
-    emit({ type: "tool_end", name: "find_companies", result: { count: 0, error: message } });
-    throw new Error(`Finding companies failed: ${message}`);
-  }
-
-  emit({
-    type: "tool_end",
-    name: "find_companies",
-    result: { count: companies.length, companies: companies.map((c) => ({ name: c.name, domain: c.website })) },
-  });
-
-  if (companies.length === 0) {
-    return { found: 0, contactCount: 0, warnings: 0, cancelled: false, stopReason: "no companies matched the ICP" };
-  }
-
-  // STEP 2 (per company) — find a decision maker, resolve their email, save.
-  // save_lead calls are chained sequentially: ctx.savedDomains/counters are
-  // read-then-write across calls and are not safe to touch concurrently.
   let saveChain: Promise<unknown> = Promise.resolve();
   let stopReason = "target reached";
   let cancelled = false;
 
-  await mapWithConcurrency(
-    companies,
-    CONCURRENCY,
-    () => ctx.counters.companiesSaved >= targetCount,
-    async (company) => {
-      const stopped = await checkStopped();
-      if (stopped) {
-        stopReason = stopped;
-        cancelled = stopped === "cancelled";
-        return;
-      }
-      ctx.counters.steps += 1;
-
-      const domain = company.website ? normalizeDomain(company.website) : null;
-      if (!domain) {
-        ctx.counters.warnings += 1;
-        return;
-      }
-      if (ctx.savedDomains.has(domain)) return;
-
-      const peopleArgs = { domain, titles };
-      emit({ type: "tool_start", name: "find_people", args: peopleArgs });
-      let people: FoundPerson[] | null;
-      try {
-        people = await findPeopleAtCompany(domain, titles, 3);
-      } catch {
-        people = null;
-      }
-      if (!people || people.length === 0) {
-        emit({
-          type: "tool_end",
-          name: "find_people",
-          result: people === null ? { people: [], error: "The contact-database lookup failed for this domain." } : { people: [], note: "Nobody matches the target titles at this company." },
-        });
-        ctx.counters.warnings += 1;
-        return;
-      }
-      emit({ type: "tool_end", name: "find_people", result: { count: people.length, people: people.map((p) => ({ fullName: p.fullName, title: p.title })) } });
-
-      const person = extractedPersonFrom(people[0], domain);
-
-      emit({ type: "tool_start", name: "resolve_email", args: { fullName: person.fullName, domain } });
-      const resolved = await resolveEmail(person, domain, null);
-      emit({ type: "tool_end", name: "resolve_email", result: { email: resolved.email, status: resolved.status } });
-
-      // Re-check the target here, not just at the top of the loop: with
-      // several companies in flight at once, more than one lane can reach
-      // this point after another lane already hit the target — checked only
-      // at loop-pickup, that let a target of 6 save 9. This bounds the
-      // overshoot to "a lookup already in flight completes," never "another
-      // one starts."
-      if (ctx.counters.companiesSaved >= targetCount) return;
-
-      const candidateCompany = candidateCompanyFrom(company, domain, criteria);
-      const candidateContact = candidateContactFrom(person, resolved);
-
-      const saveArgs = { company: { name: candidateCompany.name, domain }, contacts: [{ fullName: candidateContact.fullName }] };
-      emit({ type: "tool_start", name: "save_lead", args: saveArgs });
-      // The saveChain serializes these, so this re-check runs at the actual
-      // moment each save reaches the front of the queue — the last point
-      // where "already at target" can still be caught before writing.
-      const result = await (saveChain = saveChain.then(() =>
-        ctx.counters.companiesSaved >= targetCount
-          ? { saved: false, contactCount: 0, reason: "target already reached" }
-          : persistLead(ctx, candidateCompany, [candidateContact])
-      ));
-      emit({ type: "tool_end", name: "save_lead", result });
+  while (ctx.counters.companiesSaved < targetCount) {
+    const stopped = await checkStopped();
+    if (stopped) {
+      stopReason = stopped;
+      cancelled = stopped === "cancelled";
+      break;
     }
-  );
+    if (sourceExhausted) {
+      stopReason = totalSeen > 0 ? "no more companies matched" : "no companies matched the ICP";
+      break;
+    }
 
-  if (ctx.counters.companiesSaved < targetCount && stopReason === "target reached") {
-    stopReason = "no more companies matched";
+    // STEP 1 — gather this round's batch of new candidate companies.
+    const remaining = targetCount - ctx.counters.companiesSaved;
+    const roundTarget = Math.max(remaining * COMPANY_OVERSAMPLE, MIN_ROUND_SIZE);
+    const roundCompanies: FoundCompany[] = [];
+
+    const step1Args = { industries: criteria.industries, geographies: criteria.geographies, companySizeRange: criteria.companySizeRange };
+    emit({ type: "tool_start", name: "find_companies", args: step1Args });
+
+    try {
+      for (let page = 0; page < COMPANY_SEARCH_MAX_PAGES && roundCompanies.length < roundTarget; page += 1) {
+        const { companies: pageCompanies, nextToken } = await findCompaniesByIcp({
+          industries,
+          geographies,
+          minHeadcount,
+          maxHeadcount,
+          pageSize: 200,
+          paginationToken,
+        });
+        totalSeen += pageCompanies.length;
+        paginationToken = nextToken;
+
+        for (const company of pageCompanies) {
+          const domain = company.website ? normalizeDomain(company.website) : null;
+          if (!domain) continue;
+          if (triedThisRun.has(domain)) continue;
+          triedThisRun.add(domain);
+          if (ctx.savedDomains.has(domain)) {
+            totalSkippedKnown += 1;
+            continue;
+          }
+          roundCompanies.push(company);
+          if (roundCompanies.length >= roundTarget) break;
+        }
+
+        if (!nextToken || pageCompanies.length === 0) {
+          sourceExhausted = true;
+          break;
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "the company search failed";
+      emit({ type: "tool_end", name: "find_companies", result: { count: 0, error: message } });
+      if (ctx.counters.companiesSaved === 0) throw new Error(`Finding companies failed: ${message}`);
+      // Already saved some leads this run — report those rather than
+      // discarding them over a search failure partway through.
+      stopReason = `stopped early — the company search failed: ${message}`;
+      break;
+    }
+
+    emit({
+      type: "tool_end",
+      name: "find_companies",
+      result: {
+        count: roundCompanies.length,
+        skippedKnown: totalSkippedKnown,
+        companies: roundCompanies.map((c) => ({ name: c.name, domain: c.website })),
+      },
+    });
+
+    // Nothing new this round (a page of nothing but duplicates or companies
+    // already in the account) — loop back to the top. If the source isn't
+    // exhausted yet, that check gathers another page; if it is, the
+    // exhausted check at the top of the next iteration ends the run.
+    if (roundCompanies.length === 0) continue;
+
+    // STEP 2 (per company) — find a decision maker, resolve their email, save.
+    // save_lead calls are chained sequentially: ctx.savedDomains/counters are
+    // read-then-write across calls and are not safe to touch concurrently.
+    await mapWithConcurrency(
+      roundCompanies,
+      CONCURRENCY,
+      () => ctx.counters.companiesSaved >= targetCount || cancelled,
+      async (company) => {
+        const stoppedNow = await checkStopped();
+        if (stoppedNow) {
+          stopReason = stoppedNow;
+          cancelled = stoppedNow === "cancelled";
+          return;
+        }
+        ctx.counters.steps += 1;
+
+        const domain = company.website ? normalizeDomain(company.website) : null;
+        if (!domain) {
+          ctx.counters.warnings += 1;
+          return;
+        }
+        if (ctx.savedDomains.has(domain)) return;
+
+        const peopleArgs = { domain, titles };
+        emit({ type: "tool_start", name: "find_people", args: peopleArgs });
+        let people: FoundPerson[] | null;
+        try {
+          people = await findPeopleAtCompany(domain, titles, 3);
+        } catch {
+          people = null;
+        }
+        if (!people || people.length === 0) {
+          emit({
+            type: "tool_end",
+            name: "find_people",
+            result: people === null ? { people: [], error: "The contact-database lookup failed for this domain." } : { people: [], note: "Nobody matches the target titles at this company." },
+          });
+          ctx.counters.warnings += 1;
+          return;
+        }
+        emit({ type: "tool_end", name: "find_people", result: { count: people.length, people: people.map((p) => ({ fullName: p.fullName, title: p.title })) } });
+
+        const person = extractedPersonFrom(people[0], domain);
+
+        emit({ type: "tool_start", name: "resolve_email", args: { fullName: person.fullName, domain } });
+        const resolved = await resolveEmail(person, domain, null);
+        emit({ type: "tool_end", name: "resolve_email", result: { email: resolved.email, status: resolved.status } });
+
+        // Re-check the target here, not just at the top of the loop: with
+        // several companies in flight at once, more than one lane can reach
+        // this point after another lane already hit the target — checked only
+        // at loop-pickup, that let a target of 6 save 9. This bounds the
+        // overshoot to "a lookup already in flight completes," never "another
+        // one starts."
+        if (ctx.counters.companiesSaved >= targetCount) return;
+
+        const candidateCompany = candidateCompanyFrom(company, domain, criteria);
+        const candidateContact = candidateContactFrom(person, resolved);
+
+        const saveArgs = { company: { name: candidateCompany.name, domain }, contacts: [{ fullName: candidateContact.fullName }] };
+        emit({ type: "tool_start", name: "save_lead", args: saveArgs });
+        // The saveChain serializes these, so this re-check runs at the actual
+        // moment each save reaches the front of the queue — the last point
+        // where "already at target" can still be caught before writing.
+        const result = await (saveChain = saveChain.then(() =>
+          ctx.counters.companiesSaved >= targetCount
+            ? { saved: false, contactCount: 0, reason: "target already reached" }
+            : persistLead(ctx, candidateCompany, [candidateContact])
+        ));
+        emit({ type: "tool_end", name: "save_lead", result });
+      }
+    );
+
+    if (cancelled) break;
+  }
+
+  if (ctx.counters.companiesSaved === 0 && !cancelled && stopReason === "target reached") {
+    stopReason = totalSkippedKnown > 0 && totalSeen === 0
+      ? "all matching companies are already in this account"
+      : "no companies matched the ICP";
   }
 
   return {

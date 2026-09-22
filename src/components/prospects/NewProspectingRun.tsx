@@ -257,6 +257,25 @@ export function NewProspectingRun({
 
   const scanPhase = phase === "running" ? "scanning" : phase === "error" ? "error" : "done";
 
+  /** Turns a stopReason into the sentence explaining why the run stopped, shared by the zero- and short-of-target cases below. */
+  function explainStopReason(stopReason: string | undefined): string {
+    switch (stopReason) {
+      case "no companies matched the ICP":
+        return "No companies matched this ICP in the contact database. Try broadening the industries or geographies.";
+      case "no more companies matched":
+        return "The contact database ran out of companies matching this ICP with a listed decision maker. Try broader personas, industries or geographies.";
+      case "all matching companies are already in this account":
+        return "Every matching company is already a saved prospect in your account.";
+      case "time budget reached":
+        return "The run ran out of time before it could reach the target. Try again — it will pick up new companies, skipping ones already saved.";
+      case "cancelled":
+      case "stopped by you":
+        return "You stopped the run before it reached the target.";
+      default:
+        return stopReason ? `The run stopped: ${stopReason}.` : "No reason was reported.";
+    }
+  }
+
   const doneSummary =
     phase === "done" && summary ? (
       summary.found === 0 ? (
@@ -265,13 +284,18 @@ export function NewProspectingRun({
         // and there was simply nobody to find.
         <div className="flex flex-col gap-1 text-amber-900">
           <span className="font-medium">No leads were saved.</span>
-          <span className="text-xs leading-relaxed">
-            {summary.stopReason === "no companies matched the ICP"
-              ? "No companies matched this ICP in the contact database. Try broadening the industries or geographies."
-              : summary.stopReason === "no more companies matched"
-                ? "The companies found don't have a listed decision maker matching your target titles. Try broader personas."
-                : `The run stopped: ${summary.stopReason ?? "no reason reported"}.`}
+          <span className="text-xs leading-relaxed">{explainStopReason(summary.stopReason)}</span>
+        </div>
+      ) : budget && summary.found < budget.targetCount && summary.stopReason !== "target reached" ? (
+        // Found some, but fewer than asked for — say why, rather than a bare
+        // count that reads as "done" when the target wasn't actually met.
+        <div className="flex flex-col gap-1">
+          <span className="font-medium text-neutral-900">
+            Found {summary.found} of {budget.targetCount} requested compan{summary.found === 1 ? "y" : "ies"} ·{" "}
+            {summary.contactCount} contact{summary.contactCount === 1 ? "" : "s"}
+            {summary.warnings > 0 ? ` · ${summary.warnings} skipped` : ""}
           </span>
+          <span className="text-xs leading-relaxed text-neutral-500">{explainStopReason(summary.stopReason)}</span>
         </div>
       ) : (
         <span>
