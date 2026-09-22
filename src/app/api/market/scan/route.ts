@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
-import { inngest } from "@/lib/inngest/client";
-import { runMarketScanWithProgress } from "@/lib/market/mutations";
+import { enqueueInternalJob } from "@/lib/jobs/enqueue";
+import { runMarketScanWithProgress, runDeepMarketScan } from "@/lib/market/mutations";
 import { MARKET_PLATFORMS } from "@/lib/market/types";
 
 export const runtime = "nodejs";
@@ -62,9 +62,12 @@ export async function POST(request: NextRequest) {
 
         // Keep digging in the background after the visible batch is shown —
         // no need to hold the response open for this.
-        await inngest.send({ name: "market/scan.deepen", data: { companyId: company.id, platforms } }).catch((error) => {
-          console.error("[market] failed to enqueue deep scan:", error instanceof Error ? error.message : error);
-        });
+        // Keep digging in the background after the visible batch is shown.
+        enqueueInternalJob(
+          "/api/jobs/market-deep-scan",
+          { companyId: company.id, platforms },
+          () => runDeepMarketScan(db, company.id, platforms),
+        );
       } catch (error) {
         const message = error instanceof Error ? error.message : "Scan failed";
         console.error("[market] scan failed:", message);

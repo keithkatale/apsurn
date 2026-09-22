@@ -53,17 +53,19 @@ export function withinSendingWindow(now = new Date()): boolean {
 }
 
 function valueHash(kind: string, value: string) {
-  const pepper = process.env.SUPPRESSION_HASH_SECRET;
-  if (!pepper) throw new Error("SUPPRESSION_HASH_SECRET is not configured");
+  const pepper = process.env.SUPPRESSION_HASH_SECRET?.trim();
+  if (!pepper) return null;
   return createHash("sha256").update(`${pepper}:${kind}:${value.toLowerCase()}`).digest("hex");
 }
 
 export async function isEmailSuppressed(email: string): Promise<boolean> {
+  const hash = valueHash("email", email);
+  if (!hash) return false;
   const db = createAdminClient();
   const { data } = await db
     .from("suppressed_contact_values")
     .select("id")
-    .eq("value_hash", valueHash("email", email))
+    .eq("value_hash", hash)
     .maybeSingle();
   return Boolean(data);
 }
@@ -109,10 +111,11 @@ export type GuardBlockReason =
 export async function checkSendGuards(opts: {
   email: string | null | undefined;
   inboxId: string | null | undefined;
+  ignoreWindow?: boolean;
 }): Promise<{ ok: true } | { ok: false; reason: Exclude<GuardBlockReason, null> }> {
   if (!opts.email) return { ok: false, reason: "no_email" };
   if (!opts.inboxId) return { ok: false, reason: "no_inbox" };
-  if (!withinSendingWindow()) return { ok: false, reason: "outside_window" };
+  if (!opts.ignoreWindow && !withinSendingWindow()) return { ok: false, reason: "outside_window" };
   if (await isEmailSuppressed(opts.email)) return { ok: false, reason: "suppressed" };
   const sent = await inboxSendsToday(opts.inboxId);
   if (sent >= dailySendCap()) return { ok: false, reason: "daily_cap" };

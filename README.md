@@ -7,8 +7,7 @@ Apsurn is a source-backed AI prospecting application. It turns an approved compa
 1. Copy `.env.example` to `.env.local` and configure Supabase and Vertex AI.
 2. Apply `supabase/migrations` in numeric order to a new Supabase project. Migration `0000` is destructive and must never be applied to a project containing data that should be retained.
 3. Run `npm install` and `npm run dev`.
-4. In a second terminal, run `npm run inngest:dev`. Local development is explicitly placed in keyless Inngest Dev mode; cloud deployments require the event and signing keys.
-5. Configure `EMAIL_VERIFIER_URL`, `EMAIL_VERIFIER_SECRET`, and `SUPPRESSION_HASH_SECRET`. Run `npm run verifier:dev` locally, or deploy the verifier to a host with outbound TCP/25 for production.
+4. Configure `EMAIL_VERIFIER_URL`, `EMAIL_VERIFIER_SECRET`, and `SUPPRESSION_HASH_SECRET`. Run `npm run verifier:dev` locally, or deploy the verifier to a host with outbound TCP/25 for production.
 
 The app requires a real Supabase Auth session. Create an account at `/login`, generate and approve a blueprint at `/setup`, then start a search under `/dashboard/prospects`. Website analytics lives under `/dashboard/analytics`.
 
@@ -20,7 +19,7 @@ The app requires a real Supabase Auth session. Create an account at `/login`, ge
 - AI extracts and ranks evidence; it is not accepted as the sole source for a person or contact value.
 - Known and inferred email addresses are checked by the dedicated verifier. Inference tries a learned company pattern first, then common business-email patterns; only a definitive mailbox result is exposed.
 - A company is saved and counted only when at least one named person has a verified email address or public phone number.
-- Inngest executes searches asynchronously and persists progress and partial failures.
+- Background jobs run as Cloud Run HTTP handlers (`/api/jobs/*`, `/api/cron/*`) after the user-facing request returns, or on Cloud Scheduler.
 
 ## Website analytics
 

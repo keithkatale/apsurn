@@ -1,5 +1,6 @@
 import { getAiClient } from "@/lib/ai/openai";
 import { safeAiErrorMessage } from "@/lib/ai/errors";
+import { EMAIL_SKILL_BRIEF } from "@/lib/outreach/email-skills";
 
 export interface DraftContext {
   contactName: string | null;
@@ -10,6 +11,8 @@ export interface DraftContext {
   qualifyReason: string | null;
   productSummary: string | null;
   senderName?: string | null;
+  campaignName?: string | null;
+  campaignPain?: string | null;
 }
 
 export interface OutreachDraft {
@@ -39,7 +42,9 @@ function extractJsonObject(text: string): unknown {
  * Vertex opener draft — Mom Test / non-salesy voice (OpenOutSend outreach agent).
  */
 export async function draftOpener(ctx: DraftContext): Promise<OutreachDraft> {
-  const prompt = `You write a first cold outreach email as a curious peer doing Mom Test research — not a pitch.
+  const prompt = `${EMAIL_SKILL_BRIEF}
+
+You write a first cold outreach email as a curious peer doing Mom Test research — not a pitch.
 Return ONLY JSON: {"subject":"...","body":"..."}.
 Rules:
 - Subject: short, specific, human — not salesy, no ALL CAPS, no clickbait.
@@ -52,6 +57,8 @@ Sender: ${ctx.senderName ?? "the sender"}
 Recipient: ${ctx.contactName ?? "there"}${ctx.contactTitle ? ` (${ctx.contactTitle})` : ""} at ${ctx.companyName} (${ctx.companyDomain})
 Email: ${ctx.contactEmail}
 Why they fit: ${ctx.qualifyReason ?? "(none — keep generic but relevant)"}
+Campaign: ${ctx.campaignName ?? "(none)"}
+Pain this campaign speaks to: ${ctx.campaignPain ?? "(none)"}
 Our product (context only, do not hard-sell): ${ctx.productSummary ?? "(unspecified)"}`;
 
   try {
@@ -67,6 +74,57 @@ Our product (context only, do not hard-sell): ${ctx.productSummary ?? "(unspecif
     return { subject, body };
   } catch (error) {
     throw new Error(`Outreach draft failed: ${safeAiErrorMessage(error)}`);
+  }
+}
+
+export interface FollowupContext {
+  campaignName?: string | null;
+  campaignPain?: string | null;
+  campaignDescription?: string | null;
+  productSummary?: string | null;
+  senderName?: string | null;
+  stepNumber: number;
+  delayDays: number;
+  previousSubject?: string | null;
+  previousBody?: string | null;
+}
+
+/**
+ * Generic (template) follow-up draft — used once per campaign step, not per contact.
+ * Uses {{first_name}} / {{company}} placeholders so it can be rendered per recipient later.
+ */
+export async function draftFollowupTemplate(ctx: FollowupContext): Promise<OutreachDraft> {
+  const prompt = `${EMAIL_SKILL_BRIEF}
+
+You write follow-up bump #${ctx.stepNumber} in a cold outreach sequence, sent ${ctx.delayDays} day(s) after the previous email if there was no reply.
+Return ONLY JSON: {"subject":"...","body":"..."}.
+Rules:
+- This is a TEMPLATE reused for many recipients — use exactly the placeholders {{first_name}} and {{company}} where a name/company would go. Do not invent specific facts.
+- Short, low-pressure bump. Reference that you reached out before without repeating it verbatim.
+- Plain text, no signature block, no links unless essential. A few short sentences.
+- Do not be salesy or pushy. One new angle or data point — not a rehash of the opener.
+
+Sender: ${ctx.senderName ?? "the sender"}
+Campaign: ${ctx.campaignName ?? "(none)"}
+Pain this campaign speaks to: ${ctx.campaignPain ?? "(none)"}
+Campaign description: ${ctx.campaignDescription ?? "(none)"}
+Our product (context only, do not hard-sell): ${ctx.productSummary ?? "(unspecified)"}
+Previous email subject: ${ctx.previousSubject ?? "(unknown)"}
+Previous email body: ${ctx.previousBody ?? "(unknown)"}`;
+
+  try {
+    const { ai, model } = await getAiClient();
+    const response = await ai.responses.create({
+      model,
+      input: prompt,
+    });
+    const parsed = extractJsonObject(response.output_text ?? "") as OutreachDraft;
+    const subject = String(parsed.subject ?? "").trim();
+    const body = String(parsed.body ?? "").trim();
+    if (!subject || !body) throw new Error("empty draft");
+    return { subject, body };
+  } catch (error) {
+    throw new Error(`Follow-up draft failed: ${safeAiErrorMessage(error)}`);
   }
 }
 

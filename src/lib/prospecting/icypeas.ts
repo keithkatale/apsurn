@@ -324,8 +324,11 @@ export async function findCompaniesByIcp(opts: {
   geographies: string[];
   minHeadcount?: number;
   maxHeadcount?: number;
-  limit?: number;
-}): Promise<FoundCompany[]> {
+  /** People per page (1–200). Distinct companies on a page will be fewer. */
+  pageSize?: number;
+  /** Opaque token from a previous response's `pagination` object. */
+  paginationToken?: string | null;
+}): Promise<{ companies: FoundCompany[]; nextToken: string | null }> {
   const apiKey = process.env.ICYPEAS_API_KEY?.trim();
   if (!apiKey) throw new IcypeasError("ICYPEAS_API_KEY is not set", null);
 
@@ -338,27 +341,20 @@ export async function findCompaniesByIcp(opts: {
     if (opts.maxHeadcount !== undefined) headcount["<="] = Math.max(0, Math.floor(opts.maxHeadcount));
     query["currentCompany.headcount"] = headcount;
   }
-  // An unconstrained query would return an arbitrary slice of the entire
-  // database rather than anything resembling "matches this ICP".
-  if (Object.keys(query).length === 0) return [];
+  if (Object.keys(query).length === 0) return { companies: [], nextToken: null };
 
-  // Oversampled relative to the requested limit: many rows will share a
-  // company (multiple employees indexed at the same place), so the raw page
-  // needs to be larger than the number of distinct companies wanted.
-  const limit = Math.min(200, Math.max(1, opts.limit ?? 25));
-  // Throws with the real reason (a timeout, an HTTP status, an API-reported
-  // validation error) rather than swallowing it into a bare null — a run
-  // that could not search at all is a different failure than one that
-  // searched and matched nobody, and reporting them the same way is what
-  // made a transient timeout here read as a rejected, unfixable query.
-  const response = await postOrThrow<{ success?: boolean; leads?: CompanySearchLead[] }>(
-    "/find-people",
-    { query, pagination: { size: Math.min(200, limit * 5) } },
-    apiKey
-  );
+  const pageSize = Math.min(200, Math.max(1, opts.pageSize ?? 100));
+  const pagination: Record<string, unknown> = { size: pageSize };
+  if (opts.paginationToken) pagination.token = opts.paginationToken;
+
+  const response = await postOrThrow<{
+    success?: boolean;
+    leads?: CompanySearchLead[];
+    pagination?: { size?: number; token?: string };
+  }>("/find-people", { query, pagination }, apiKey);
 
   const seen = new Set<string>();
-  const out: FoundCompany[] = [];
+  const companies: FoundCompany[] = [];
   for (const lead of response.leads ?? []) {
     const name = (lead.lastCompanyName ?? "").trim();
     if (!name) continue;
@@ -366,16 +362,19 @@ export async function findCompaniesByIcp(opts: {
     const dedupeKey = (website || name).toLowerCase();
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
-    out.push({
+    companies.push({
       name,
       website,
       location: lead.lastCompanyAddress?.trim() || null,
       size: typeof lead.lastCompanySize === "number" ? lead.lastCompanySize : null,
       industry: lead.lastCompanyIndustry?.trim() || null,
     });
-    if (out.length >= limit) break;
   }
-  return out;
+
+  const nextToken = typeof response.pagination?.token === "string" && response.pagination.token.length > 0
+    ? response.pagination.token
+    : null;
+  return { companies, nextToken };
 }
 
 /**

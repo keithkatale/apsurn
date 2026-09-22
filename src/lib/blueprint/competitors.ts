@@ -31,18 +31,22 @@ function extractJsonArray(text: string): unknown {
 export async function findCompetitors(params: {
   companyName: string | null;
   productSummary: string | null;
+  positioning?: string | null;
+  valueProp?: string | null;
   industries: string[];
 }): Promise<string[]> {
-  const { companyName, productSummary, industries } = params;
+  const { companyName, productSummary, positioning, valueProp, industries } = params;
   if (!companyName && !productSummary) return [];
 
-  const prompt = `Using web search, find real, named competitors for this company.
+  const prompt = `Using web search, find real companies that offer a similar service or product to this business — direct competitors and close alternatives in the same category.
 
 Company name: ${companyName ?? "unknown"}
 What they do: ${productSummary ?? "unknown"}
+Positioning: ${positioning ?? "unknown"}
+Value: ${valueProp ?? "unknown"}
 Industries: ${industries.join(", ") || "unknown"}
 
-Return ONLY a JSON array of competitor company names (max 8), no markdown fences, no commentary. Example: ["Competitor One", "Competitor Two"]. If you can't find any real competitors, return [].`;
+Return ONLY a JSON array of competitor names or domains (max 12), no markdown fences, no commentary. Example: ["Competitor One", "othertool.io"]. If you can't find any real companies, return [].`;
 
   try {
     const { ai, model } = await getAiClient();
@@ -59,9 +63,10 @@ Return ONLY a JSON array of competitor company names (max 8), no markdown fences
       .filter((item): item is string => typeof item === "string")
       .map((item) => item.trim().slice(0, 80))
       .filter(Boolean)
-      .slice(0, 8);
+      .slice(0, 12);
   } catch (err) {
     console.error(`[blueprint] competitor search failed: ${safeAiErrorMessage(err)}`);
     return [];
   }
 }
+

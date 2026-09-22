@@ -1,6 +1,5 @@
 import { getAiClient } from "@/lib/ai/openai";
 import type { SiteSnapshot } from "@/lib/scraper/crawl";
-import { findCompetitors } from "./competitors";
 import { sanitizeBlueprint } from "./sanitize";
 import type { CompanyBlueprint } from "./types";
 import { safeAiErrorMessage } from "@/lib/ai/errors";
@@ -66,11 +65,10 @@ Return ONLY JSON (no markdown fences, no commentary) matching exactly this shape
   ],
   "valueProp": string | null,
   "positioning": string | null,
-  "productSummary": string | null,
-  "competitors": string[]
+  "productSummary": string | null
 }
 
-Base every field only on what's reasonably inferable from the scraped text. If something can't be inferred, use null or an empty array rather than guessing wildly.`;
+Do not list competitors. Competitor discovery happens in a later step. Base every field only on what's reasonably inferable from the scraped text. If something can't be inferred, use null or an empty array rather than guessing wildly.`;
 }
 
 /** Deterministic fallback used when the model call fails or times out. */
@@ -113,18 +111,7 @@ export async function generateCompanyBlueprint(snapshot: SiteSnapshot): Promise<
     const text = response.output_text ?? "";
     const parsed = extractJsonObject(text);
     const blueprint = sanitizeBlueprint(parsed, { confidence: "model", modelUsed: model });
-
-    // The model's training-data recall of "who competes with X" is
-    // unreliable — ground it in a real web search instead when it came
-    // back empty.
-    if (blueprint.competitors.length === 0) {
-      blueprint.competitors = await findCompetitors({
-        companyName: blueprint.companyName,
-        productSummary: blueprint.productSummary,
-        industries: blueprint.icp.industries,
-      });
-    }
-
+    blueprint.competitors = [];
     return blueprint;
   } catch (err) {
     console.error(`[blueprint] model generation failed, using fallback: ${safeAiErrorMessage(err)}`);

@@ -3,7 +3,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUserId } from "@/lib/auth/session";
 import { ProspectsWorkspace } from "@/components/prospects/ProspectsWorkspace";
 
-export default async function ProspectsPage() {
+export default async function ProspectsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ find?: string }>;
+}) {
+  const params = await searchParams;
   const supabase = createAdminClient();
   const userId = await getCurrentUserId();
 
@@ -41,7 +46,7 @@ export default async function ProspectsPage() {
 
   if (error) console.error("[prospects] failed to load companies:", error);
 
-  return <ProspectsWorkspace initialCompanies={companies ?? []} />;
+  return <ProspectsWorkspace initialCompanies={companies ?? []} openFind={params.find === "1"} />;
 }
 
 export const dynamic = "force-dynamic";

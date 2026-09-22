@@ -1,28 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ChevronDown, Plus, UserCheck, UserPlus, UserRound } from "lucide-react";
+import { Check, ChevronDown, Plus, UserCheck, UserPlus } from "lucide-react";
+import { AuthorAvatar } from "./AuthorAvatar";
 
 export interface FilterOption {
   id: string;
   label: string;
   avatarUrl?: string | null;
   isFollowed?: boolean;
-}
-
-function OptionAvatar({ url }: { url: string | null | undefined }) {
-  const [failed, setFailed] = useState(false);
-  if (!url || failed) {
-    return (
-      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-400">
-        <UserRound className="size-3" />
-      </span>
-    );
-  }
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={url} alt="" className="size-5 shrink-0 rounded-full object-cover" onError={() => setFailed(true)} />
-  );
 }
 
 export function FilterDropdown({
@@ -70,7 +56,9 @@ export function FilterDropdown({
                     onClick={() => onToggle(option.id)}
                     className="flex flex-1 items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-sm text-neutral-700"
                   >
-                    {option.avatarUrl !== undefined && <OptionAvatar url={option.avatarUrl} />}
+                    {option.avatarUrl !== undefined && (
+                      <AuthorAvatar url={option.avatarUrl} name={option.label} className="size-5" />
+                    )}
                     <span className="min-w-0 flex-1 truncate">{option.label}</span>
                     {selected.has(option.id) && <Check className="size-3.5 shrink-0 text-blue-700" />}
                   </button>

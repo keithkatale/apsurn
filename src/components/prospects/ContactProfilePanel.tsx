@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Pencil, Trash2, X } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { EnrollInSequenceModal } from "@/components/sequences/EnrollInSequenceModal";
+import { CompanyFavicon } from "./CompanyFavicon";
+import { ContactAvatar } from "./ContactAvatar";
 import { LeadStatusPicker } from "./LeadStatusPicker";
 import type { ContactRow, ProspectRow } from "./types";
 
@@ -85,20 +87,28 @@ export function ContactProfilePanel({
   return (
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-start justify-between gap-4 border-b border-neutral-200 bg-white px-4 py-3 pr-10">
-        <div className="min-w-0">
-          {editing ? (
-            <input
-              className="input w-full text-base font-medium"
-              value={fields.full_name}
-              onChange={(e) => setFields((f) => ({ ...f, full_name: e.target.value }))}
-              placeholder="Full name"
-            />
-          ) : (
-            <>
-              <h2 className="truncate text-base font-semibold text-neutral-900">{contact.full_name || "Unnamed contact"}</h2>
-              {contact.title && <p className="text-xs text-neutral-500">{contact.title}</p>}
-            </>
-          )}
+        <div className="flex min-w-0 items-center gap-3">
+          <ContactAvatar
+            name={contact.full_name}
+            linkedinUrl={fields.linkedin_url || contact.linkedin_url}
+            email={fields.email || contact.email}
+            className="size-14"
+          />
+          <div className="min-w-0">
+            {editing ? (
+              <input
+                className="input w-full text-base font-medium"
+                value={fields.full_name}
+                onChange={(e) => setFields((f) => ({ ...f, full_name: e.target.value }))}
+                placeholder="Full name"
+              />
+            ) : (
+              <>
+                <h2 className="truncate text-base font-semibold text-neutral-900">{contact.full_name || "Unnamed contact"}</h2>
+                {contact.title && <p className="text-xs text-neutral-500">{contact.title}</p>}
+              </>
+            )}
+          </div>
         </div>
         <button
           type="button"
@@ -122,8 +132,11 @@ export function ContactProfilePanel({
 
           <div className="flex flex-col gap-1 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm">
             <span className="text-neutral-500">Company</span>
-            <span className="text-neutral-900">
-              {company.name} <span className="text-neutral-400">({company.domain})</span>
+            <span className="flex items-center gap-2 text-neutral-900">
+              <CompanyFavicon domain={company.domain} name={company.name} className="size-6" />
+              <span>
+                {company.name} <span className="text-neutral-400">({company.domain})</span>
+              </span>
             </span>
             {company.industry && <span className="text-xs text-neutral-500">{company.industry}</span>}
             {company.location && <span className="text-xs text-neutral-500">{company.location}</span>}

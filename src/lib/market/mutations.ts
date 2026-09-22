@@ -301,7 +301,7 @@ export async function runMarketScanWithProgress(
 
 /**
  * A follow-up pass that runs after the user-visible scan, with no progress
- * UI attached — fired as a background Inngest event so it keeps digging for
+ * UI attached — fired as a background job so it keeps digging for
  * more content after the first batch is already on screen, without keeping
  * the request/response cycle open. Uses depth:"deep" query phrasing to
  * surface a different slice of results than the initial broad pass (older

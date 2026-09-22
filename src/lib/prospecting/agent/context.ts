@@ -27,7 +27,7 @@ export interface AgentRunContext {
   productSummary: string | null;
   budget: AgentBudget;
   counters: AgentCounters;
-  savedDomains: Set<string>; // dedupe companies within a run
+  savedDomains: Set<string>; // domains already on this user's account, plus this run
   pageCache: Map<string, FetchedPage>; // url -> fetched page (avoid refetch)
 }
 

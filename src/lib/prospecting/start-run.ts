@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { inngest } from "@/lib/inngest/client";
+import { enqueueInternalJob } from "@/lib/jobs/enqueue";
+import { executeAgentProspectingRun } from "@/lib/prospecting/agent/run";
 import type { ProspectCriteria } from "./types";
 
 export interface StartProspectingRunInput {
@@ -19,27 +20,24 @@ export type StartProspectingRunResult = ReserveProspectingRunResult;
 /**
  * Creates a prospect_lists + prospecting_runs row (stale-run cleanup +
  * concurrent-run throttle included). Shared by the in-request streaming
- * route and the weekly-schedule cron — neither sends the Inngest event
- * itself; only startProspectingRun (below) does that, for the scheduler.
+ * route and the weekly-schedule cron — neither starts the agent itself;
+ * only startProspectingRun (below) enqueues the background job.
  */
 export async function reserveProspectingRun(
   db: SupabaseClient,
   input: StartProspectingRunInput
 ): Promise<ReserveProspectingRunResult> {
-  // A process restart between inserting a run and publishing its event can
-  // leave a row queued forever. Retire only old runs that never began; active
-  // discovery/enrichment runs are owned by their executor and are left untouched.
   const staleBefore = new Date(Date.now() - 10 * 60_000).toISOString();
   const { data: staleRuns } = await db
     .from("prospecting_runs")
     .select("id,list_id")
     .eq("user_id", input.userId)
-    .eq("status", "queued")
+    .in("status", ["queued", "discovering", "enriching", "verifying"])
     .lt("created_at", staleBefore);
   if (staleRuns?.length) {
     const staleRunIds = staleRuns.map((run) => run.id);
     const staleListIds = staleRuns.map((run) => run.list_id);
-    const staleMessage = "This run was queued before the background worker was available. Run the search again.";
+    const staleMessage = "This run stopped after the background worker was removed. Start a new search.";
     await Promise.all([
       db.from("prospecting_runs").update({ status: "failed", stage: "failed", error_summary: staleMessage, completed_at: new Date().toISOString() }).in("id", staleRunIds),
       db.from("prospect_lists").update({ status: "failed", error: staleMessage, completed_at: new Date().toISOString() }).in("id", staleListIds),
@@ -71,9 +69,9 @@ export async function reserveProspectingRun(
 }
 
 /**
- * reserveProspectingRun + enqueue via Inngest. Used only by the weekly
- * schedule cron — the interactive "Find prospects" flow runs the agent
- * in-request instead (see src/app/api/prospecting/run/route.ts).
+ * reserveProspectingRun + background agent. Used by the weekly schedule
+ * cron — the interactive "Find prospects" flow runs the agent in-request
+ * instead (see src/app/api/prospecting/run/route.ts).
  */
 export async function startProspectingRun(
   db: SupabaseClient,
@@ -82,20 +80,11 @@ export async function startProspectingRun(
   const reserved = await reserveProspectingRun(db, input);
   if (!reserved.ok) return reserved;
 
-  try {
-    await inngest.send({ name: "prospecting/run.requested", data: { runId: reserved.runId, listId: reserved.listId } });
-  } catch (error) {
-    const message =
-      process.env.NODE_ENV === "development"
-        ? "Could not reach the Inngest Dev Server. Start it with `npm run inngest:dev`."
-        : "Could not enqueue prospecting. Check INNGEST_EVENT_KEY and INNGEST_SIGNING_KEY.";
-    await Promise.all([
-      db.from("prospecting_runs").update({ status: "failed", stage: "failed", error_summary: message, completed_at: new Date().toISOString() }).eq("id", reserved.runId),
-      db.from("prospect_lists").update({ status: "failed", error: message, completed_at: new Date().toISOString() }).eq("id", reserved.listId),
-    ]);
-    console.error(`[prospecting] enqueue failed: ${error instanceof Error ? error.message.slice(0, 200) : "unknown error"}`);
-    return { ok: false, error: message, status: 503 };
-  }
+  enqueueInternalJob(
+    "/api/jobs/prospecting",
+    { runId: reserved.runId, listId: reserved.listId },
+    () => executeAgentProspectingRun(reserved.runId, reserved.listId),
+  );
 
   return reserved;
 }

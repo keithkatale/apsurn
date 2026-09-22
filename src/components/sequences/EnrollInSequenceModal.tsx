@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Loader2, Send } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
-import { CreateSequenceModal } from "./CreateSequenceModal";
 
 interface SequenceOption {
   id: string;
@@ -78,7 +77,7 @@ export function EnrollInSequenceModal({
       ) : (
         <ThreeDButton variant="soft" size="sm" onClick={openModal}>
           <Send className="size-4" />
-          <span>Enroll in sequence</span>
+          <span>Enroll in campaign</span>
         </ThreeDButton>
       )}
 
@@ -104,25 +103,20 @@ export function EnrollInSequenceModal({
                   .
                 </p>
                 <p className="text-neutral-500">
-                  Sending is separate — run a send pass from Sequences when an inbox is connected
-                  and the sequence is active.
+                  Sending is separate — run a send pass from Campaigns when an inbox is connected
+                  and the campaign is active.
                 </p>
               </div>
             ) : sequences === null ? (
-              <p className="text-sm text-neutral-500">Loading sequences…</p>
+              <p className="text-sm text-neutral-500">Loading campaigns…</p>
             ) : sequences.length === 0 ? (
               <div className="flex flex-col items-start gap-3">
                 <p className="text-sm text-neutral-500">
-                  No sequences yet — create one to enroll these contacts into.
+                  No campaigns yet — generate them from your blueprint on the Campaigns page.
                 </p>
-                <CreateSequenceModal
-                  onCreated={(sequenceId) => {
-                    setSelectedId(sequenceId);
-                    fetch("/api/sequences", { cache: "no-store" })
-                      .then((res) => res.json())
-                      .then((data) => setSequences(data.sequences ?? []));
-                  }}
-                />
+                <ThreeDButton href="/dashboard/campaigns" variant="solid" size="sm">
+                  Go to campaigns
+                </ThreeDButton>
               </div>
             ) : (
               <>

@@ -82,7 +82,7 @@ export function CreateSequenceModal({
       ) : (
         <ThreeDButton variant="solid" onClick={() => setOpen(true)}>
           <Plus className="size-4" />
-          <span>New sequence</span>
+          <span>New campaign</span>
         </ThreeDButton>
       )}
 
@@ -93,14 +93,14 @@ export function CreateSequenceModal({
             className="mt-10 flex w-full max-w-lg flex-col gap-4 rounded-lg border border-neutral-200 bg-white p-6 shadow-xl"
           >
             <div className="flex items-center justify-between">
-              <h2 className="font-medium text-neutral-900">New sequence</h2>
+              <h2 className="font-medium text-neutral-900">New campaign</h2>
               <ThreeDButton type="button" variant="soft" size="sm" onClick={() => setOpen(false)}>
                 Cancel
               </ThreeDButton>
             </div>
 
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-neutral-700">Sequence name</span>
+              <span className="font-medium text-neutral-700">Campaign name</span>
               <input
                 className="input"
                 placeholder="e.g. Cold outreach — SaaS founders"
@@ -184,7 +184,7 @@ export function CreateSequenceModal({
                   <span>Creating…</span>
                 </>
               ) : (
-                <span>Create sequence</span>
+                <span>Create campaign</span>
               )}
             </ThreeDButton>
           </form>

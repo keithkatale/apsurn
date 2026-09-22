@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
-import { inngest } from "@/lib/inngest/client";
+import { enqueueInternalJob } from "@/lib/jobs/enqueue";
 import { runOutreachSendPass } from "@/lib/outreach/pass";
 
 const bodySchema = z.object({
-  /** When true, run inline instead of queueing Inngest (useful in local dev). */
+  /** When true, run inline instead of queueing a background job. */
   sync: z.boolean().optional(),
   limit: z.number().int().min(1).max(50).optional(),
 });
@@ -38,9 +38,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   }
 
-  await inngest.send({
-    name: "outreach/send.pass",
-    data: { userId, limit: parsed.data.limit },
-  });
+  enqueueInternalJob(
+    "/api/cron/outreach-send-pass",
+    { userId },
+    () => runOutreachSendPass({ userId, limit: parsed.data.limit }),
+  );
   return NextResponse.json({ queued: true });
 }

@@ -1,76 +1,60 @@
 "use client";
 
-import { useState } from "react";
-import { UserRound } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { dicebearFaceUrl } from "@/lib/avatars/dicebear";
+import { cn } from "@/lib/cn";
 
-/**
- * A poster's profile picture, falling back to a stable generated avatar.
- *
- * Reddit gates profile photos behind authentication — its `about.json`
- * answers 403 to unauthenticated clients, and the keyless avatar proxies now
- * paywall Reddit — so for most mentions there is no honest way to show a real
- * picture. An avatar derived from the name is consistent across every post by
- * the same person, which reads as an identity in a feed the way a row of
- * identical grey placeholders does not.
- */
-
-const AVATAR_COLORS = [
-  "bg-blue-500",
-  "bg-emerald-500",
-  "bg-violet-500",
-  "bg-amber-500",
-  "bg-rose-500",
-  "bg-cyan-500",
-  "bg-indigo-500",
-  "bg-teal-500",
-];
-
-function avatarSeed(name: string): { initials: string; color: string } {
-  // Strip the platform prefix so "u/alex" and "@alex" resolve identically.
-  const cleaned = name.replace(/^@/, "").replace(/^[ur]\//i, "").trim();
-  const initials = (cleaned.match(/[A-Za-z0-9]/g) ?? []).slice(0, 2).join("").toUpperCase() || "?";
-  let hash = 0;
-  for (let i = 0; i < cleaned.length; i++) hash = (hash * 31 + cleaned.charCodeAt(i)) >>> 0;
-  return { initials, color: AVATAR_COLORS[hash % AVATAR_COLORS.length] };
+function avatarSeed(name?: string | null): string {
+  return name?.replace(/^@/, "").replace(/^[ur]\//i, "").trim() || "profile";
 }
 
+function looksLikePlaceholder(src: string): boolean {
+  return /unavatar\.io\/(fallback|static)|ghosts?\.gif|default[-_](profile|avatar)|d=identicon|styles\/.*\/default/i.test(src);
+}
+
+/**
+ * Profile photo when it loads; otherwise a stable DiceBear face seeded from
+ * the handle or name so the same person looks the same across every mention.
+ */
 export function AuthorAvatar({
   url,
   name,
   className = "size-9",
 }: {
-  url: string | null;
+  url: string | null | undefined;
   name?: string | null;
   className?: string;
 }) {
-  const [failed, setFailed] = useState(false);
+  const fallbackSrc = useMemo(() => dicebearFaceUrl(avatarSeed(name)), [name]);
+  const [photoReady, setPhotoReady] = useState(false);
 
-  if (url && !failed) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={url}
-        alt=""
-        className={`${className} shrink-0 rounded-full object-cover`}
-        onError={() => setFailed(true)}
-      />
-    );
-  }
-
-  if (name) {
-    const { initials, color } = avatarSeed(name);
-    return (
-      <span
-        className={`${className} inline-flex shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${color}`}
-      >
-        {initials}
-      </span>
-    );
-  }
+  useEffect(() => {
+    setPhotoReady(false);
+  }, [url]);
 
   return (
-    <span className={`${className} inline-flex shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-400`}>
-      <UserRound className="size-4" />
+    <span className={cn("relative inline-flex shrink-0 overflow-hidden rounded-full bg-[#E8F1FC]", className)}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={fallbackSrc} alt="" className="size-full object-cover" />
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={url}
+          src={url}
+          alt=""
+          referrerPolicy="no-referrer"
+          className={cn(
+            "absolute inset-0 size-full object-cover",
+            photoReady ? "opacity-100" : "pointer-events-none opacity-0",
+          )}
+          onError={() => setPhotoReady(false)}
+          onLoad={(event) => {
+            const loaded = event.currentTarget.currentSrc || event.currentTarget.src;
+            if (looksLikePlaceholder(loaded)) return;
+            setPhotoReady(true);
+          }}
+        />
+      ) : null}
     </span>
   );
 }

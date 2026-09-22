@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { Geist, Manrope } from "next/font/google";
 import { NavigationLoaderHost } from "@/components/loaders/navigation-loader-host";
+import { ThemeProvider } from "@/components/theme/theme-provider";
 import { PUBLIC_CONFIG_GLOBAL, readPublicSupabaseConfig } from "@/lib/supabase/public-config";
+import { THEME_BOOTSTRAP_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
 const geist = Geist({
@@ -37,7 +39,7 @@ export default function RootLayout({
   const publicConfig = readPublicSupabaseConfig();
 
   return (
-    <html lang="en" className={`${geist.variable} ${manrope.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${geist.variable} ${manrope.variable}`}>
       <head>
         <script
           // Must run before any client component tries to build a Supabase
@@ -46,10 +48,13 @@ export default function RootLayout({
             __html: `window.${PUBLIC_CONFIG_GLOBAL}=${JSON.stringify(publicConfig)};`,
           }}
         />
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
       </head>
       <body className="antialiased font-sans">
-        {children}
-        <NavigationLoaderHost />
+        <ThemeProvider>
+          {children}
+          <NavigationLoaderHost />
+        </ThemeProvider>
         <Script
           src="/trackify.js"
           strategy="afterInteractive"

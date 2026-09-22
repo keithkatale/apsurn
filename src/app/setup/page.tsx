@@ -1,20 +1,20 @@
 import Link from "next/link";
-import { ArrowLeft, Sparkles, ShieldCheck, Database, Mail } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { HeroBackdrop } from "@/components/landing/HeroBackdrop";
-import { OnboardingForm } from "@/components/onboarding/OnboardingForm";
+import { SetupWizard } from "@/components/onboarding/SetupWizard";
 
 export const metadata = {
-  title: "Setup & Company Blueprint — apsurn",
-  description: "Generate your AI-powered Ideal Customer Profile blueprint from your website.",
+  title: "Setup — apsurn",
+  description: "Analyze your site, define campaigns, find accounts, and write outreach.",
 };
 
 export default function SetupPage() {
   return (
-    <div className="relative min-h-screen bg-white text-neutral-900" style={{ colorScheme: "light" }}>
+    <div className="relative h-dvh overflow-hidden bg-white text-neutral-900">
       <HeroBackdrop />
-      <div className="relative z-10">
-        <nav className="sticky top-0 z-20">
-          <div className="flex w-full items-center justify-between px-8 pt-8 sm:px-10 sm:pt-10 lg:px-14">
+      <div className="relative z-10 flex h-full flex-col">
+        <nav className="shrink-0">
+          <div className="flex w-full items-center justify-between px-6 pt-4 sm:px-10 sm:pt-5 lg:px-12">
             <Link
               href="/"
               className="group inline-flex items-center gap-2 text-sm font-medium text-neutral-600 transition-colors hover:text-neutral-900"
@@ -22,57 +22,14 @@ export default function SetupPage() {
               <ArrowLeft className="size-4 transition-transform group-hover:-translate-x-0.5" />
               <span>Back to home</span>
             </Link>
-
             <Link href="/dashboard" className="text-sm font-medium text-neutral-600 hover:text-neutral-900">
               Go to dashboard
             </Link>
           </div>
         </nav>
 
-        <main className="mx-auto flex max-w-2xl flex-col gap-8 px-6 py-12 md:py-16">
-          <header className="flex flex-col items-center gap-3 text-center">
-            <div className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs font-medium text-neutral-600 shadow-xs">
-              <Sparkles className="size-3.5 text-neutral-800" />
-              <span>Step 1 · AI Sales Blueprint</span>
-            </div>
-
-            <h1 className="text-3xl font-bold tracking-tight text-neutral-900">
-              Build your company blueprint
-            </h1>
-            <p className="max-w-md text-sm leading-relaxed text-neutral-600">
-              Enter your company website. We&apos;ll analyze it and build your Ideal Customer Profile.
-            </p>
-          </header>
-
-          <div className="rounded-2xl border border-[#EEEEEE] bg-white p-6 md:p-8">
-            <OnboardingForm />
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 pt-2 sm:grid-cols-3">
-            <div className="flex flex-col gap-2 rounded-lg border border-neutral-200/70 bg-white/80 p-4 text-xs text-neutral-600">
-              <div className="flex items-center gap-2 font-medium text-neutral-900">
-                <Database className="size-4 text-neutral-800" />
-                <span>Deep Website Crawl</span>
-              </div>
-              <p>Heuristically extracts key pages, features, pricing, and value propositions.</p>
-            </div>
-
-            <div className="flex flex-col gap-2 rounded-lg border border-neutral-200/70 bg-white/80 p-4 text-xs text-neutral-600">
-              <div className="flex items-center gap-2 font-medium text-neutral-900">
-                <ShieldCheck className="size-4 text-neutral-800" />
-                <span>Competitor Discovery</span>
-              </div>
-              <p>Live search-grounded recall to map who you compete against in the market.</p>
-            </div>
-
-            <div className="flex flex-col gap-2 rounded-lg border border-neutral-200/70 bg-white/80 p-4 text-xs text-neutral-600">
-              <div className="flex items-center gap-2 font-medium text-neutral-900">
-                <Mail className="size-4 text-neutral-800" />
-                <span>Ready for Outreach</span>
-              </div>
-              <p>Powers downstream prospecting queries, fit scoring, and sequence drafts.</p>
-            </div>
-          </div>
+        <main className="mx-auto flex min-h-0 w-full max-w-[1400px] flex-1 flex-col px-4 pb-4 pt-3 sm:px-8 lg:px-10">
+          <SetupWizard />
         </main>
       </div>
     </div>

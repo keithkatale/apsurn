@@ -27,7 +27,20 @@ export async function persistLead(
 ): Promise<SaveLeadResult> {
   if (!company.domain) return { saved: false, contactCount: 0, reason: "no domain" };
   if (ctx.savedDomains.has(company.domain)) {
-    return { saved: false, contactCount: 0, reason: "already saved this run" };
+    return { saved: false, contactCount: 0, reason: "already in this account" };
+  }
+
+  const { data: existing } = await ctx.db
+    .from("prospect_companies")
+    .select("id")
+    .eq("user_id", ctx.userId)
+    .eq("domain", company.domain)
+    .is("archived_at", null)
+    .limit(1)
+    .maybeSingle();
+  if (existing) {
+    ctx.savedDomains.add(company.domain);
+    return { saved: false, contactCount: 0, reason: "already in this account" };
   }
 
   // Any contact with a name, a title, and an address to reach them at is worth

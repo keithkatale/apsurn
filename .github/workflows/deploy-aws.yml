@@ -1,0 +1,94 @@
+# Build the Playwright/Next standalone image and push to Amazon ECR.
+# If ECS_CLUSTER + ECS_SERVICE are set as GitHub variables, also roll the service.
+#
+# One-time AWS + GitHub setup:
+#
+# 1. Create an ECR repo, e.g. `apsurn`.
+# 2. (Recommended) GitHub OIDC — no long-lived AWS keys:
+#    - IAM → Identity providers → Add `token.actions.githubusercontent.com`
+#    - IAM role with trust for this repo (`keithkatale/apsurn`) and `ref:refs/heads/main`
+#    - Attach policies: AmazonEC2ContainerRegistryPowerUser
+#      and (if deploying) AmazonECS_FullAccess, or a tighter custom policy
+# 3. GitHub repo → Settings → Secrets and variables:
+#    Secrets:
+#      AWS_ROLE_ARN          — the OIDC role ARN
+#    Variables:
+#      AWS_REGION            — e.g. us-east-1
+#      ECR_REPOSITORY        — e.g. apsurn
+#      ECS_CLUSTER           — optional, e.g. apsurn
+#      ECS_SERVICE           — optional, e.g. apsurn
+#
+# Fallback if you skip OIDC: secrets AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY
+# instead of AWS_ROLE_ARN (the configure-aws-credentials step below will need
+# that variant — swap the `role-to-assume` block for those two keys).
+#
+# App secrets (Supabase, AI keys, CRON_SECRET) belong on the ECS task / App Runner
+# service, not in this workflow.
+
+name: Deploy AWS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'apsurn' }}
+
+jobs:
+  build-and-push:
+    name: Build and push image
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.image.outputs.uri }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push
+        id: image
+        run: |
+          REGISTRY="${{ steps.ecr.outputs.registry }}"
+          IMAGE="$REGISTRY/${{ env.ECR_REPOSITORY }}"
+          TAG="${GITHUB_SHA::12}"
+          docker build -t "$IMAGE:$TAG" -t "$IMAGE:latest" .
+          docker push "$IMAGE:$TAG"
+          docker push "$IMAGE:latest"
+          echo "uri=$IMAGE:$TAG" >> "$GITHUB_OUTPUT"
+
+  deploy-ecs:
+    name: Deploy ECS service
+    needs: build-and-push
+    if: ${{ vars.ECS_CLUSTER != '' && vars.ECS_SERVICE != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Force new ECS deployment
+        run: |
+          aws ecs update-service \
+            --cluster "${{ vars.ECS_CLUSTER }}" \
+            --service "${{ vars.ECS_SERVICE }}" \
+            --force-new-deployment
+          aws ecs wait services-stable \
+            --cluster "${{ vars.ECS_CLUSTER }}" \
+            --services "${{ vars.ECS_SERVICE }}"

@@ -3,6 +3,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
+import { cn } from "@/lib/cn";
 
 /**
  * Progress bar + live log feed for long-running work.
@@ -40,6 +41,8 @@ export function ScanOverlay({
   onRestart,
   restartLabel = "Run again",
   onRetry,
+  compact = false,
+  className,
 }: {
   state: ScanState;
   kicker: string;
@@ -54,6 +57,8 @@ export function ScanOverlay({
   onRestart?: () => void;
   restartLabel?: string;
   onRetry?: () => void;
+  compact?: boolean;
+  className?: string;
 }) {
   const logsRef = useRef<HTMLOListElement>(null);
 
@@ -64,8 +69,14 @@ export function ScanOverlay({
   }, [state.logs]);
 
   return (
-    <div className="w-full rounded-2xl border border-neutral-100 bg-white p-6 shadow-[0px_1px_3px_rgba(0,0,0,0.06)]">
-      <div className={`market-scan mx-auto max-w-md ${state.phase === "error" ? "is-failed" : ""}`}>
+    <div
+      className={cn(
+        "rounded-lg border border-neutral-100 bg-white shadow-[0px_1px_3px_rgba(0,0,0,0.06)]",
+        compact ? "w-full p-5" : "w-full p-6",
+        className,
+      )}
+    >
+      <div className={`market-scan mx-auto max-w-md ${compact ? "compact-scan" : ""} ${state.phase === "error" ? "is-failed" : ""}`}>
         <p className="market-scan-kicker">{kicker}</p>
         <h2>{title}</h2>
 
@@ -94,7 +105,7 @@ export function ScanOverlay({
         {detail && <p className="mt-2 text-center text-xs text-neutral-500">{detail}</p>}
 
         <ol className="market-scan-logs" ref={logsRef}>
-          {state.logs.map((entry) => (
+          {(compact ? state.logs.slice(-3) : state.logs).map((entry) => (
             <li key={entry.id}>{entry.text}</li>
           ))}
         </ol>

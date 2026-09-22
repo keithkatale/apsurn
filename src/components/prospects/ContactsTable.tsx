@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
+import { CompanyFavicon } from "./CompanyFavicon";
+import { ContactAvatar } from "./ContactAvatar";
 import { LeadStatusPicker } from "./LeadStatusPicker";
 import type { ContactRow, ProspectRow } from "./types";
 
@@ -14,11 +16,13 @@ export function ContactsTable({
   selected,
   onSelectedChange,
   onOpenProfile,
+  readOnly = false,
 }: {
   prospects: ProspectRow[];
   selected: Set<string>;
   onSelectedChange: (next: Set<string>) => void;
-  onOpenProfile: (row: FlatRow) => void;
+  onOpenProfile?: (row: FlatRow) => void;
+  readOnly?: boolean;
 }) {
   const rows = useMemo<FlatRow[]>(
     () =>
@@ -30,6 +34,7 @@ export function ContactsTable({
 
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.contact.id));
   const someSelected = rows.some((r) => selected.has(r.contact.id));
+  const showRowCheckboxes = someSelected;
 
   function toggle(contactId: string) {
     const next = new Set(selected);
@@ -54,18 +59,20 @@ export function ContactsTable({
         <table className="w-full border-collapse text-sm leading-tight">
           <thead>
             <tr className="border-b border-blue-100 bg-blue-50 text-left text-[11px] font-medium uppercase tracking-wide text-blue-700">
-              <th className="w-10 px-3 py-2.5">
-                <input
-                  type="checkbox"
-                  checked={allSelected}
-                  ref={(el) => {
-                    if (el) el.indeterminate = someSelected && !allSelected;
-                  }}
-                  onChange={toggleAll}
-                  className="size-3.5 rounded border-neutral-300"
-                  aria-label="Select all"
-                />
-              </th>
+              {!readOnly && (
+                <th className="w-10 px-3 py-2.5">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someSelected && !allSelected;
+                    }}
+                    onChange={toggleAll}
+                    className="size-3.5 rounded border-neutral-300"
+                    aria-label="Select all"
+                  />
+                </th>
+              )}
               <th className="px-3 py-2.5 font-medium">Name</th>
               <th className="px-3 py-2.5 font-medium">Title</th>
               <th className="px-3 py-2.5 font-medium">Company</th>
@@ -90,29 +97,44 @@ export function ContactsTable({
                         : "bg-white"
                   }`}
                 >
-                  <td className="px-3 py-3 align-middle">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggle(contact.id)}
-                      className="size-3.5 rounded border-neutral-300"
-                      aria-label={`Select ${contact.full_name ?? "contact"}`}
-                    />
-                  </td>
-                  <td className="max-w-[160px] truncate px-3 py-3 align-middle">
-                    <button
-                      type="button"
-                      className="truncate font-medium text-neutral-900 hover:underline"
-                      onClick={() => onOpenProfile({ contact, company })}
-                    >
-                      {contact.full_name || "—"}
-                    </button>
+                  {!readOnly && (
+                    <td className="px-3 py-3 align-middle">
+                      {showRowCheckboxes ? (
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggle(contact.id)}
+                          className="size-3.5 rounded border-neutral-300"
+                          aria-label={`Select ${contact.full_name ?? "contact"}`}
+                        />
+                      ) : null}
+                    </td>
+                  )}
+                  <td className="max-w-[200px] px-3 py-3 align-middle">
+                    {onOpenProfile ? (
+                      <button
+                        type="button"
+                        className="flex min-w-0 items-center gap-2.5 text-left font-medium text-neutral-900 hover:underline"
+                        onClick={() => onOpenProfile({ contact, company })}
+                      >
+                        <ContactAvatar name={contact.full_name} linkedinUrl={contact.linkedin_url} email={contact.email} className="size-8" />
+                        <span className="truncate">{contact.full_name || "—"}</span>
+                      </button>
+                    ) : (
+                      <span className="flex min-w-0 items-center gap-2.5 font-medium text-neutral-900">
+                        <ContactAvatar name={contact.full_name} linkedinUrl={contact.linkedin_url} email={contact.email} className="size-8" />
+                        <span className="truncate">{contact.full_name || "—"}</span>
+                      </span>
+                    )}
                   </td>
                   <td className="max-w-[180px] truncate px-3 py-3 align-middle text-neutral-600">
                     {contact.title || "—"}
                   </td>
-                  <td className="max-w-[160px] truncate px-3 py-3 align-middle text-neutral-700">
-                    {company.name}
+                  <td className="max-w-[180px] px-3 py-3 align-middle text-neutral-700">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <CompanyFavicon domain={company.domain} name={company.name} />
+                      <span className="truncate">{company.name}</span>
+                    </span>
                   </td>
                   <td className="max-w-[200px] truncate px-3 py-3 align-middle text-neutral-600">
                     {contact.email ? (
@@ -132,7 +154,11 @@ export function ContactsTable({
                     {contact.phone || "—"}
                   </td>
                   <td className="px-3 py-3 align-middle">
-                    <LeadStatusPicker contactId={contact.id} value={contact.lead_status} />
+                    {readOnly ? (
+                      <span className="text-[12px] capitalize text-neutral-700">{contact.lead_status}</span>
+                    ) : (
+                      <LeadStatusPicker contactId={contact.id} value={contact.lead_status} />
+                    )}
                   </td>
                   <td
                     className="max-w-[200px] truncate px-3 py-3 align-middle text-neutral-500"

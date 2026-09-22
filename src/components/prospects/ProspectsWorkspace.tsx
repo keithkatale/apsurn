@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PanelLeftOpen, Search, X } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { BulkActionBar } from "@/components/prospects/BulkActionBar";
@@ -15,10 +15,16 @@ import { LEAD_STATUSES, type LeadStatus, type ProspectRow } from "@/components/p
 
 type LeftPanelMode = "idle" | "form" | "structured-run" | "chat";
 
-export function ProspectsWorkspace({ initialCompanies }: { initialCompanies: ProspectRow[] }) {
+export function ProspectsWorkspace({
+  initialCompanies,
+  openFind = false,
+}: {
+  initialCompanies: ProspectRow[];
+  openFind?: boolean;
+}) {
   const [companies, setCompanies] = useState<ProspectRow[]>(initialCompanies);
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [leftMode, setLeftMode] = useState<LeftPanelMode>("idle");
+  const [panelOpen, setPanelOpen] = useState(openFind);
+  const [leftMode, setLeftMode] = useState<LeftPanelMode>(openFind ? "form" : "idle");
   const [activeCriteria, setActiveCriteria] = useState<ProspectSearchCriteria | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [profileIds, setProfileIds] = useState<{ contactId: string; companyId: string } | null>(null);
@@ -78,8 +84,13 @@ export function ProspectsWorkspace({ initialCompanies }: { initialCompanies: Pro
     setPanelOpen(true);
   }
 
+  useEffect(() => {
+    if (openFind) openPanel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open once from query
+  }, [openFind]);
+
   return (
-    <div className="-m-8 flex h-[calc(100%+4rem)] overflow-hidden bg-white">
+    <div className="flex h-full overflow-hidden bg-white">
       <div
         className={`shrink-0 overflow-hidden border-r border-neutral-200 bg-white transition-[width] duration-300 ease-out ${
           panelOpen ? "w-[420px]" : "w-0"
@@ -112,31 +123,53 @@ export function ProspectsWorkspace({ initialCompanies }: { initialCompanies: Pro
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="flex flex-col gap-4 p-6">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h1 className="text-lg font-semibold text-neutral-900">Prospects</h1>
-              <p className="text-sm text-neutral-500">
-                {active.length > 0 ? `${active.length} compan${active.length === 1 ? "y" : "ies"}` : "No prospects yet"}
-              </p>
-            </div>
-
-            {selected.size > 0 ? (
-              <BulkActionBar
-                selectedContactIds={[...selected]}
-                contacts={allContacts}
-                prospects={qualified}
-                onCleared={() => setSelected(new Set())}
-              />
-            ) : (
-              <div className="flex items-center gap-2">
-                <WeeklyScheduleForm />
-                <ThreeDButton type="button" variant="solid" size="sm" onClick={openPanel}>
-                  <PanelLeftOpen className="size-4" />
-                  <span>Find prospects</span>
-                </ThreeDButton>
-              </div>
+        <div className="flex flex-col gap-3 px-1 py-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="shrink-0 text-lg font-semibold text-neutral-900">Prospects</h1>
+            {active.length > 0 && (
+              <>
+                <div className="relative min-w-[200px] flex-1 max-w-sm">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-neutral-400" />
+                  <input
+                    className="input w-full py-1.5"
+                    style={{ paddingLeft: "2rem" }}
+                    placeholder="Search by name or company…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </div>
+                <select
+                  className="input w-auto py-1.5"
+                  value={stageFilter}
+                  onChange={(e) => setStageFilter(e.target.value as LeadStatus | "all")}
+                >
+                  <option value="all">All stages</option>
+                  {LEAD_STATUSES.map((status) => (
+                    <option key={status} value={status} className="capitalize">
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </>
             )}
+            <div className="ml-auto flex items-center gap-2">
+              {selected.size > 0 ? (
+                <BulkActionBar
+                  selectedContactIds={[...selected]}
+                  contacts={allContacts}
+                  prospects={qualified}
+                  onCleared={() => setSelected(new Set())}
+                />
+              ) : (
+                <>
+                  <WeeklyScheduleForm />
+                  <ThreeDButton type="button" variant="solid" size="sm" onClick={openPanel}>
+                    <PanelLeftOpen className="size-4" />
+                    <span>Find prospects</span>
+                  </ThreeDButton>
+                </>
+              )}
+            </div>
           </div>
 
           {active.length === 0 ? (
@@ -148,31 +181,6 @@ export function ProspectsWorkspace({ initialCompanies }: { initialCompanies: Pro
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="relative flex-1 min-w-[220px] max-w-sm">
-                  <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-neutral-400" />
-                  <input
-                    className="input w-full"
-                    style={{ paddingLeft: "2rem" }}
-                    placeholder="Search by name or company…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
-                </div>
-                <select
-                  className="input w-auto"
-                  value={stageFilter}
-                  onChange={(e) => setStageFilter(e.target.value as LeadStatus | "all")}
-                >
-                  <option value="all">All stages</option>
-                  {LEAD_STATUSES.map((status) => (
-                    <option key={status} value={status} className="capitalize">
-                      {status}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
               {qualified.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-neutral-300 bg-white p-8 text-center">
                   <p className="text-sm text-neutral-500">No prospects match your search or filters.</p>

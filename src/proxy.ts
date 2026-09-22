@@ -39,6 +39,8 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
+// Narrow matcher: a broad catch-all under Next 16.3 + Turbopack can leave nested
+// App Router pages returning 404 in `next dev` despite the files existing.
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/inngest|api/ingest|trackify.js|privacy).*)"],
+  matcher: ["/dashboard/:path*", "/setup/:path*", "/login", "/signup"],
 };

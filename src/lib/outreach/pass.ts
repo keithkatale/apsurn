@@ -1,6 +1,6 @@
 /**
  * One OpenOutSend-style send pass: due enrollments → draft → guarded send → log.
- * Does not wait or loop; cron / Inngest fires this repeatedly.
+ * Does not wait or loop; Cloud Scheduler / POST /api/cron/outreach-send-pass fires this repeatedly.
  */
 
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -61,7 +61,7 @@ export async function runOutreachSendPass(opts: {
         email,
         qualify_reason,
         archived_at,
-        prospect_companies!inner ( name, domain )
+        prospect_companies!contacts_prospect_company_id_fkey!inner ( name, domain )
       )
     `
     )

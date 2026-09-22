@@ -73,6 +73,7 @@ export default async function DashboardOverviewPage() {
     companySizeRange?: string;
     geographies?: string[];
   }) ?? {};
+  const competitors = Array.isArray(blueprint?.competitors) ? (blueprint.competitors as string[]) : [];
   const personas = (blueprint?.personas as Array<{ title: string }>) ?? [];
 
   return (
@@ -86,8 +87,8 @@ export default async function DashboardOverviewPage() {
 
       <section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard label="Prospects" value={prospectCount ?? 0} href="/dashboard/prospects" />
-        <StatCard label="Sequences" value={sequenceCount ?? 0} href="/dashboard/sequences" />
-        <StatCard label="Connected inboxes" value={inboxCount ?? 0} href="/dashboard/inboxes" />
+        <StatCard label="Campaigns" value={sequenceCount ?? 0} href="/dashboard/campaigns" />
+        <StatCard label="Connected inboxes" value={inboxCount ?? 0} href="/dashboard/campaigns?panel=settings" />
         <StatCard label="Analytics" value={siteCount ?? 0} href="/dashboard/analytics" />
       </section>
 
@@ -99,7 +100,7 @@ export default async function DashboardOverviewPage() {
           {/* Second entry point: this card is where the blueprint is actually
               read, so "this is wrong, redo it" belongs here as well as in
               Settings. */}
-          <Link href="/dashboard/settings" className="shrink-0 text-sm font-medium text-blue-700 hover:underline">
+          <Link href="/dashboard?panel=settings" className="shrink-0 text-sm font-medium text-blue-700 hover:underline">
             Rebuild
           </Link>
         </div>
@@ -107,9 +108,9 @@ export default async function DashboardOverviewPage() {
           <p className="mb-4 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
             This blueprint hasn&apos;t been approved yet.{" "}
             <Link href="/setup" className="font-medium underline">
-              Review and approve it
+              Finish setup
             </Link>{" "}
-            before running prospecting.
+            to approve the blueprint and generate campaigns.
           </p>
         )}
         <dl className="grid grid-cols-2 gap-4 text-sm">
@@ -135,6 +136,15 @@ export default async function DashboardOverviewPage() {
         {blueprint?.value_prop && (
           <p className="mt-4 text-sm text-neutral-700">{blueprint.value_prop}</p>
         )}
+        {blueprint?.positioning && (
+          <p className="mt-2 text-sm text-neutral-600">{blueprint.positioning}</p>
+        )}
+        {competitors.length > 0 && (
+          <div className="mt-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">Competitors</p>
+            <p className="mt-1 text-sm text-neutral-800">{competitors.join(", ")}</p>
+          </div>
+        )}
       </section>
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -151,12 +161,12 @@ export default async function DashboardOverviewPage() {
         <ActionCard
           title="Connect your inbox"
           description="Send outreach from your own Gmail or Outlook address."
-          href="/dashboard/inboxes"
+          href="/dashboard/campaigns?panel=settings"
         />
         <ActionCard
-          title="Build a sequence"
-          description="Create a multi-step email sequence with scheduled follow-ups."
-          href="/dashboard/sequences"
+          title="Open campaigns"
+          description="Email campaigns by pain, positioning, and enrolled contacts."
+          href="/dashboard/campaigns"
         />
       </section>
     </div>

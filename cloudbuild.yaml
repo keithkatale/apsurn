@@ -5,9 +5,8 @@
 #
 # The scraping agent needs a headless browser, so we run on Cloud Run (not
 # Vercel). Give the service enough memory/CPU for Chromium and a long request
-# timeout; the agent run is also driven by Inngest so it isn't bound to one
-# HTTP request. Secrets/env are set on the service (see --set-secrets below or
-# configure them in the Cloud Run console).
+# timeout. Background work is HTTP jobs on this same service (`/api/jobs/*`
+# and `/api/cron/*`); Cloud Scheduler should hit those routes with CRON_SECRET.
 
 substitutions:
   _SERVICE: apsurn
