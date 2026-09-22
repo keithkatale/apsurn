@@ -107,6 +107,20 @@ export function parseCompletedCampaigns(text: string): CampaignDefinition[] {
   return found;
 }
 
+/**
+ * Hard ceiling on campaigns produced during setup, enforced here rather than
+ * only in generateCampaignDefinitions below — the setup route (api/
+ * onboarding/campaigns) consumes this generator directly and persists every
+ * campaign it yields as it streams in, so that wrapper's own cap never
+ * actually applied to what got saved. Two separate paths could each push
+ * past 5 on their own: the model isn't held to the "design 5" instruction
+ * in the prompt (parseCompletedCampaigns had no upper bound, so a model
+ * that ignored it and produced more would have all of them persisted), and
+ * the fallback-padding branch explicitly topped up to 6 whenever the model
+ * produced fewer than 4.
+ */
+const MAX_CAMPAIGNS = 5;
+
 export async function* streamCampaignDefinitions(input: CampaignGenInput): AsyncGenerator<CampaignDefinition> {
   const fallback = fallbackCampaigns({
     personas: input.personas,
@@ -114,6 +128,9 @@ export async function* streamCampaignDefinitions(input: CampaignGenInput): Async
     competitors: input.competitors,
     productSummary: input.productSummary,
   });
+
+  let yielded = 0;
+  const seen = new Set<string>();
 
   try {
     const { ai, model } = await getAiClient();
@@ -124,37 +141,45 @@ export async function* streamCampaignDefinitions(input: CampaignGenInput): Async
       stream: true,
     });
     let acc = "";
-    let emitted = 0;
-    const seen = new Set<string>();
+    // A cursor into parseCompletedCampaigns' output — distinct from
+    // `yielded`, since a duplicate segmentKey advances this without
+    // producing a yield. Conflating the two would let a run with a couple
+    // of duplicates stop a campaign or two short of the real cap.
+    let parsedCount = 0;
     for await (const event of stream) {
+      if (yielded >= MAX_CAMPAIGNS) break;
       if (event.type !== "response.output_text.delta") continue;
       const delta = typeof event.delta === "string" ? event.delta : "";
       if (!delta) continue;
       acc += delta;
       const all = parseCompletedCampaigns(acc);
-      while (emitted < all.length) {
-        const campaign = all[emitted];
-        emitted += 1;
+      while (parsedCount < all.length && yielded < MAX_CAMPAIGNS) {
+        const campaign = all[parsedCount];
+        parsedCount += 1;
         if (seen.has(campaign.segmentKey)) continue;
         seen.add(campaign.segmentKey);
+        yielded += 1;
         yield campaign;
       }
     }
-    if (emitted === 0) {
-      for (const campaign of fallback) yield campaign;
-      return;
-    }
-    if (emitted < 4) {
-      for (const campaign of fallback) {
-        if (seen.has(campaign.segmentKey)) continue;
-        yield campaign;
-        emitted += 1;
-        if (emitted >= 6) break;
-      }
+    // Fewer than the cap came back from the model (including zero) — top up
+    // from the fallback templates, but never past the same cap.
+    for (const campaign of fallback) {
+      if (yielded >= MAX_CAMPAIGNS) break;
+      if (seen.has(campaign.segmentKey)) continue;
+      seen.add(campaign.segmentKey);
+      yielded += 1;
+      yield campaign;
     }
   } catch (error) {
     console.error("[onboarding] campaign stream failed:", safeAiErrorMessage(error));
-    for (const campaign of fallback) yield campaign;
+    for (const campaign of fallback) {
+      if (yielded >= MAX_CAMPAIGNS) break;
+      if (seen.has(campaign.segmentKey)) continue;
+      seen.add(campaign.segmentKey);
+      yielded += 1;
+      yield campaign;
+    }
   }
 }
 
@@ -163,5 +188,7 @@ export async function generateCampaignDefinitions(input: CampaignGenInput): Prom
   for await (const campaign of streamCampaignDefinitions(input)) {
     campaigns.push(campaign);
   }
-  return campaigns.slice(0, 6);
+  // streamCampaignDefinitions already caps at MAX_CAMPAIGNS; this slice is
+  // just defense in depth so the two functions can never disagree on the limit.
+  return campaigns.slice(0, MAX_CAMPAIGNS);
 }
