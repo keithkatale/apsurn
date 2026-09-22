@@ -13,7 +13,6 @@ export function Navbar() {
     { href: "#hero", label: "Home" },
     { href: "#why-us", label: "About" },
     { href: "#pricing", label: "Pricing" },
-    { href: "#blog", label: "Blog" },
     { href: "#contact", label: "Contact" },
   ];
 
@@ -48,13 +47,7 @@ export function Navbar() {
 
           {/* Desktop Action Buttons */}
           <div className="hidden md:flex items-center gap-2">
-            <Link
-              href="/dashboard"
-              className="text-xs font-medium text-neutral-500 hover:text-neutral-900 px-2 py-1 transition-colors"
-            >
-              Dashboard
-            </Link>
-            <ThreeDButton href="/setup" variant="solid" size="sm" className="rounded-xl px-4">
+            <ThreeDButton href="/signup?next=/setup" variant="solid" size="sm" className="rounded-xl px-4">
               <span>Get free trial</span>
               <ArrowRight className="size-3.5" />
             </ThreeDButton>
@@ -88,17 +81,9 @@ export function Navbar() {
               </Link>
             ))}
 
-            <Link
-              href="/dashboard"
-              onClick={() => setIsOpen(false)}
-              className="rounded-xl py-2 text-[14px] font-medium text-neutral-500 hover:bg-neutral-100/70 hover:text-neutral-900 transition-colors"
-            >
-              Dashboard
-            </Link>
-
             <div className="pt-2">
               <ThreeDButton
-                href="/setup"
+                href="/signup?next=/setup"
                 variant="solid"
                 size="md"
                 onClick={() => setIsOpen(false)}

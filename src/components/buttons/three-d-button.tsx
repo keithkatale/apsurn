@@ -78,13 +78,12 @@ export const ThreeDButton = forwardRef<
   ThreeDButtonProps
 >(({ className, children, variant = "solid", size = "md", ...props }, ref) => {
   const sharedClassName = cn(
-    "inline-flex cursor-pointer items-center justify-center font-sans font-semibold outline-none select-none",
+    "inline-flex shrink-0 cursor-pointer items-center justify-center whitespace-nowrap font-sans font-semibold outline-none select-none",
     "transition-[background-color,box-shadow,color] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900",
     "disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40",
     SIZE[size],
     VARIANT[variant],
-    size === "icon" && "shrink-0",
     className,
   );
 

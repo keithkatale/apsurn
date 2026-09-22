@@ -6,7 +6,9 @@ import type { ConnectedInbox } from "@/lib/inbox/gmail";
 import { checkSendGuards } from "@/lib/outreach/guards";
 import { sendViaInbox } from "@/lib/outreach/send";
 import { getOwnedContact } from "@/lib/outreach/owned-contact";
+import { resolveMergeFields } from "@/lib/outreach/merge-fields";
 import { enrollContacts } from "@/lib/sequences/mutations";
+import { requireActiveBilling } from "@/lib/billing/entitlements";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -30,6 +32,18 @@ export async function POST(request: NextRequest) {
 
     const parsed = bodySchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+
+    try {
+      await requireActiveBilling(userId);
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error: error instanceof Error ? error.message : "Billing required",
+          code: "billing_required",
+        },
+        { status: 402 },
+      );
+    }
 
     const db = createAdminClient();
     const { data: inbox } = await db
@@ -62,6 +76,16 @@ export async function POST(request: NextRequest) {
             : "Cannot send this email";
       return NextResponse.json({ error: message, code: guards.reason }, { status: 400 });
     }
+
+    const leadSource = {
+      fullName: contact.full_name,
+      title: contact.title,
+      email: contact.email,
+      companyName: contact.company.name,
+      companyDomain: contact.company.domain,
+    };
+    const subject = resolveMergeFields(parsed.data.subject, leadSource);
+    const body = resolveMergeFields(parsed.data.body, leadSource);
 
     let enrollmentId: string | null = null;
     let stepId: string | null = null;
@@ -105,8 +129,8 @@ export async function POST(request: NextRequest) {
         .insert({
           enrollment_id: enrollmentId,
           sequence_step_id: stepId,
-          subject: parsed.data.subject,
-          body: parsed.data.body,
+          subject,
+          body,
           status: "pending",
         })
         .select("id")
@@ -116,8 +140,8 @@ export async function POST(request: NextRequest) {
 
     const sent = await sendViaInbox(inbox as ConnectedInbox, {
       to: contact.email,
-      subject: parsed.data.subject,
-      body: parsed.data.body,
+      subject,
+      body,
       threadId,
     });
 

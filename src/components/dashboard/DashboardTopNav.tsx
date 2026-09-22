@@ -4,6 +4,7 @@ import { useEffect, useState, type MouseEvent } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BrandLogo } from "@/components/brand/BrandLogo";
+import { CreditsBalance } from "@/components/billing/CreditsBalance";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { setDashboardContentPending } from "@/lib/navigation-progress";
@@ -70,7 +71,8 @@ export function DashboardTopNav() {
           );
         })}
       </nav>
-      <div className="flex items-center justify-end gap-1">
+      <div className="flex items-center justify-end gap-1.5 sm:gap-2">
+        <CreditsBalance />
         <ThemeToggle compact />
         {open ? (
           <ThreeDButton type="button" variant="solid" size="sm" className="rounded-lg px-3 text-sm" onClick={closeSettings}>

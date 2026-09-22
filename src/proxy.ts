@@ -28,13 +28,19 @@ export async function proxy(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/dashboard");
 
   if (!user && protectedPath) {
-    const login = request.nextUrl.clone();
-    login.pathname = "/login";
-    login.searchParams.set("next", request.nextUrl.pathname);
-    return NextResponse.redirect(login);
+    const dest = request.nextUrl.clone();
+    // New users hitting setup from landing CTAs should land on signup, not sign-in.
+    const authPath = request.nextUrl.pathname.startsWith("/setup") ? "/signup" : "/login";
+    dest.pathname = authPath;
+    const next = `${request.nextUrl.pathname}${request.nextUrl.search}`;
+    dest.search = "";
+    dest.searchParams.set("next", next);
+    return NextResponse.redirect(dest);
   }
   if (user && (request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/signup")) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    const next = request.nextUrl.searchParams.get("next");
+    const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+    return NextResponse.redirect(new URL(safeNext, request.url));
   }
   return response;
 }
@@ -42,5 +48,5 @@ export async function proxy(request: NextRequest) {
 // Narrow matcher: a broad catch-all under Next 16.3 + Turbopack can leave nested
 // App Router pages returning 404 in `next dev` despite the files existing.
 export const config = {
-  matcher: ["/dashboard/:path*", "/setup/:path*", "/login", "/signup"],
+  matcher: ["/dashboard/:path*", "/setup/:path*", "/login", "/signup", "/auth/callback"],
 };

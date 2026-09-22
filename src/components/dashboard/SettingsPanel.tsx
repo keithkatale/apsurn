@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { RebuildBlueprintButton } from "@/components/settings/RebuildBlueprintButton";
 import { AiProviderSettings } from "@/components/settings/AiProviderSettings";
+import { CreditTopupPanel } from "@/components/billing/CreditTopupPanel";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { useSettingsPanel } from "./settings-panel-context";
 import { createClient } from "@/lib/supabase/client";
@@ -121,6 +122,14 @@ export function SettingsPanel() {
             >
               Sign out
             </ThreeDButton>
+          </section>
+
+          <section className="mb-6 border-t border-neutral-100 pt-5">
+            <h3 className="text-sm font-semibold text-neutral-900">Billing & credits</h3>
+            <p className="mt-1 text-sm text-neutral-600">
+              No free plan — AI and sending need an active subscription or $1 / 7-day trial. Top-ups are sold only in-app.
+            </p>
+            <CreditTopupPanel className="mt-3" />
           </section>
 
           <section className="mb-6 border-t border-neutral-100 pt-5">

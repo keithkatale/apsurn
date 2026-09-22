@@ -13,15 +13,15 @@ export function HeroDomainInput() {
     e.preventDefault();
     const trimmed = domain.trim();
     if (!trimmed) {
-      router.push("/setup");
+      router.push("/signup?next=/setup");
       return;
     }
     const cleanUrl = trimmed.replace(/^https?:\/\//i, "");
-    router.push(`/setup?url=${encodeURIComponent(cleanUrl)}`);
+    router.push(`/signup?next=${encodeURIComponent(`/setup?url=${encodeURIComponent(cleanUrl)}`)}`);
   }
 
   function handlePreset(preset: string) {
-    router.push(`/setup?url=${encodeURIComponent(preset)}`);
+    router.push(`/signup?next=${encodeURIComponent(`/setup?url=${encodeURIComponent(preset)}`)}`);
   }
 
   return (

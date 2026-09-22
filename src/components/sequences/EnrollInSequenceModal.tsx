@@ -103,8 +103,7 @@ export function EnrollInSequenceModal({
                   .
                 </p>
                 <p className="text-neutral-500">
-                  Sending is separate — run a send pass from Campaigns when an inbox is connected
-                  and the campaign is active.
+                  Sending is separate — open the campaign and send when an inbox is connected.
                 </p>
               </div>
             ) : sequences === null ? (

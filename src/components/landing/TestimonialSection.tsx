@@ -36,7 +36,8 @@ export function TestimonialSection() {
 
               {/* Quote text */}
               <blockquote className="text-xl sm:text-2xl lg:text-[32px] font-bold tracking-tight text-neutral-950 font-heading leading-snug sm:leading-[1.3]">
-                &ldquo;This platform gives us instant clarity. Our outbound discovery is more accurate and our sales team books meetings faster than ever.&rdquo;
+                &ldquo;We stopped buying stale lists. apsurn builds our ICP from the site, finds verified contacts, and
+                our Gmail sequences actually land in inboxes.&rdquo;
               </blockquote>
             </div>
 

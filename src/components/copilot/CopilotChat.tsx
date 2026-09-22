@@ -12,6 +12,55 @@ function uid(): string {
   return `local-${Date.now()}-${uidCounter}`;
 }
 
+const DEFAULT_STARTERS = [
+  "Summarize my account and what’s ready to work",
+  "Who are my best qualified contacts right now?",
+  "Help me create a sequence for my ICP",
+] as const;
+
+const MARKET_STARTERS = [
+  "What’s worth following up on in Market Insights?",
+  "Scan my keywords for new mentions",
+  "Save the strongest posts for outreach",
+] as const;
+
+function EmptyWelcome({
+  marketMode,
+  onPick,
+}: {
+  marketMode: boolean;
+  onPick: (prompt: string) => void;
+}) {
+  const starters = marketMode ? MARKET_STARTERS : DEFAULT_STARTERS;
+
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center px-4 text-center">
+      <p className="text-[13px] font-semibold tracking-wide text-[var(--copilot-accent-dim)]">Copilot</p>
+      <h1 className="mt-2 max-w-md text-2xl font-semibold tracking-tight text-[var(--copilot-foreground)] sm:text-[28px]">
+        {marketMode ? "Your market listening co-pilot" : "Your AI SDR co-pilot"}
+      </h1>
+      <p className="mt-3 max-w-lg text-[14px] leading-relaxed text-[var(--copilot-muted)]">
+        {marketMode
+          ? "Ask about mentions on screen, follow accounts, run scans, and flag posts for outreach — without leaving this view."
+          : "Ask about your blueprint, prospects, and campaigns. Copilot can look things up, update lead status, build sequences, and enroll contacts for you."}
+      </p>
+      <ul className="mt-8 flex w-full max-w-md flex-col gap-2">
+        {starters.map((prompt) => (
+          <li key={prompt}>
+            <button
+              type="button"
+              onClick={() => onPick(prompt)}
+              className="w-full rounded-xl border border-[var(--copilot-card-border)] bg-[var(--copilot-card)] px-3.5 py-2.5 text-left text-[13px] text-[var(--copilot-foreground)] transition-colors hover:bg-[var(--copilot-dropdown-hover)]"
+            >
+              {prompt}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function CopilotChat({ buildContext }: { buildContext?: () => string } = {}) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<UIMessage[]>([]);
@@ -21,10 +70,13 @@ export function CopilotChat({ buildContext }: { buildContext?: () => string } = 
   const [typing, setTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const marketMode = Boolean(buildContext);
+  const isEmpty = messages.length === 0 && !sending && streamingText === null && activeTools.length === 0;
 
   useEffect(() => {
+    if (isEmpty) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, streamingText, activeTools, typing]);
+  }, [messages, streamingText, activeTools, typing, isEmpty]);
 
   async function sendMessage(message: string) {
     setError(null);
@@ -123,53 +175,63 @@ export function CopilotChat({ buildContext }: { buildContext?: () => string } = 
 
   return (
     <div className="copilot-panel flex h-full w-full flex-col">
-      <div className="mx-auto min-h-0 w-full max-w-2xl flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3">
-        {messages.map((m) => {
-          if (m.role === "user") {
-            return (
-              <div key={m.id} className="flex justify-end">
-                <div className="w-fit max-w-[85%] rounded-2xl rounded-br-md bg-[var(--copilot-accent)] px-3 py-2 text-[14px] leading-snug text-white">
-                  {m.content}
+      <div
+        className={`mx-auto min-h-0 w-full max-w-2xl flex-1 overflow-y-auto overscroll-contain px-3 py-3 ${
+          isEmpty ? "flex flex-col" : "space-y-3"
+        }`}
+      >
+        {isEmpty ? (
+          <EmptyWelcome marketMode={marketMode} onPick={sendMessage} />
+        ) : (
+          <>
+            {messages.map((m) => {
+              if (m.role === "user") {
+                return (
+                  <div key={m.id} className="flex justify-end">
+                    <div className="w-fit max-w-[85%] rounded-2xl rounded-br-md bg-[var(--copilot-accent)] px-3 py-2 text-[14px] leading-snug text-white">
+                      {m.content}
+                    </div>
+                  </div>
+                );
+              }
+              if (m.role === "tool") {
+                return (
+                  <div key={m.id}>
+                    <ToolActivity name={m.toolName} status={m.status} />
+                  </div>
+                );
+              }
+              return (
+                <div key={m.id}>
+                  <CopilotMarkdown content={m.content} />
                 </div>
+              );
+            })}
+
+            {activeTools.map((t, i) => (
+              <div key={`${t.name}-${i}`}>
+                <ToolActivity name={t.name} status={t.status} />
               </div>
-            );
-          }
-          if (m.role === "tool") {
-            return (
-              <div key={m.id}>
-                <ToolActivity name={m.toolName} status={m.status} />
+            ))}
+
+            {typing && streamingText === null && (
+              <div className="copilot-typing" aria-label="Copilot is typing">
+                <span />
+                <span />
+                <span />
               </div>
-            );
-          }
-          return (
-            <div key={m.id}>
-              <CopilotMarkdown content={m.content} />
-            </div>
-          );
-        })}
+            )}
 
-        {activeTools.map((t, i) => (
-          <div key={`${t.name}-${i}`}>
-            <ToolActivity name={t.name} status={t.status} />
-          </div>
-        ))}
+            {streamingText !== null && (
+              <div>
+                <CopilotMarkdown content={streamingText} caret />
+              </div>
+            )}
 
-        {typing && streamingText === null && (
-          <div className="copilot-typing" aria-label="Copilot is typing">
-            <span />
-            <span />
-            <span />
-          </div>
+            {error && <p className="text-[11px] text-red-600">{error}</p>}
+            <div ref={bottomRef} />
+          </>
         )}
-
-        {streamingText !== null && (
-          <div>
-            <CopilotMarkdown content={streamingText} caret />
-          </div>
-        )}
-
-        {error && <p className="text-[11px] text-red-600">{error}</p>}
-        <div ref={bottomRef} />
       </div>
 
       <div className="copilot-composer px-3 pb-6 pt-1">

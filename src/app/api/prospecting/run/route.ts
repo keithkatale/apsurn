@@ -40,6 +40,21 @@ export async function POST(request: NextRequest) {
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid prospecting request", issues: parsed.error.issues }, { status: 400 });
 
+  const { getBillingStatus } = await import("@/lib/billing/entitlements");
+  const { SETUP_FREE_LEAD_CAP } = await import("@/lib/billing/plans");
+  const billing = await getBillingStatus(userId);
+  // Setup may find a small set of leads without a plan; larger runs need billing.
+  if (!billing.active && parsed.data.limit > SETUP_FREE_LEAD_CAP) {
+    return NextResponse.json(
+      {
+        error: `Start a 7-day trial ($1) to find more than ${SETUP_FREE_LEAD_CAP} leads.`,
+        code: "billing_required",
+      },
+      { status: 402 },
+    );
+  }
+  const limit = billing.active ? parsed.data.limit : Math.min(parsed.data.limit, SETUP_FREE_LEAD_CAP);
+
   const db = createAdminClient();
   const { data: company } = await db
     .from("companies")
@@ -57,14 +72,14 @@ export async function POST(request: NextRequest) {
     userId,
     companyId: company.id,
     listName,
-    limit: parsed.data.limit,
+    limit,
     criteria: parsed.data.criteria,
   });
   if (!reserved.ok) return NextResponse.json({ error: reserved.error }, { status: reserved.status });
 
   const { listId, runId } = reserved;
   const criteria: ProspectCriteria = parsed.data.criteria;
-  const targetCount = parsed.data.limit;
+  const targetCount = limit;
   const { data: blueprint } = await db
     .from("company_blueprints")
     .select("product_summary")

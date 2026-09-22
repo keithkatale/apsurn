@@ -55,6 +55,19 @@ export async function POST(request: NextRequest) {
     throw error;
   }
 
+  try {
+    const { requireActiveBilling } = await import("@/lib/billing/entitlements");
+    await requireActiveBilling(userId);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Billing required",
+        code: "billing_required",
+      },
+      { status: 402 },
+    );
+  }
+
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid request", issues: parsed.error.issues }, { status: 400 });

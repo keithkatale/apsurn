@@ -52,6 +52,7 @@ Rules:
 - Ask one genuine question about their world; do not push a demo or pricing.
 - Use the qualify reason if present as the reason you're reaching out.
 - Never invent facts about the recipient.
+- Where you would write the recipient's first name, full name, title, email, company, or domain, use exactly these tokens: {{first_name}}, {{full_name}}, {{title}}, {{email}}, {{company}}, {{domain}}. Do not hardcode their real values.
 
 Sender: ${ctx.senderName ?? "the sender"}
 Recipient: ${ctx.contactName ?? "there"}${ctx.contactTitle ? ` (${ctx.contactTitle})` : ""} at ${ctx.companyName} (${ctx.companyDomain})
@@ -78,6 +79,10 @@ Our product (context only, do not hard-sell): ${ctx.productSummary ?? "(unspecif
 }
 
 export interface FollowupContext {
+  contactName?: string | null;
+  contactTitle?: string | null;
+  companyName?: string | null;
+  companyDomain?: string | null;
   campaignName?: string | null;
   campaignPain?: string | null;
   campaignDescription?: string | null;
@@ -90,21 +95,22 @@ export interface FollowupContext {
 }
 
 /**
- * Generic (template) follow-up draft — used once per campaign step, not per contact.
- * Uses {{first_name}} / {{company}} placeholders so it can be rendered per recipient later.
+ * Per-contact follow-up draft. Uses {{first_name}} / {{company}} (and related) tokens
+ * so the UI can render live chips from the lead profile.
  */
-export async function draftFollowupTemplate(ctx: FollowupContext): Promise<OutreachDraft> {
+export async function draftFollowupForContact(ctx: FollowupContext): Promise<OutreachDraft> {
   const prompt = `${EMAIL_SKILL_BRIEF}
 
-You write follow-up bump #${ctx.stepNumber} in a cold outreach sequence, sent ${ctx.delayDays} day(s) after the previous email if there was no reply.
+You write follow-up bump #${ctx.stepNumber} in a cold outreach sequence for ONE recipient, sent ${ctx.delayDays} day(s) after the previous email if there was no reply.
 Return ONLY JSON: {"subject":"...","body":"..."}.
 Rules:
-- This is a TEMPLATE reused for many recipients — use exactly the placeholders {{first_name}} and {{company}} where a name/company would go. Do not invent specific facts.
+- Where you would write the recipient's first name, full name, title, email, company, or domain, use exactly these tokens: {{first_name}}, {{full_name}}, {{title}}, {{email}}, {{company}}, {{domain}}. Do not hardcode their real values.
 - Short, low-pressure bump. Reference that you reached out before without repeating it verbatim.
 - Plain text, no signature block, no links unless essential. A few short sentences.
-- Do not be salesy or pushy. One new angle or data point — not a rehash of the opener.
+- Do not be salesy or pushy. One new angle — not a rehash of the opener.
 
 Sender: ${ctx.senderName ?? "the sender"}
+Recipient: ${ctx.contactName ?? "there"}${ctx.contactTitle ? ` (${ctx.contactTitle})` : ""} at ${ctx.companyName ?? "their company"}${ctx.companyDomain ? ` (${ctx.companyDomain})` : ""}
 Campaign: ${ctx.campaignName ?? "(none)"}
 Pain this campaign speaks to: ${ctx.campaignPain ?? "(none)"}
 Campaign description: ${ctx.campaignDescription ?? "(none)"}
@@ -126,6 +132,11 @@ Previous email body: ${ctx.previousBody ?? "(unknown)"}`;
   } catch (error) {
     throw new Error(`Follow-up draft failed: ${safeAiErrorMessage(error)}`);
   }
+}
+
+/** @deprecated use draftFollowupForContact */
+export async function draftFollowupTemplate(ctx: FollowupContext): Promise<OutreachDraft> {
+  return draftFollowupForContact(ctx);
 }
 
 /** Fill {{first_name}} / {{company}} style templates when AI draft is not used. */

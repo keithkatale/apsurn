@@ -12,27 +12,31 @@ export function FaqSection() {
   const faqs = [
     {
       q: "How does apsurn build an Ideal Customer Profile (ICP)?",
-      a: "apsurn scrapes your company website, analyzes your product offerings, customer case studies, and positioning, then uses Google Vertex AI & Gemini to synthesize a structured ICP blueprint with target verticals, company sizes, and buyer personas.",
+      a: "apsurn crawls your company website, analyzes product pages and positioning, then uses Google Vertex AI & Gemini to synthesize a structured ICP blueprint — industries, company size, geos, and buyer personas — for you to review and approve.",
     },
     {
       q: "How are prospect emails discovered and verified?",
-      a: "Our search-grounded prospecting crawls verified web sources and runs real-time DNS MX record lookups to ensure zero bounce rates and protect your domain's sending reputation.",
+      a: "Search-grounded prospecting crawls public sources and extracts named people with evidence. Known and inferred addresses are checked by a dedicated verifier (syntax, MX, SMTP). Only definitive mailbox results are exposed for outreach — we never invent contacts.",
     },
     {
-      q: "Can I connect my existing Gmail or Outlook inboxes?",
-      a: "Yes, you can securely connect multiple Google Workspace or Microsoft 365 inboxes via OAuth. All tokens are encrypted at rest with AES-256-GCM.",
+      q: "Can I connect my existing Gmail inbox?",
+      a: "Yes. Connect Google Workspace / Gmail via OAuth. Tokens are encrypted at rest. Sequences send from your connected mailbox under capacity and pacing guards.",
+    },
+    {
+      q: "Is there a free plan?",
+      a: "No. Apsurn does not offer a free plan. Every paid plan starts with a 7-day trial for $1. Cancel anytime during the trial and you won’t be charged the monthly rate. After the trial, Startup ($30), Growth ($79), or Pro ($149) continues monthly with AI credits.",
     },
     {
       q: "Can I change or cancel my plan at any time?",
-      a: "Yes, you can upgrade, downgrade, or cancel your subscription whenever you like directly from your dashboard with no hidden contracts or fees.",
+      a: "Yes, you can upgrade, downgrade, or cancel your subscription whenever you like directly from your dashboard with no hidden contracts or fees. Cancel during the trial and you won’t be charged.",
     },
     {
-      q: "Does the platform support multiple team members?",
-      a: "Yes, you can invite your sales reps, assign specific inboxes, share prospect lists, and collaborate on sequencing campaigns seamlessly.",
+      q: "Who is apsurn for?",
+      a: "Founders and lean GTM teams running outbound for B2B SaaS — ICP blueprinting, prospecting, verification, and Gmail sequences in one account-scoped workspace. Shared multi-seat team invites are on the roadmap.",
     },
     {
       q: "Do you offer onboarding assistance?",
-      a: "Yes, we provide interactive guided setup, sample campaign templates, and priority technical support to get your automated outbound pipeline running smoothly.",
+      a: "Yes — guided setup from website to approved blueprint, sample campaign templates, and support to get your outbound pipeline running.",
     },
   ];
 

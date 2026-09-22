@@ -4,22 +4,18 @@ import { campaignIconSvg, type CampaignIconInput } from "@/lib/campaigns/icon";
 export function CampaignIcon({
   campaign,
   storedSvg,
-  selected = false,
   className = "size-8",
 }: {
   campaign: CampaignIconInput;
   storedSvg?: string | null;
+  /** @deprecated Selection chrome removed — kept optional so callers don’t break. */
   selected?: boolean;
   className?: string;
 }) {
   const svg = campaignIconSvg(campaign, storedSvg);
   return (
     <span
-      className={cn(
-        "inline-flex shrink-0 overflow-hidden rounded-lg [&_svg]:size-full",
-        selected && "ring-1 ring-[#4379EE]",
-        className,
-      )}
+      className={cn("inline-flex shrink-0 text-black [&_svg]:size-full", className)}
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );

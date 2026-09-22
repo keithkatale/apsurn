@@ -81,16 +81,32 @@ export default async function CampaignsPage() {
     sequenceIds.length > 0
       ? await supabase
           .from("outreach_drafts")
-          .select("contact_id, sequence_id, subject, body")
+          .select("contact_id, sequence_id, sequence_step_id, subject, body")
           .eq("user_id", userId)
           .in("sequence_id", sequenceIds)
       : { data: [], error: null };
-  if (draftLoadError) console.error("[campaigns] drafts", draftLoadError);
-
   const initialDrafts: Record<string, { subject: string; body: string }> = {};
-  for (const row of draftRows ?? []) {
-    if (!row.subject?.trim() || !row.body?.trim()) continue;
-    initialDrafts[`${row.contact_id}:${row.sequence_id}`] = { subject: row.subject, body: row.body };
+  {
+    let rows = draftRows;
+    if (draftLoadError) {
+      const legacy = sequenceIds.length
+        ? await supabase
+            .from("outreach_drafts")
+            .select("contact_id, sequence_id, subject, body")
+            .eq("user_id", userId)
+            .in("sequence_id", sequenceIds)
+        : { data: [] as Array<{ contact_id: string; sequence_id: string; subject: string; body: string }>, error: null };
+      if (legacy.error) console.error("[campaigns] drafts", legacy.error);
+      rows = (legacy.data ?? []).map((row) => ({ ...row, sequence_step_id: null as string | null }));
+    }
+    for (const row of rows ?? []) {
+      if (!row.subject?.trim() || !row.body?.trim()) continue;
+      const base = `${row.contact_id}:${row.sequence_id}`;
+      initialDrafts[base] = { subject: row.subject, body: row.body };
+      if (row.sequence_step_id) {
+        initialDrafts[`${base}:${row.sequence_step_id}`] = { subject: row.subject, body: row.body };
+      }
+    }
   }
 
   const contactIdsBySequence = new Map<string, string[]>();

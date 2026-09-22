@@ -7,13 +7,15 @@ import { CampaignIcon } from "@/components/campaigns/CampaignIcon";
 import { CompanyFavicon } from "@/components/prospects/CompanyFavicon";
 import { ContactAvatar } from "@/components/prospects/ContactAvatar";
 import { SequenceCanvas } from "@/components/campaigns/SequenceCanvas";
-import { RunSendPassButton } from "@/components/sequences/RunSendPassButton";
+import { TrialStartModal } from "@/components/billing/TrialStartModal";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { ScanOverlay, type ScanLogEntry, type ScanState } from "@/components/progress/ScanOverlay";
 import { PricingCardShell } from "@/components/ui/pricing-card-shell";
 import { canvasVisibleSteps } from "@/lib/campaigns/sequence-steps";
 import { cn } from "@/lib/cn";
 import { htmlToPlain } from "@/lib/outreach/email-html";
+import type { PlanKey } from "@/lib/billing/plans";
+import { notifyCreditsChanged } from "@/components/billing/CreditsBalance";
 
 export type CompanyProfile = {
   name: string;
@@ -86,8 +88,21 @@ export type CampaignDraft = {
   body: string;
 };
 
-function draftKey(contactId: string, sequenceId: string) {
-  return `${contactId}:${sequenceId}`;
+function draftKey(contactId: string, sequenceId: string, stepId?: string | null) {
+  return stepId ? `${contactId}:${sequenceId}:${stepId}` : `${contactId}:${sequenceId}`;
+}
+
+function lookupDraft(
+  drafts: Record<string, CampaignDraft>,
+  contactId: string,
+  sequenceId: string,
+  stepId?: string | null,
+) {
+  if (stepId) {
+    const keyed = drafts[draftKey(contactId, sequenceId, stepId)];
+    if (keyed) return keyed;
+  }
+  return drafts[draftKey(contactId, sequenceId)] ?? null;
 }
 
 export function CampaignWorkspace({
@@ -117,8 +132,13 @@ export function CampaignWorkspace({
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+  const [sendingAll, setSendingAll] = useState(false);
   const [sendMessage, setSendMessage] = useState<string | null>(null);
+  const [sendAllMessage, setSendAllMessage] = useState<string | null>(null);
   const [newCampaignOpen, setNewCampaignOpen] = useState(false);
+  const [trialOpen, setTrialOpen] = useState(false);
+  const [trialPlan, setTrialPlan] = useState<PlanKey>("startup");
+  const [billingActive, setBillingActive] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, CampaignDraft>>(initialDrafts);
   const [generatingKeys, setGeneratingKeys] = useState<Set<string>>(new Set());
   const inFlight = useRef(new Set<string>());
@@ -153,36 +173,118 @@ export function CampaignWorkspace({
   const generating = Boolean(scan && scan.phase === "scanning");
   const campaignSteps = campaign ? (stepsByCampaign[campaign.id] ?? canvasVisibleSteps(campaign.steps)) : [];
   const domain = hostOf(profile.websiteUrl);
-  const selectedKey = lead && campaign ? draftKey(lead.id, campaign.id) : null;
+  const openerStepId = campaignSteps[0]?.id ?? null;
+  const selectedKey = lead && campaign ? draftKey(lead.id, campaign.id, openerStepId) : null;
   const selectedDrafting = Boolean(selectedKey && generatingKeys.has(selectedKey));
   const leadIdsKey = campaignLeads.map((person) => person.id).join(",");
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/billing/status");
+        if (!res.ok) return;
+        const data = (await res.json()) as { active?: boolean };
+        if (!cancelled) setBillingActive(Boolean(data.active));
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const trial = params.get("trial");
+    if (trial === "startup" || trial === "growth" || trial === "pro") {
+      setTrialPlan(trial);
+      if (!billingActive) setTrialOpen(true);
+    }
+
+    const billing = params.get("billing");
+    const subscriptionId = params.get("subscription_id");
+    const email = params.get("email");
+    if (billing === "success") {
+      void (async () => {
+        try {
+          if (subscriptionId) {
+            const res = await fetch("/api/billing/sync", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                subscriptionId,
+                email: email || undefined,
+              }),
+            });
+            const data = (await res.json().catch(() => null)) as { active?: boolean } | null;
+            if (res.ok) {
+              setBillingActive(Boolean(data?.active));
+              setTrialOpen(false);
+              notifyCreditsChanged(
+                typeof (data as { creditBalance?: number } | null)?.creditBalance === "number"
+                  ? (data as { creditBalance: number }).creditBalance
+                  : undefined,
+              );
+              // Clean query params so refresh doesn't re-sync forever.
+              const url = new URL(window.location.href);
+              url.searchParams.delete("billing");
+              url.searchParams.delete("subscription_id");
+              url.searchParams.delete("status");
+              url.searchParams.delete("email");
+              window.history.replaceState({}, "", url.pathname + (url.search ? url.search : ""));
+              return;
+            }
+          }
+          const statusRes = await fetch("/api/billing/status");
+          const status = (await statusRes.json().catch(() => null)) as { active?: boolean } | null;
+          setBillingActive(Boolean(status?.active));
+          if (status?.active) setTrialOpen(false);
+        } catch {
+          /* ignore */
+        }
+      })();
+    }
+  }, [billingActive]);
 
   useEffect(() => {
     if (!campaign) {
       setLeadId(null);
       return;
     }
-    setLeadId((current) => (current && campaign.contactIds.includes(current) ? current : null));
-  }, [campaign]);
+    setLeadId((current) => {
+      if (current && campaignLeads.some((person) => person.id === current)) return current;
+      return campaignLeads[0]?.id ?? null;
+    });
+  }, [campaign, leadIdsKey, campaignLeads]);
 
-  async function generateDraft(contactId: string, sequenceId: string, regenerate: boolean) {
-    const key = draftKey(contactId, sequenceId);
+  async function generateDraft(contactId: string, sequenceId: string, regenerate: boolean, stepId?: string | null) {
+    const resolvedStepId = stepId ?? openerStepId;
+    const key = draftKey(contactId, sequenceId, resolvedStepId);
     if (inFlight.current.has(key)) return;
-    if (!regenerate && draftsRef.current[key]) return;
+    if (!regenerate && (draftsRef.current[key] || (!resolvedStepId && draftsRef.current[draftKey(contactId, sequenceId)]))) return;
     inFlight.current.add(key);
     setGeneratingKeys((prev) => new Set(prev).add(key));
     try {
       const res = await fetch("/api/outreach/draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contactId, campaignId: sequenceId, regenerate }),
+        body: JSON.stringify({ contactId, campaignId: sequenceId, stepId: resolvedStepId ?? undefined, regenerate }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not write this email");
+      if (typeof data.creditBalance === "number") {
+        notifyCreditsChanged(data.creditBalance);
+      } else {
+        notifyCreditsChanged();
+      }
       const next = { subject: String(data.subject ?? ""), body: String(data.body ?? "") };
-      setDrafts((prev) => ({ ...prev, [key]: next }));
+      const saveKey = data.stepId ? draftKey(contactId, sequenceId, data.stepId) : key;
+      setDrafts((prev) => ({ ...prev, [saveKey]: next, [key]: next }));
       setLeadId((current) => {
-        if (current === contactId) {
+        if (current === contactId && (!resolvedStepId || resolvedStepId === openerStepId)) {
           setSubject(next.subject);
           setBody(next.body);
           setSendMessage(null);
@@ -191,7 +293,7 @@ export function CampaignWorkspace({
       });
     } catch (error) {
       setLeadId((current) => {
-        if (current === contactId) {
+        if (current === contactId && (!resolvedStepId || resolvedStepId === openerStepId)) {
           setSendMessage(error instanceof Error ? error.message : "Could not write this email");
         }
         return current;
@@ -207,10 +309,11 @@ export function CampaignWorkspace({
   }
 
   useEffect(() => {
-    if (!campaign) return;
+    if (!campaign || !openerStepId) return;
     const missing = campaignLeads.filter((person) => {
-      const key = draftKey(person.id, campaign.id);
-      return !drafts[key] && !inFlight.current.has(key);
+      const key = draftKey(person.id, campaign.id, openerStepId);
+      const legacy = draftKey(person.id, campaign.id);
+      return !drafts[key] && !drafts[legacy] && !inFlight.current.has(key);
     });
     if (missing.length === 0) return;
     let cancelled = false;
@@ -220,7 +323,7 @@ export function CampaignWorkspace({
         while (!cancelled && queue.length > 0 && campaign) {
           const person = queue.shift();
           if (!person) break;
-          await generateDraft(person.id, campaign.id, false);
+          await generateDraft(person.id, campaign.id, false, openerStepId);
         }
       }
       await Promise.all([worker(), worker()]);
@@ -228,8 +331,8 @@ export function CampaignWorkspace({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- generate missing drafts when the campaign's people change
-  }, [campaign?.id, leadIdsKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- generate missing opener drafts when the campaign's people change
+  }, [campaign?.id, leadIdsKey, openerStepId]);
 
   useEffect(() => {
     if (!lead || !campaign) {
@@ -237,20 +340,20 @@ export function CampaignWorkspace({
       setBody("");
       return;
     }
-    const cached = drafts[draftKey(lead.id, campaign.id)];
+    const cached = lookupDraft(drafts, lead.id, campaign.id, openerStepId);
     if (cached) {
       setSubject(cached.subject);
       setBody(cached.body);
-    } else if (!generatingKeys.has(draftKey(lead.id, campaign.id))) {
+    } else if (!generatingKeys.has(draftKey(lead.id, campaign.id, openerStepId))) {
       setSubject("");
       setBody("");
     }
-  }, [lead?.id, campaign?.id]);
+  }, [lead?.id, campaign?.id, openerStepId]);
 
   useEffect(() => {
     if (!lead || !campaign || selectedDrafting) return;
-    const key = draftKey(lead.id, campaign.id);
-    const cached = draftsRef.current[key];
+    const key = draftKey(lead.id, campaign.id, openerStepId);
+    const cached = lookupDraft(draftsRef.current, lead.id, campaign.id, openerStepId);
     if (!subject.trim() || !body.trim()) return;
     if (cached && cached.subject === subject && cached.body === body) return;
     const timeout = window.setTimeout(() => {
@@ -259,11 +362,11 @@ export function CampaignWorkspace({
       void fetch("/api/outreach/draft", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contactId: lead.id, campaignId: campaign.id, subject, body }),
+        body: JSON.stringify({ contactId: lead.id, campaignId: campaign.id, stepId: openerStepId ?? undefined, subject, body }),
       });
     }, 700);
     return () => window.clearTimeout(timeout);
-  }, [subject, body, lead?.id, campaign?.id, selectedDrafting]);
+  }, [subject, body, lead?.id, campaign?.id, selectedDrafting, openerStepId]);
 
   async function generateFromBlueprint() {
     if (!hasBlueprint) {
@@ -320,10 +423,43 @@ export function CampaignWorkspace({
 
   function rememberDraft(nextSubject: string, nextBody: string) {
     if (!lead || !campaign) return;
-    setDrafts((prev) => ({ ...prev, [draftKey(lead.id, campaign.id)]: { subject: nextSubject, body: nextBody } }));
+    const key = draftKey(lead.id, campaign.id, openerStepId);
+    setDrafts((prev) => ({ ...prev, [key]: { subject: nextSubject, body: nextBody } }));
   }
 
+  function saveStepDraft(stepId: string, nextSubject: string, nextBody: string) {
+    if (!lead || !campaign) return;
+    const key = draftKey(lead.id, campaign.id, stepId);
+    setDrafts((prev) => ({ ...prev, [key]: { subject: nextSubject, body: nextBody } }));
+    void fetch("/api/outreach/draft", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contactId: lead.id,
+        campaignId: campaign.id,
+        stepId,
+        subject: nextSubject,
+        body: nextBody,
+      }),
+    });
+  }
+
+  const readyToSendCount = useMemo(() => {
+    if (!campaign || !openerStepId) return 0;
+    let count = 0;
+    for (const person of campaignLeads) {
+      if (!person.email) continue;
+      const draft = lookupDraft(drafts, person.id, campaign.id, openerStepId);
+      if (draft?.subject?.trim() && draft?.body?.trim()) count += 1;
+    }
+    return count;
+  }, [campaign, campaignLeads, drafts, openerStepId]);
+
   async function sendEmail() {
+    if (!billingActive) {
+      setTrialOpen(true);
+      return;
+    }
     if (!lead) {
       setSendMessage("Select a person first.");
       return;
@@ -353,13 +489,83 @@ export function CampaignWorkspace({
           body: body.trim(),
         }),
       });
-      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      const data = (await res.json().catch(() => null)) as { error?: string; code?: string } | null;
+      if (res.status === 402 || data?.code === "billing_required") {
+        setTrialOpen(true);
+        setSendMessage(null);
+        return;
+      }
       if (!res.ok) throw new Error(data?.error || `Send failed (${res.status})`);
       setSendMessage(`Sent from ${inboxEmail}`);
     } catch (error) {
       setSendMessage(error instanceof Error ? error.message : "Send failed");
     } finally {
       setSending(false);
+    }
+  }
+
+  async function sendAllGenerated() {
+    if (!billingActive) {
+      setTrialOpen(true);
+      return;
+    }
+    if (!campaign) {
+      setSendAllMessage("Select a campaign first.");
+      return;
+    }
+    if (!inboxEmail) {
+      setSendAllMessage("Connect Gmail to send as you.");
+      return;
+    }
+
+    const queue = campaignLeads.flatMap((person) => {
+      if (!person.email) return [];
+      const draft = lookupDraft(drafts, person.id, campaign.id, openerStepId);
+      if (!draft?.subject?.trim() || !draft?.body?.trim()) return [];
+      return [{ person, draft }];
+    });
+
+    if (queue.length === 0) {
+      setSendAllMessage("Generate emails first — nothing ready to send.");
+      return;
+    }
+
+    setSendingAll(true);
+    setSendAllMessage(`Sending 0 of ${queue.length}…`);
+    let sent = 0;
+    let failed = 0;
+    try {
+      for (const item of queue) {
+        const res = await fetch("/api/outreach/send-now", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contactId: item.person.id,
+            campaignId: campaign.id,
+            subject: item.draft.subject.trim(),
+            body: item.draft.body.trim(),
+          }),
+        });
+        const data = (await res.json().catch(() => null)) as { error?: string; code?: string } | null;
+        if (res.status === 402 || data?.code === "billing_required") {
+          setTrialOpen(true);
+          setSendAllMessage(sent > 0 ? `Sent ${sent}, then billing required` : null);
+          return;
+        }
+        if (!res.ok) {
+          failed += 1;
+        } else {
+          sent += 1;
+        }
+        setSendAllMessage(`Sending ${sent + failed} of ${queue.length}…`);
+      }
+      setSendAllMessage(
+        failed > 0 ? `Sent ${sent} · ${failed} failed` : `Sent ${sent} email${sent === 1 ? "" : "s"}`,
+      );
+    } catch (error) {
+      setSendAllMessage(error instanceof Error ? error.message : "Send all failed");
+    } finally {
+      setSendingAll(false);
     }
   }
 
@@ -522,11 +728,50 @@ export function CampaignWorkspace({
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <RunSendPassButton />
-                <ThreeDButton type="button" variant="solid" size="sm" disabled={generating} onClick={() => setNewCampaignOpen(true)}>
-                  New campaign
-                </ThreeDButton>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <div className="flex items-center gap-2">
+                  <ThreeDButton
+                    type="button"
+                    variant="solid"
+                    size="sm"
+                    className="send-attention-pulse"
+                    disabled={sendingAll || generating}
+                    onClick={() => void sendAllGenerated()}
+                  >
+                    {sendingAll ? (
+                      "Sending all…"
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5">
+                        Send all now
+                        {readyToSendCount > 0 ? (
+                          <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold leading-none">
+                            {readyToSendCount}
+                          </span>
+                        ) : null}
+                        <span className="material-symbols-outlined text-[16px] leading-none" aria-hidden>
+                          send
+                        </span>
+                      </span>
+                    )}
+                  </ThreeDButton>
+                  <ThreeDButton type="button" variant="soft" size="sm" disabled={generating} onClick={() => setNewCampaignOpen(true)}>
+                    New campaign
+                  </ThreeDButton>
+                </div>
+                {sendAllMessage && (
+                  <p
+                    className={cn(
+                      "max-w-xs text-right text-[11px]",
+                      /fail|error|required|nothing|Connect/i.test(sendAllMessage)
+                        ? "text-red-600"
+                        : sendAllMessage.startsWith("Sent")
+                          ? "text-emerald-600"
+                          : "text-neutral-500",
+                    )}
+                  >
+                    {sendAllMessage}
+                  </p>
+                )}
               </div>
             </header>
 
@@ -544,16 +789,16 @@ export function CampaignWorkspace({
                   )}
                   {campaignLeads.map((person) => {
                     const selected = person.id === lead?.id;
-                    const key = campaign ? draftKey(person.id, campaign.id) : "";
-                    const ready = Boolean(drafts[key]);
-                    const writing = generatingKeys.has(key);
+                    const key = campaign ? draftKey(person.id, campaign.id, openerStepId) : "";
+                    const ready = Boolean(lookupDraft(drafts, person.id, campaign?.id ?? "", openerStepId));
+                    const writing = generatingKeys.has(key) || generatingKeys.has(draftKey(person.id, campaign?.id ?? ""));
                     return (
                       <li key={person.id}>
                         <button
                           type="button"
                           onClick={() => {
                             if (selected && campaign) {
-                              void generateDraft(person.id, campaign.id, true);
+                              void generateDraft(person.id, campaign.id, true, openerStepId);
                               return;
                             }
                             setLeadId(person.id);
@@ -597,6 +842,12 @@ export function CampaignWorkspace({
                     steps={campaignSteps}
                     onStepsChange={(next) => setStepsByCampaign((prev) => ({ ...prev, [campaign.id]: next }))}
                     lead={lead}
+                    drafts={drafts}
+                    generatingKeys={generatingKeys}
+                    onGenerateStep={(stepId, regenerate) => {
+                      if (lead && campaign) void generateDraft(lead.id, campaign.id, regenerate, stepId);
+                    }}
+                    onSaveStepDraft={saveStepDraft}
                     senderName={senderName}
                     inboxEmail={inboxEmail}
                     subject={subject}
@@ -611,11 +862,13 @@ export function CampaignWorkspace({
                     }}
                     drafting={selectedDrafting}
                     onRegenerateOpener={() => {
-                      if (lead && campaign) void generateDraft(lead.id, campaign.id, true);
+                      if (lead && campaign) void generateDraft(lead.id, campaign.id, true, openerStepId);
                     }}
                     sending={sending}
                     sendMessage={sendMessage}
                     onSend={() => void sendEmail()}
+                    billingActive={billingActive}
+                    onStartTrial={() => setTrialOpen(true)}
                   />
                 )}
               </section>
@@ -638,6 +891,10 @@ export function CampaignWorkspace({
           </div>
         )}
       </div>
+
+      {trialOpen && (
+        <TrialStartModal open={trialOpen} onClose={() => setTrialOpen(false)} defaultPlan={trialPlan} />
+      )}
 
       {newCampaignOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setNewCampaignOpen(false)}>

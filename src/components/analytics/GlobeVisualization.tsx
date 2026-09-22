@@ -113,14 +113,7 @@ export function GlobeVisualization({
       .catch(() => setCountries({ features: [] }));
   }, []);
 
-  const visitorsWithAvatars = useMemo(
-    () =>
-      visitors.map((visitor) => ({
-        ...visitor,
-        avatarUrl: `https://api.dicebear.com/9.x/avataaars/svg?seed=${visitor.id}&backgroundColor=f5f5f5`,
-      })),
-    [visitors]
-  );
+  const visitorMarkers = useMemo(() => visitors, [visitors]);
 
   useEffect(() => {
     if (!globeEl.current) return;
@@ -167,16 +160,17 @@ export function GlobeVisualization({
         labelResolution={2}
         labelAltitude={0.012}
         labelIncludeDot={false}
-        htmlElementsData={visitorsWithAvatars}
+        htmlElementsData={visitorMarkers}
         htmlLat={(d) => (d as LiveVisitor).lat}
         htmlLng={(d) => (d as LiveVisitor).lng}
         htmlElement={(d) => {
-          const visitor = d as LiveVisitor & { avatarUrl: string };
+          const visitor = d as LiveVisitor;
+          const initials = (visitor.city || "?").trim().slice(0, 2).toUpperCase();
           const el = document.createElement("div");
           el.innerHTML = `
             <div style="position:relative;transform:translate(-50%,-50%);">
-              <div style="width:28px;height:28px;border-radius:50%;overflow:hidden;border:2px solid #fff;background:#f5f5f5;box-shadow:0 4px 12px rgba(0,0,0,0.12);">
-                <img src="${visitor.avatarUrl}" style="width:100%;height:100%;object-fit:cover;" alt="" />
+              <div style="width:28px;height:28px;border-radius:50%;overflow:hidden;border:2px solid #fff;background:#f0f0f0;color:#525252;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.12);">
+                ${initials}
               </div>
               <div style="position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);background:#fff;color:#171717;border:1px solid #EEEEEE;padding:1px 6px;border-radius:8px;font-size:10px;white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,0.06);">
                 ${visitor.city}

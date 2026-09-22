@@ -335,8 +335,8 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           version: 1,
-          listName: "Setup — first 10 accounts",
-          limit: 10,
+          listName: "Setup — first 6 accounts",
+          limit: 6,
           criteria: {
             industries: textToList(industries),
             companySizeRange,
@@ -501,13 +501,14 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
       <div
         className={cn(
           "min-h-0 flex-1",
-          scanCentered || step === 4 ? "flex flex-col overflow-hidden" : "overflow-y-auto overscroll-contain",
+          step === 1 && !started && "flex items-center justify-center pb-[8vh]",
+          scanCentered || step === 4 ? "flex flex-col overflow-hidden" : step === 1 && !started ? "" : "overflow-y-auto overscroll-contain",
         )}
       >
       {step === 1 && !started && (
         <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-5 text-center">
           <div>
-            <h1 className="text-2xl font-semibold text-neutral-900">Research your company</h1>
+            <h1 className="text-2xl font-semibold text-neutral-900">Enter your business domain.</h1>
             <p className="mt-1 text-sm text-neutral-600">Enter your domain. We&apos;ll read the site and draft the ICP.</p>
           </div>
           <form onSubmit={analyze} className="w-full max-w-md">

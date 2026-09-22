@@ -171,6 +171,20 @@ export async function runOutreachSendPass(opts: {
       : "";
     let body = renderTemplate(step.body_template, vars);
 
+    // Prefer a per-contact draft for this step when present.
+    const { data: savedDraft } = await db
+      .from("outreach_drafts")
+      .select("subject, body")
+      .eq("user_id", sequence.user_id)
+      .eq("contact_id", contact.id)
+      .eq("sequence_id", sequence.id)
+      .eq("sequence_step_id", step.id)
+      .maybeSingle();
+    if (savedDraft?.subject?.trim() && savedDraft?.body?.trim()) {
+      subject = renderTemplate(savedDraft.subject, vars);
+      body = renderTemplate(savedDraft.body, vars);
+    }
+
     const wantsAi =
       nextIndex === 0 &&
       (Boolean(contact.qualify_reason) ||

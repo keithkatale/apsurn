@@ -143,9 +143,6 @@ export function Footer() {
                   <Link href="#contact" className="hover:text-black transition-colors">
                     Contact
                   </Link>
-                  <Link href="#blog" className="hover:text-black transition-colors">
-                    Blog
-                  </Link>
                 </div>
               </div>
 
