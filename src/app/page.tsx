@@ -3,7 +3,6 @@ import { HeroFeaturesSection } from "@/components/landing/HeroFeaturesSection";
 import { WhyUsSection } from "@/components/landing/WhyUsSection";
 import { ProcessSection } from "@/components/landing/ProcessSection";
 import { PricingSection } from "@/components/landing/PricingSection";
-import { TestimonialSection } from "@/components/landing/TestimonialSection";
 import { FaqSection } from "@/components/landing/FaqSection";
 import { ContactSection } from "@/components/landing/ContactSection";
 import { BottomCtaSection } from "@/components/landing/BottomCtaSection";
@@ -24,7 +23,6 @@ export default function LandingPage() {
       <ProcessSection />
       {/* IntegrationSection temporarily disabled */}
       <PricingSection />
-      <TestimonialSection />
       <FaqSection />
       <ContactSection />
       <BottomCtaSection />

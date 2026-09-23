@@ -83,21 +83,7 @@ export function LoginForm({ mode = "signin" }: { mode?: "signin" | "signup" }) {
   async function continueWithGoogle() {
     setGoogleBusy(true);
     setMessage(null);
-    try {
-      const supabase = createClient();
-      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo, queryParams: { access_type: "offline", prompt: "select_account" } },
-      });
-      if (error) {
-        setGoogleBusy(false);
-        setMessage(error.message);
-      }
-    } catch (error) {
-      setGoogleBusy(false);
-      setMessage(error instanceof Error ? error.message : "Could not start Google sign-in.");
-    }
+    window.location.assign(`/api/auth/google/start?next=${encodeURIComponent(next)}`);
   }
 
   return (

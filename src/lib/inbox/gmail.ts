@@ -12,6 +12,12 @@ export interface ConnectedInbox {
   refresh_token_enc: string;
   token_expires_at: string | null;
   status: string;
+  scopes?: string[] | null;
+}
+
+/** App-password SMTP inbox — works before Google OAuth verification is approved. */
+export function inboxUsesSmtp(inbox: Pick<ConnectedInbox, "scopes">): boolean {
+  return (inbox.scopes ?? []).includes("smtp");
 }
 
 function oauthClient() {

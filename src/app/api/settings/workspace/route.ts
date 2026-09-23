@@ -30,8 +30,9 @@ export async function GET() {
       : Promise.resolve({ data: null }),
     db
       .from("connected_inboxes")
-      .select("id, provider, email_address, status, created_at")
+      .select("id, provider, email_address, status, scopes, created_at")
       .eq("user_id", userId)
+      .eq("status", "connected")
       .order("created_at", { ascending: false }),
   ]);
 

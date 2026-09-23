@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { Check } from "lucide-react";
 import { BrandLogo } from "@/components/brand/BrandLogo";
@@ -57,52 +56,6 @@ export function Footer() {
                   </button>
                 </form>
               )}
-            </div>
-
-            {/* Social Icons */}
-            <div className="flex items-center gap-2.5 pt-1">
-              <a
-                href="https://instagram.com"
-                target="_blank"
-                rel="noreferrer"
-                className="flex size-9 items-center justify-center rounded-full border border-[#EEEEEE] bg-[#FAFAFA] text-black hover:bg-white hover:border-neutral-300 transition-colors shadow-2xs"
-                aria-label="Instagram"
-              >
-                <Image
-                  src="/landing/social-instagram.svg"
-                  alt="Instagram"
-                  width={18}
-                  height={18}
-                />
-              </a>
-              <a
-                href="https://linkedin.com"
-                target="_blank"
-                rel="noreferrer"
-                className="flex size-9 items-center justify-center rounded-full border border-[#EEEEEE] bg-[#FAFAFA] text-black hover:bg-white hover:border-neutral-300 transition-colors shadow-2xs"
-                aria-label="LinkedIn"
-              >
-                <Image
-                  src="/landing/social-linkedin.svg"
-                  alt="LinkedIn"
-                  width={18}
-                  height={18}
-                />
-              </a>
-              <a
-                href="https://x.com"
-                target="_blank"
-                rel="noreferrer"
-                className="flex size-9 items-center justify-center rounded-full border border-[#EEEEEE] bg-[#FAFAFA] text-black hover:bg-white hover:border-neutral-300 transition-colors shadow-2xs"
-                aria-label="X"
-              >
-                <Image
-                  src="/landing/social-x.svg"
-                  alt="X"
-                  width={18}
-                  height={18}
-                />
-              </a>
             </div>
           </div>
 
@@ -164,7 +117,7 @@ export function Footer() {
 
             {/* Copyright / Credits */}
             <div className="lg:text-right text-left text-[14px] sm:text-[16px] text-[#605F5F] tracking-[-0.64px]">
-              <p>Designed by Lunis. All rights reserved.</p>
+              <p>All rights reserved.</p>
             </div>
           </div>
         </div>

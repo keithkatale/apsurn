@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { RebuildBlueprintButton } from "@/components/settings/RebuildBlueprintButton";
-import { AiProviderSettings } from "@/components/settings/AiProviderSettings";
+import { ConnectGoogleModal, GoogleLogo } from "@/components/settings/ConnectGoogleModal";
 import { CreditTopupPanel } from "@/components/billing/CreditTopupPanel";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { useSettingsPanel } from "./settings-panel-context";
@@ -16,6 +16,7 @@ type InboxRow = {
   provider: string;
   email_address: string;
   status: string;
+  scopes?: string[] | null;
 };
 
 function formatDate(value: string | null | undefined) {
@@ -31,7 +32,6 @@ function formatDate(value: string | null | undefined) {
 export function SettingsPanel() {
   const { open, closeSettings, openSettings } = useSettingsPanel();
   const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState<string | null>(null);
   const [company, setCompany] = useState<{
@@ -42,6 +42,8 @@ export function SettingsPanel() {
   } | null>(null);
   const [inboxes, setInboxes] = useState<InboxRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [inboxBusy, setInboxBusy] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("panel") === "settings" || searchParams.get("inbox") === "connected") {
@@ -52,7 +54,7 @@ export function SettingsPanel() {
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    fetch("/api/settings/workspace")
+    fetch("/api/settings/workspace", { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
         if (cancelled) return;
@@ -70,11 +72,41 @@ export function SettingsPanel() {
   }, [open]);
 
   const inboxError = searchParams.get("error");
-  const connectNext = `${pathname}?panel=settings`;
+
+  async function refreshInboxes() {
+    const refresh = await fetch("/api/settings/workspace", { cache: "no-store" });
+    const next = await refresh.json().catch(() => null);
+    if (Array.isArray(next?.inboxes)) setInboxes(next.inboxes);
+    router.refresh();
+  }
+
+  const connectedInbox = inboxes[0] ?? null;
+
+  async function disconnectInbox() {
+    if (!connectedInbox || inboxBusy) return;
+    setInboxBusy(true);
+    setLoadError(null);
+    try {
+      const res = await fetch("/api/inboxes/smtp", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inboxId: connectedInbox.id }),
+      });
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) throw new Error(data?.error || "Could not disconnect");
+      setInboxes([]);
+      router.refresh();
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Could not disconnect");
+    } finally {
+      setInboxBusy(false);
+    }
+  }
 
   if (!open) return null;
 
   return (
+    <>
     <div className="pointer-events-none absolute inset-0 z-40 flex justify-end">
       <aside className="pointer-events-auto flex h-full w-[420px] shrink-0 flex-col overflow-hidden border-l border-neutral-200 bg-white">
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-neutral-200 bg-white px-4 py-3">
@@ -133,31 +165,52 @@ export function SettingsPanel() {
           </section>
 
           <section className="mb-6 border-t border-neutral-100 pt-5">
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold text-neutral-900">Inbox</h3>
-                <p className="mt-1 text-sm text-neutral-600">Campaigns send as you, from Gmail.</p>
-              </div>
-              <ThreeDButton href={`/api/inboxes/gmail/start?next=${encodeURIComponent(connectNext)}`} variant="solid" size="sm">
-                Connect Gmail
-              </ThreeDButton>
-            </div>
-            {inboxes.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-neutral-200 px-3 py-4 text-sm text-neutral-500">
-                No inbox connected yet.
-              </p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {inboxes.map((inbox) => (
-                  <li key={inbox.id} className="flex items-center justify-between rounded-xl border border-[#EEEEEE] px-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-neutral-900">{inbox.email_address}</p>
-                      <p className="text-[12px] text-neutral-500">{inbox.provider}</p>
+            <h3 className="text-sm font-semibold text-neutral-900">Inbox</h3>
+            <p className="mt-1 text-sm text-neutral-600">Campaigns send from your Google account.</p>
+            {connectedInbox ? (
+              <div className="mt-3 rounded-xl border border-neutral-200 px-3 py-3">
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full border border-neutral-200 bg-white">
+                    <GoogleLogo className="size-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-[13px] font-semibold text-neutral-900">Google connected</p>
+                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                        Active
+                      </span>
                     </div>
-                    <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-600">{inbox.status}</span>
-                  </li>
-                ))}
-              </ul>
+                    <p className="mt-0.5 truncate text-[13px] text-neutral-600">{connectedInbox.email_address}</p>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <ThreeDButton
+                    type="button"
+                    variant="soft"
+                    size="sm"
+                    disabled={inboxBusy}
+                    onClick={() => setConnectOpen(true)}
+                  >
+                    Reconnect
+                  </ThreeDButton>
+                  <ThreeDButton
+                    type="button"
+                    variant="muted"
+                    size="sm"
+                    disabled={inboxBusy}
+                    onClick={() => void disconnectInbox()}
+                  >
+                    {inboxBusy ? "Disconnecting…" : "Disconnect"}
+                  </ThreeDButton>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3">
+                <ThreeDButton type="button" variant="soft" size="sm" onClick={() => setConnectOpen(true)}>
+                  <GoogleLogo className="size-3.5" />
+                  Connect to Google
+                </ThreeDButton>
+              </div>
             )}
           </section>
 
@@ -190,13 +243,25 @@ export function SettingsPanel() {
               </div>
             </dl>
           </section>
-
-          <section className="border-t border-neutral-100 pt-5">
-            <h3 className="mb-3 text-sm font-semibold text-neutral-900">AI provider</h3>
-            <AiProviderSettings />
-          </section>
         </div>
       </aside>
     </div>
+    <ConnectGoogleModal
+      open={connectOpen}
+      onClose={() => setConnectOpen(false)}
+      defaultEmail={email ?? ""}
+      onConnected={(connectedEmail) => {
+        setInboxes((current) => [
+          {
+            id: current[0]?.id ?? "connected",
+            provider: "gmail",
+            email_address: connectedEmail,
+            status: "connected",
+          },
+        ]);
+        void refreshInboxes();
+      }}
+    />
+    </>
   );
 }

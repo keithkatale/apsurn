@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Script from "next/script";
 import { Geist, Manrope } from "next/font/google";
+import { PostHogProvider } from "@/components/analytics/PostHogProvider";
 import { NavigationLoaderHost } from "@/components/loaders/navigation-loader-host";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { PUBLIC_CONFIG_GLOBAL, readPublicSupabaseConfig } from "@/lib/supabase/public-config";
@@ -18,6 +19,7 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://apsurn.com"),
   title: "apsurn — AI SDR & Autonomous Prospecting Engine",
   description: "Outbound sales on autopilot. Turn your website into a 24/7 autonomous prospecting machine.",
   icons: {
@@ -26,6 +28,26 @@ export const metadata: Metadata = {
       { url: "/favicon-48.png", sizes: "48x48", type: "image/png" },
     ],
     apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  openGraph: {
+    type: "website",
+    siteName: "apsurn",
+    title: "apsurn — AI SDR & Autonomous Prospecting Engine",
+    description: "Outbound sales on autopilot. Turn your website into a 24/7 autonomous prospecting machine.",
+    images: [
+      {
+        url: "/landing/socialshare.png",
+        width: 3478,
+        height: 2104,
+        alt: "apsurn — Distribution engine for B2B SaaS startups",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "apsurn — AI SDR & Autonomous Prospecting Engine",
+    description: "Outbound sales on autopilot. Turn your website into a 24/7 autonomous prospecting machine.",
+    images: ["/landing/socialshare.png"],
   },
 };
 
@@ -58,8 +80,10 @@ export default function RootLayout({
       </head>
       <body className="antialiased font-sans">
         <ThemeProvider>
-          {children}
-          <NavigationLoaderHost />
+          <PostHogProvider>
+            {children}
+            <NavigationLoaderHost />
+          </PostHogProvider>
         </ThemeProvider>
         <Script
           src="/trackify.js"

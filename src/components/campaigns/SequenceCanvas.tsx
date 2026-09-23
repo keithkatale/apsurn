@@ -267,8 +267,8 @@ export function SequenceCanvas({
                     )}
                   </ThreeDButton>
                 ) : (
-                  <ThreeDButton href="/api/inboxes/gmail/start?next=%2Fdashboard%2Fcampaigns%3Fpanel%3Dsettings" variant="solid" size="sm">
-                    Connect Gmail
+                  <ThreeDButton href="/dashboard/campaigns?panel=settings" variant="solid" size="sm">
+                    Connect to Google
                   </ThreeDButton>
                 )}
               </div>
