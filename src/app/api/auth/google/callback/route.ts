@@ -4,11 +4,12 @@ import {
   decodeGoogleSignInState,
   exchangeGoogleSignInCode,
   googleSignInCookieName,
+  publicAppOrigin,
 } from "@/lib/auth/google-signin";
 
 export async function GET(request: NextRequest) {
   const url = request.nextUrl;
-  const origin = url.origin;
+  const origin = publicAppOrigin(request);
   const fail = (next: string) =>
     NextResponse.redirect(new URL(`/login?error=auth&next=${encodeURIComponent(next)}`, origin));
 
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const tokens = await exchangeGoogleSignInCode(code, origin);
+    const tokens = await exchangeGoogleSignInCode(code, request);
     const supabase = await createClient();
     const { error } = await supabase.auth.signInWithIdToken({
       provider: "google",

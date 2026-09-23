@@ -4,20 +4,21 @@ import {
   encodeGoogleSignInState,
   googleSignInAuthUrl,
   googleSignInCookieName,
+  publicAppOrigin,
 } from "@/lib/auth/google-signin";
 
 export async function GET(request: NextRequest) {
   const nextRaw = request.nextUrl.searchParams.get("next") || "/dashboard";
   const next = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard";
-  const origin = request.nextUrl.origin;
+  const origin = publicAppOrigin(request);
 
   try {
     const state = randomBytes(24).toString("hex");
-    const res = NextResponse.redirect(googleSignInAuthUrl(state, origin));
+    const res = NextResponse.redirect(googleSignInAuthUrl(state, request));
     res.cookies.set(googleSignInCookieName(), encodeGoogleSignInState(state, next), {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: origin.startsWith("https://"),
       path: "/",
       maxAge: 600,
     });
