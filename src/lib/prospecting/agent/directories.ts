@@ -29,6 +29,37 @@ export const EXCLUDED_DIRECTORY_HOSTS = [
   "rocketreach.co",
   "apollo.io",
   "crunchbase.com",
+  // Site builders and link-in-bio hosts. Icypeas sometimes returns these as a
+  // "company website", then rejects the follow-up people lookup as an invalid
+  // domain, so the run walks a page of nothing and saves zero companies.
+  "canva.site",
+  "wixsite.com",
+  "wordpress.com",
+  "github.io",
+  "gitlab.io",
+  "linktr.ee",
+  "carrd.co",
+  "notion.site",
+  "notion.so",
+  "webflow.io",
+  "squarespace.com",
+  "sites.google.com",
+  "myshopify.com",
+  "blogspot.com",
+  "medium.com",
+  "substack.com",
+  "about.me",
+  "bio.link",
+  "beacons.ai",
+  "godaddysites.com",
+  "weebly.com",
+  "jimdosite.com",
+  "teachable.com",
+  "podia.com",
+  "gumroad.com",
+  "etsy.com",
+  "bit.ly",
+  "linkin.bio",
 ];
 
 export function isExcludedHost(host: string): boolean {

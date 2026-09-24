@@ -48,7 +48,7 @@ export function SiteSelector({
       <ThreeDButton
         type="button"
         variant="soft"
-        className="min-w-[200px] justify-start rounded-xl px-3"
+        className="min-w-[200px] justify-start rounded-full px-3"
         onClick={() => setOpen((value) => !value)}
       >
         <Globe className="size-4 text-neutral-500" />

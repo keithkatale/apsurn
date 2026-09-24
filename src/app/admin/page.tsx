@@ -29,7 +29,7 @@ export default async function AdminPage() {
     <div className="min-h-screen bg-neutral-50">
       <header className="border-b border-neutral-200 bg-white px-6 py-4">
         <div className="mx-auto flex max-w-3xl items-center justify-between">
-          <BrandLogo href="/dashboard" size={24} />
+          <BrandLogo href="/dashboard/copilot" size={24} />
           <span className="text-xs text-neutral-400">{admin.email}</span>
         </div>
       </header>

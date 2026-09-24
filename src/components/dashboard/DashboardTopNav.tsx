@@ -41,7 +41,7 @@ export function DashboardTopNav() {
 
   return (
     <header className="z-20 grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-neutral-200 bg-white px-4 py-2.5">
-      <BrandLogo href="/dashboard" size={26} />
+      <BrandLogo href="/dashboard/copilot" size={26} />
       <nav className="flex items-center justify-center gap-1">
         {NAV_ITEMS.map((item) => {
           const active = isActivePath(activePath, item.href);
@@ -52,7 +52,7 @@ export function DashboardTopNav() {
                 href={item.href}
                 variant="solid"
                 size="sm"
-                className="shrink-0 rounded-lg px-3 text-sm"
+                className="shrink-0 rounded-full px-3 text-base"
                 onClick={(event) => onTabClick(event, item.href)}
               >
                 {item.label}
@@ -64,7 +64,7 @@ export function DashboardTopNav() {
               key={item.href}
               href={item.href}
               onClick={(event) => onTabClick(event, item.href)}
-              className="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
+              className="shrink-0 rounded-full px-3 py-2 text-base font-medium text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
             >
               {item.label}
             </Link>
@@ -75,14 +75,14 @@ export function DashboardTopNav() {
         <CreditsBalance />
         <ThemeToggle compact />
         {open ? (
-          <ThreeDButton type="button" variant="solid" size="sm" className="rounded-lg px-3 text-sm" onClick={closeSettings}>
+          <ThreeDButton type="button" variant="solid" size="sm" className="rounded-full px-3 text-base" onClick={closeSettings}>
             Settings
           </ThreeDButton>
         ) : (
           <button
             type="button"
             onClick={openSettings}
-            className="rounded-lg px-3 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
+            className="rounded-full px-3 py-2 text-base font-medium text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
           >
             Settings
           </button>

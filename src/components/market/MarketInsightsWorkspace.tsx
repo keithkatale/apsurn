@@ -14,7 +14,7 @@ import { SaveLeadModal } from "./SaveLeadModal";
 import type { MarketMentionWithKeyword } from "./types";
 import {
   DEFAULT_MARKET_PLATFORMS,
-  MARKET_PLATFORMS,
+  SCAN_MARKET_PLATFORMS,
   type MarketAccountRow,
   type MarketKeywordRow,
   type MarketPlatform,
@@ -497,7 +497,7 @@ export function MarketInsightsWorkspace({
                     <div className="fixed inset-0 z-10" onClick={() => setScanPlatformsOpen(false)} />
                     <div className="absolute right-0 top-9 z-20 flex w-56 flex-col gap-2 rounded-xl border border-neutral-200 bg-white p-3 shadow-lg">
                       <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">Platforms to scan</span>
-                      {MARKET_PLATFORMS.map((platform) => (
+                      {SCAN_MARKET_PLATFORMS.map((platform) => (
                         <button
                           key={platform}
                           type="button"
@@ -539,7 +539,7 @@ export function MarketInsightsWorkspace({
           <div className="flex flex-wrap items-center gap-1.5">
             <FilterDropdown
               label="Source"
-              options={MARKET_PLATFORMS.map((p) => ({ id: p, label: PLATFORM_LABEL[p] }))}
+              options={SCAN_MARKET_PLATFORMS.map((p) => ({ id: p, label: PLATFORM_LABEL[p] }))}
               selected={platformFilter}
               onToggle={(id) => toggleSetValue(platformFilter, id as MarketPlatform, setPlatformFilter)}
             />
@@ -604,7 +604,7 @@ export function MarketInsightsWorkspace({
                   onChange={(e) => setNewKeyword(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && addKeyword()}
                 />
-                {MARKET_PLATFORMS.map((platform) => (
+                {SCAN_MARKET_PLATFORMS.map((platform) => (
                   <label key={platform} className="flex items-center gap-1 text-[11px] text-neutral-500">
                     <input
                       type="checkbox"
@@ -646,7 +646,7 @@ export function MarketInsightsWorkspace({
             <div className="rounded-lg border border-dashed border-neutral-300 bg-white p-10 text-center">
               <p className="font-medium text-neutral-900">No mentions found yet</p>
               <p className="mt-1 text-sm text-neutral-500">
-                Click &ldquo;Scan now&rdquo; to search X/Twitter, Reddit, YouTube, and LinkedIn for your keywords.
+                Click &ldquo;Scan now&rdquo; to search X, Reddit, and LinkedIn for your keywords.
               </p>
             </div>
           ) : visibleMentions.length === 0 ? (

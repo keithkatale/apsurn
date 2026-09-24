@@ -134,6 +134,8 @@ export const CREDIT_COSTS = {
   market_scan: 15,
   copilot_turn: 2,
   prospect_company: 3,
+  /** One sourcing pass (registry, page, or social search) before any rows are saved. */
+  lead_source_scan: 8,
 } as const;
 
 export function isLiveBilling(): boolean {

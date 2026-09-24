@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
-import { DEFAULT_MARKET_PLATFORMS, MARKET_PLATFORMS, type MarketPlatform } from "@/lib/market/types";
+import { DEFAULT_MARKET_PLATFORMS, SCAN_MARKET_PLATFORMS, type MarketPlatform } from "@/lib/market/types";
 import { PLATFORM_LABEL } from "./PlatformBadge";
 
 export function KeywordOnboarding({ onAdded }: { onAdded: () => void }) {
@@ -57,8 +57,8 @@ export function KeywordOnboarding({ onAdded }: { onAdded: () => void }) {
       <div>
         <h1 className="text-lg font-semibold text-neutral-900">Track what people are saying</h1>
         <p className="text-sm text-neutral-500">
-          List a few keywords to track — your brand, product, or topics you care about. We&apos;ll keep scanning X/Twitter,
-          Reddit, YouTube, and LinkedIn for public mentions.
+          List a few keywords to track — your brand, product, or topics you care about. We&apos;ll keep scanning X,
+          Reddit, and LinkedIn for public mentions.
         </p>
       </div>
 
@@ -103,7 +103,7 @@ export function KeywordOnboarding({ onAdded }: { onAdded: () => void }) {
       <div className="flex flex-col gap-2">
         <span className="text-sm font-medium text-neutral-700">Platforms to listen on</span>
         <div className="flex flex-wrap gap-2">
-          {MARKET_PLATFORMS.map((platform) => (
+          {SCAN_MARKET_PLATFORMS.map((platform) => (
             <label
               key={platform}
               className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${

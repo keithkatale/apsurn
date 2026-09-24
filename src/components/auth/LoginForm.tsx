@@ -8,6 +8,7 @@ import { FloatingLabelFieldInput } from "@/components/inputs/floating-label-fiel
 import { SpinLoader } from "@/components/loaders/spin-loader";
 import { createClient } from "@/lib/supabase/client";
 import { setNavigationPending } from "@/lib/navigation-progress";
+import { trackGoal } from "@/lib/analytics/datafast";
 
 function safeNext(raw: string | null, fallback: string) {
   if (!raw) return fallback;
@@ -42,7 +43,7 @@ export function LoginForm({ mode = "signin" }: { mode?: "signin" | "signup" }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = useMemo(
-    () => safeNext(searchParams.get("next"), mode === "signup" ? "/setup" : "/dashboard"),
+    () => safeNext(searchParams.get("next"), mode === "signup" ? "/setup" : "/dashboard/copilot"),
     [searchParams, mode],
   );
   const [email, setEmail] = useState("");
@@ -68,11 +69,13 @@ export function LoginForm({ mode = "signin" }: { mode?: "signin" | "signup" }) {
         return;
       }
       if (result.data.session) {
+        trackGoal(mode === "signup" ? "signup" : "login", { method: "email" });
         setNavigationPending(true);
         router.replace(next);
         return;
       }
       setBusy(false);
+      if (mode === "signup") trackGoal("signup", { method: "email", status: "confirm_email" });
       setMessage("Check your email to confirm your account.");
     } catch (error) {
       setBusy(false);

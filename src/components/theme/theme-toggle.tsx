@@ -23,7 +23,7 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
         onClick={() => setTheme(next)}
         aria-label={`Theme: ${theme}. Switch to ${next}`}
         title={`Theme: ${theme}`}
-        className="inline-flex size-9 items-center justify-center rounded-lg text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
+        className="inline-flex size-9 items-center justify-center rounded-full text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
       >
         <Icon className="size-4" />
       </button>

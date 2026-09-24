@@ -12,7 +12,7 @@ export function Composer({ disabled, busy, onSend }: { disabled: boolean; busy: 
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
-    const lineHeight = 22;
+    const lineHeight = 24;
     const maxHeight = lineHeight * 4 + 8;
     el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
   }, [value]);
@@ -53,7 +53,7 @@ export function Composer({ disabled, busy, onSend }: { disabled: boolean; busy: 
             textareaRef.current?.focus();
           }}
         >
-          <div className="flex flex-col gap-1 p-1.5">
+          <div className="flex flex-col gap-1 p-2">
             <div className="flex items-end gap-1">
               <textarea
                 ref={textareaRef}
@@ -64,7 +64,7 @@ export function Composer({ disabled, busy, onSend }: { disabled: boolean; busy: 
                 onKeyDown={handleKeyDown}
                 placeholder="Ask Copilot about your prospects, contacts, or sequences…"
                 aria-label="Message input"
-                className="max-h-24 min-h-8 min-w-0 flex-1 resize-none bg-transparent px-2.5 py-1.5 text-[13px] leading-[22px] text-[var(--copilot-foreground)] outline-none placeholder:text-[var(--copilot-muted)] md:w-full"
+                className="copilot-prompt-input max-h-32 min-h-10 min-w-0 flex-1 resize-none bg-transparent px-3 py-2 text-[16px] leading-[24px] text-[var(--copilot-foreground)] outline-none placeholder:text-[var(--copilot-muted)] md:w-full"
               />
               <button
                 type="submit"

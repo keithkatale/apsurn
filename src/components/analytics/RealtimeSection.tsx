@@ -39,13 +39,13 @@ export function RealtimeSection({
       <ThreeDButton
         variant={autoRotate ? "solid" : "soft"}
         size="icon"
-        className="size-9 rounded-xl"
+        className="size-9 rounded-full"
         title={autoRotate ? "Pause rotation" : "Start rotation"}
         onClick={onToggleRotate}
       >
         <RotateCw className="size-4" />
       </ThreeDButton>
-      <ThreeDButton variant="soft" size="icon" className="size-9 rounded-xl" title="Refresh" onClick={onRefresh}>
+      <ThreeDButton variant="soft" size="icon" className="size-9 rounded-full" title="Refresh" onClick={onRefresh}>
         <RefreshCw className="size-4" />
       </ThreeDButton>
     </div>

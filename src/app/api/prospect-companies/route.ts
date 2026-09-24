@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
 import { archiveProspectCompanies, setProspectCompanyStatus } from "@/lib/prospecting/mutations";
+import { loadProspectCompanies } from "@/lib/prospects/load";
 
 const requestSchema = z.union([
   z.object({
@@ -31,16 +32,12 @@ export async function GET() {
   const { data: company } = await db.from("companies").select("id").eq("user_id", userId).maybeSingle();
   if (!company) return NextResponse.json({ companies: [] });
 
-  const { data: companies, error } = await db
-    .from("prospect_companies")
-    .select("*, contacts!contacts_prospect_company_id_fkey(*)")
-    .eq("company_id", company.id)
-    .is("archived_at", null)
-    .order("created_at", { ascending: false });
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  return NextResponse.json({ companies: companies ?? [] });
+  try {
+    const companies = await loadProspectCompanies(db, company.id);
+    return NextResponse.json({ companies });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load prospects" }, { status: 500 });
+  }
 }
 
 export async function PATCH(request: NextRequest) {

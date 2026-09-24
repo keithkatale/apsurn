@@ -22,7 +22,7 @@ export default function SetupPage() {
               <ArrowLeft className="size-4 transition-transform group-hover:-translate-x-0.5" />
               <span>Back to home</span>
             </Link>
-            <Link href="/dashboard" className="text-sm font-medium text-neutral-600 hover:text-neutral-900">
+            <Link href="/dashboard/copilot" className="text-sm font-medium text-neutral-600 hover:text-neutral-900">
               Go to dashboard
             </Link>
           </div>

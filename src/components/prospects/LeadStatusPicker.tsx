@@ -4,6 +4,15 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { LEAD_STATUSES, type LeadStatus } from "./types";
 
+const TONES: Record<LeadStatus, string> = {
+  new: "bg-neutral-100 text-neutral-600",
+  qualified: "bg-[#E8F1FC] text-[#4379EE]",
+  contacted: "bg-emerald-50 text-emerald-700",
+  replied: "bg-violet-50 text-violet-700",
+  won: "bg-green-50 text-green-700",
+  lost: "bg-rose-50 text-rose-700",
+};
+
 export function LeadStatusPicker({ contactId, value }: { contactId: string; value: LeadStatus }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -37,7 +46,7 @@ export function LeadStatusPicker({ contactId, value }: { contactId: string; valu
         type="button"
         disabled={saving}
         onClick={() => setOpen((o) => !o)}
-        className="rounded px-1 py-0.5 text-[12px] capitalize text-neutral-700 hover:bg-neutral-100 disabled:opacity-60"
+        className={`rounded-full px-3 py-1 text-[12px] font-medium capitalize disabled:opacity-60 ${TONES[current]}`}
       >
         {current}
       </button>
@@ -45,14 +54,14 @@ export function LeadStatusPicker({ contactId, value }: { contactId: string; valu
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 z-50 mt-0.5 flex min-w-[7.5rem] flex-col overflow-hidden rounded border border-neutral-200 bg-white shadow-sm">
+          <div className="absolute left-0 z-50 mt-1 flex min-w-[8.5rem] flex-col gap-1 rounded-2xl border border-neutral-200 bg-white p-1.5 shadow-md">
             {LEAD_STATUSES.map((status) => (
               <button
                 key={status}
                 type="button"
                 onClick={() => choose(status)}
-                className={`px-2 py-1 text-left text-[12px] capitalize hover:bg-neutral-50 ${
-                  status === current ? "bg-neutral-50 font-medium text-neutral-900" : "text-neutral-700"
+                className={`rounded-full px-3 py-1 text-left text-[12px] font-medium capitalize ${TONES[status]} ${
+                  status === current ? "ring-1 ring-neutral-300" : ""
                 }`}
               >
                 {status}

@@ -55,7 +55,7 @@ export function CreditsBalance({ className }: { className?: string }) {
     return (
       <span
         className={cn(
-          "hidden h-8 min-w-[4.5rem] animate-pulse rounded-lg bg-neutral-100 sm:inline-block",
+          "hidden h-8 min-w-[4.5rem] animate-pulse rounded-full bg-neutral-100 sm:inline-block",
           className,
         )}
         aria-hidden
@@ -71,7 +71,7 @@ export function CreditsBalance({ className }: { className?: string }) {
       onClick={openSettings}
       title={active ? "Credits remaining — open Settings for top-ups" : "Start a plan to get credits"}
       className={cn(
-        "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-semibold tabular-nums transition-colors",
+        "inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-semibold tabular-nums transition-colors",
         low
           ? "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
           : "border-neutral-200 bg-neutral-50 text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900",

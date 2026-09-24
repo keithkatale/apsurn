@@ -2,6 +2,8 @@ import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUserId } from "@/lib/auth/session";
 import { ProspectsWorkspace } from "@/components/prospects/ProspectsWorkspace";
+import type { ProspectRow } from "@/components/prospects/types";
+import { loadProspectCompanies } from "@/lib/prospects/load";
 
 export default async function ProspectsPage({
   searchParams,
@@ -28,7 +30,7 @@ export default async function ProspectsPage({
         <div className="mt-4 flex justify-center">
           <Link
             href="/setup"
-            className="inline-flex items-center rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+            className="inline-flex items-center rounded-full bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
           >
             Go to Setup
           </Link>
@@ -37,16 +39,14 @@ export default async function ProspectsPage({
     );
   }
 
-  const { data: companies, error } = await supabase
-    .from("prospect_companies")
-    .select("*, contacts!contacts_prospect_company_id_fkey(*)")
-    .eq("company_id", company.id)
-    .is("archived_at", null)
-    .order("created_at", { ascending: false });
+  let companies: Awaited<ReturnType<typeof loadProspectCompanies>> = [];
+  try {
+    companies = await loadProspectCompanies(supabase, company.id);
+  } catch (error) {
+    console.error("[prospects] failed to load companies:", error);
+  }
 
-  if (error) console.error("[prospects] failed to load companies:", error);
-
-  return <ProspectsWorkspace initialCompanies={companies ?? []} openFind={params.find === "1"} />;
+  return <ProspectsWorkspace initialCompanies={companies as unknown as ProspectRow[]} openFind={params.find === "1"} />;
 }
 
 export const dynamic = "force-dynamic";

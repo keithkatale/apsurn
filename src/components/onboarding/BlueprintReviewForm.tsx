@@ -79,7 +79,7 @@ export function BlueprintReviewForm({
       if (!res.ok) throw new Error((await res.json()).error ?? "Save failed");
       if (approve) {
         setApproved(true);
-        router.push("/dashboard");
+        router.push("/dashboard/copilot");
       }
     } finally {
       setSaving(false);

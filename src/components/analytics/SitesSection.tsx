@@ -59,7 +59,7 @@ export function AddSiteForm({ onCreated }: { onCreated: (site: AnalyticsSite, tr
         </div>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <ThreeDButton type="submit" variant="solid" disabled={loading} className="self-start rounded-xl">
+      <ThreeDButton type="submit" variant="solid" disabled={loading} className="self-start rounded-full">
         {loading ? "Adding site…" : "Add site"}
       </ThreeDButton>
     </form>
@@ -109,7 +109,7 @@ export function SitesSection({
                   </p>
                 </div>
               </div>
-              <ThreeDButton variant="soft" size="sm" className="rounded-xl" onClick={() => copyCode(site)}>
+              <ThreeDButton variant="soft" size="sm" className="rounded-full" onClick={() => copyCode(site)}>
                 {copiedId === site.id ? <Check className="size-4" /> : <Copy className="size-4" />}
                 {copiedId === site.id ? "Copied" : "Copy code"}
               </ThreeDButton>

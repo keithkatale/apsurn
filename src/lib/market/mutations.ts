@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveAvatarUrl } from "./avatars";
-import { scanAccountOnPlatform, scanKeywordAllPlatforms, scanKeywordOnPlatform, type DiscoveredMention, type ScanDepth } from "./search";
-import type { MarketAccountRow, MarketKeywordRow, MarketPlatform } from "./types";
+import { scanAccountOnPlatform, scanKeywordAllPlatforms, scanKeywordOnPlatform, type DiscoveredMention } from "./search";
+import type { MarketAccountRow, MarketKeywordRow, MarketPlatform, ScanDepth } from "./types";
 
 const PLATFORM_LABEL: Record<MarketPlatform, string> = {
   twitter: "X/Twitter",
@@ -214,9 +214,14 @@ export async function runMarketScanWithProgress(
   const platformSet = platforms && platforms.length > 0 ? new Set(platforms) : null;
 
   const activeKeywords = ((keywords ?? []) as MarketKeywordRow[])
-    .map((k) => ({ ...k, platforms: platformSet ? k.platforms.filter((p) => platformSet.has(p)) : k.platforms }))
+    .map((k) => ({
+      ...k,
+      platforms: (platformSet ? k.platforms.filter((p) => platformSet.has(p)) : k.platforms).filter((p) => p !== "youtube"),
+    }))
     .filter((k) => k.platforms.length > 0);
-  const followedAccounts = ((accounts ?? []) as MarketAccountRow[]).filter((a) => !platformSet || platformSet.has(a.platform));
+  const followedAccounts = ((accounts ?? []) as MarketAccountRow[]).filter(
+    (a) => a.platform !== "youtube" && (!platformSet || platformSet.has(a.platform))
+  );
 
   if (activeKeywords.length === 0 && followedAccounts.length === 0) {
     onProgress({ label: "No keywords or followed accounts to scan for the selected platforms.", progress: 100 });
@@ -316,9 +321,14 @@ export async function runDeepMarketScan(db: SupabaseClient, companyId: string, p
 
   const platformSet = platforms && platforms.length > 0 ? new Set(platforms) : null;
   const activeKeywords = ((keywords ?? []) as MarketKeywordRow[])
-    .map((k) => ({ ...k, platforms: platformSet ? k.platforms.filter((p) => platformSet.has(p)) : k.platforms }))
+    .map((k) => ({
+      ...k,
+      platforms: (platformSet ? k.platforms.filter((p) => platformSet.has(p)) : k.platforms).filter((p) => p !== "youtube"),
+    }))
     .filter((k) => k.platforms.length > 0);
-  const followedAccounts = ((accounts ?? []) as MarketAccountRow[]).filter((a) => !platformSet || platformSet.has(a.platform));
+  const followedAccounts = ((accounts ?? []) as MarketAccountRow[]).filter(
+    (a) => a.platform !== "youtube" && (!platformSet || platformSet.has(a.platform))
+  );
 
   const tasks: (() => Promise<number>)[] = [];
   for (const keyword of activeKeywords) {

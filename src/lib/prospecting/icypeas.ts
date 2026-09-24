@@ -306,6 +306,8 @@ export interface FoundCompany {
   location: string | null;
   size: number | null;
   industry: string | null;
+  /** The person this company was discovered through. Step 2 should use this instead of looking the domain up again. */
+  person: FoundPerson | null;
 }
 
 /**
@@ -316,12 +318,14 @@ export interface FoundCompany {
  * because Icypeas' index happens to have no title-matched employee for it.
  *
  * Under the hood this still queries find-people (the only company-level
- * search Icypeas exposes), then keeps only the company fields off each row
- * and discards the person — whoever they are is incidental, not a match.
+ * search Icypeas exposes). The person on each row is kept: looking that
+ * domain up again fails when the website is a link-in-bio or site builder.
  */
 export async function findCompaniesByIcp(opts: {
   industries: string[];
   geographies: string[];
+  /** When set, only people whose current title matches are returned — and the person is kept on each company. */
+  titles?: string[];
   minHeadcount?: number;
   maxHeadcount?: number;
   /** People per page (1–200). Distinct companies on a page will be fewer. */
@@ -335,6 +339,8 @@ export async function findCompaniesByIcp(opts: {
   const query: Record<string, unknown> = {};
   if (opts.industries.length > 0) query["currentCompany.industry"] = { include: opts.industries.slice(0, 200) };
   if (opts.geographies.length > 0) query["currentCompany.location"] = { include: opts.geographies.slice(0, 200) };
+  const cleanTitles = (opts.titles ?? []).map((title) => title.trim().slice(0, 80)).filter(Boolean).slice(0, 12);
+  if (cleanTitles.length > 0) query.currentJobTitle = { include: cleanTitles };
   if (opts.minHeadcount !== undefined || opts.maxHeadcount !== undefined) {
     const headcount: Record<string, number> = {};
     if (opts.minHeadcount !== undefined) headcount[">="] = Math.max(0, Math.floor(opts.minHeadcount));
@@ -362,12 +368,27 @@ export async function findCompaniesByIcp(opts: {
     const dedupeKey = (website || name).toLowerCase();
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
+    const firstName = (lead.firstname ?? "").trim();
+    const lastName = (lead.lastname ?? "").trim();
+    const fullName = [firstName, lastName].filter(Boolean).join(" ");
     companies.push({
       name,
       website,
       location: lead.lastCompanyAddress?.trim() || null,
       size: typeof lead.lastCompanySize === "number" ? lead.lastCompanySize : null,
       industry: lead.lastCompanyIndustry?.trim() || null,
+      person: fullName
+        ? {
+            fullName,
+            firstName,
+            lastName,
+            title: lead.lastJobTitle?.trim() || null,
+            companyName: name,
+            location: lead.address?.trim() || null,
+            profileUrl: lead.profileUrl?.trim() || null,
+            headline: lead.headline?.trim() || null,
+          }
+        : null,
     });
   }
 
@@ -461,7 +482,24 @@ async function attempt<T>(path: string, body: unknown, apiKey: string): Promise<
     }
     const json = (await response.json()) as T & { success?: boolean; error?: string };
     if (json && typeof json === "object" && json.success === false) {
-      return { ok: false, value: null, status: response.status, reason: json.error ?? "success:false with no error detail" };
+      const validationErrors = (json as { validationErrors?: unknown }).validationErrors;
+      const validation = Array.isArray(validationErrors)
+        ? validationErrors
+            .map((entry) => {
+              if (!entry || typeof entry !== "object") return "";
+              const field = "field" in entry && typeof entry.field === "string" ? entry.field : "";
+              const message = "message" in entry && typeof entry.message === "string" ? entry.message : "";
+              return [field, message].filter(Boolean).join(": ");
+            })
+            .filter(Boolean)
+            .join("; ")
+        : "";
+      return {
+        ok: false,
+        value: null,
+        status: response.status,
+        reason: [json.error, validation].filter(Boolean).join(" — ") || "success:false with no error detail",
+      };
     }
     return { ok: true, value: json as T, status: response.status, reason: "" };
   } catch (error) {

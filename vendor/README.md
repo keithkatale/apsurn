@@ -1,12 +1,12 @@
-# Vendor reference trees (GPL-3.0)
+# Vendor reference trees
 
 This directory holds **reference-only** clones of:
 
-| Path | Upstream | Role |
-|------|----------|------|
-| `OpenOutreach/` | [OpenOutreach](https://github.com/OpenOutreach/OpenOutreach) | Product shell / wizard concepts |
-| `OpenOutFind/` | OpenOutFind | Qualify-with-reason patterns (Lead Finder was BetterContact — **not used in apsurn**) |
-| `OpenOutSend/` | OpenOutSend | Draft / delivery guards / send-pass |
+| Path | Upstream | License | Role |
+|------|----------|---------|------|
+| `OpenOutreach/` | [OpenOutreach](https://github.com/OpenOutreach/OpenOutreach) | GPL-3.0 | Product shell / wizard concepts |
+| `OpenOutFind/` | OpenOutFind | GPL-3.0 | Qualify-with-reason patterns (Lead Finder was BetterContact — **not used in apsurn**) |
+| `OpenOutSend/` | OpenOutSend | GPL-3.0 | Draft / delivery guards / send-pass |
 
 All three are licensed under **GPL-3.0**.
 

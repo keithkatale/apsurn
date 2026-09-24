@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
+import { trackGoal } from "@/lib/analytics/datafast";
 import { PLANS, TRIAL_DAYS, type PlanKey } from "@/lib/billing/plans";
 import { useState } from "react";
 
@@ -30,6 +31,7 @@ export function PricingSection() {
     setError(null);
     try {
       // Pricing lives on the marketing site — send visitors through signup first.
+      trackGoal("start_trial", { plan });
       window.location.href = `/signup?next=${encodeURIComponent(`/dashboard/campaigns?trial=${plan}`)}`;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start trial");

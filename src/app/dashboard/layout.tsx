@@ -6,7 +6,7 @@ import { SettingsPanelProvider } from "@/components/dashboard/settings-panel-con
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden bg-neutral-50">
+    <div data-dashboard className="relative flex h-screen flex-col overflow-hidden bg-neutral-50">
       <SettingsPanelProvider>
         <DashboardTopNav />
         <div className="relative flex min-h-0 flex-1 flex-col">

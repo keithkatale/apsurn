@@ -4,6 +4,7 @@ import { useState } from "react";
 import { DodoPayments } from "dodopayments-checkout";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { TOPUPS, type TopupKey } from "@/lib/billing/plans";
+import { trackGoal } from "@/lib/analytics/datafast";
 import { ensureDodoCheckout } from "@/lib/billing/dodo-checkout-client";
 
 /** In-app credit top-ups (not shown on the public pricing page). */
@@ -23,6 +24,7 @@ export function CreditTopupPanel({ className }: { className?: string }) {
       });
       const data = (await res.json().catch(() => null)) as { checkoutUrl?: string; error?: string } | null;
       if (!res.ok || !data?.checkoutUrl) throw new Error(data?.error || "Checkout failed");
+      trackGoal("initiate_checkout", { topup });
       await DodoPayments.Checkout.open({ checkoutUrl: data.checkoutUrl });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Top-up failed");

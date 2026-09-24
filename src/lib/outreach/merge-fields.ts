@@ -3,6 +3,15 @@
 export const MERGE_FIELD_KEYS = ["first_name", "full_name", "title", "email", "company", "domain"] as const;
 export type MergeFieldKey = (typeof MERGE_FIELD_KEYS)[number];
 
+export const MERGE_FIELD_LABELS: Record<MergeFieldKey, string> = {
+  first_name: "First name",
+  full_name: "Full name",
+  title: "Title",
+  email: "Email",
+  company: "Company",
+  domain: "Domain",
+};
+
 export type LeadMergeSource = {
   fullName?: string | null;
   title?: string | null;

@@ -34,7 +34,7 @@ import {
 } from "../icypeas";
 import { matchIcypeasIndustries } from "../icypeas-industries";
 import { normalizeDomain, resolveEmail } from "./shared";
-import { persistLead } from "./persist";
+import { persistLead, type SaveLeadResult } from "./persist";
 import type { CandidateCompany, CandidateContact, ContactStatus, ExtractedPerson, ProspectCriteria, RunStatus } from "../types";
 import type { AgentRunContext } from "./context";
 
@@ -282,13 +282,16 @@ export async function runDirectoryAgent(opts: {
   // never re-fetching companies already seen this run.
   let paginationToken: string | null = null;
   let sourceExhausted = false;
+  let activeTitles = titles;
+  let relaxedTitles = false;
   let totalSeen = 0;
   let totalSkippedKnown = 0;
   const triedThisRun = new Set<string>();
 
-  let saveChain: Promise<unknown> = Promise.resolve();
+  let saveChain: Promise<SaveLeadResult> = Promise.resolve({ saved: false, contactCount: 0 });
   let stopReason = "target reached";
   let cancelled = false;
+  let outOfCredits = false;
 
   while (ctx.counters.companiesSaved < targetCount) {
     const stopped = await checkStopped();
@@ -298,6 +301,16 @@ export async function runDirectoryAgent(opts: {
       break;
     }
     if (sourceExhausted) {
+      // A title filter that matches nobody should not end the run at zero.
+      // Drop it once and search the same industries again.
+      if (!relaxedTitles && titles.length > 0 && ctx.counters.companiesSaved < targetCount) {
+        relaxedTitles = true;
+        activeTitles = [];
+        paginationToken = null;
+        sourceExhausted = false;
+        triedThisRun.clear();
+        continue;
+      }
       stopReason = totalSeen > 0 ? "no more companies matched" : "no companies matched the ICP";
       break;
     }
@@ -315,6 +328,7 @@ export async function runDirectoryAgent(opts: {
         const { companies: pageCompanies, nextToken } = await findCompaniesByIcp({
           industries,
           geographies,
+          titles: activeTitles,
           minHeadcount,
           maxHeadcount,
           pageSize: 200,
@@ -390,13 +404,22 @@ export async function runDirectoryAgent(opts: {
         }
         if (ctx.savedDomains.has(domain)) return;
 
-        const peopleArgs = { domain, titles };
+        const peopleArgs = { domain, titles: activeTitles };
         emit({ type: "tool_start", name: "find_people", args: peopleArgs });
-        let people: FoundPerson[] | null;
-        try {
-          people = await findPeopleAtCompany(domain, titles, 3);
-        } catch {
-          people = null;
+        let people: FoundPerson[] | null = company.person ? [company.person] : null;
+        if (!people) {
+          try {
+            people = await findPeopleAtCompany(domain, activeTitles, 3);
+          } catch {
+            people = null;
+          }
+          if (!people && activeTitles.length > 0) {
+            try {
+              people = await findPeopleAtCompany(domain, [], 3);
+            } catch {
+              people = null;
+            }
+          }
         }
         if (!people || people.length === 0) {
           emit({
@@ -431,16 +454,31 @@ export async function runDirectoryAgent(opts: {
         // The saveChain serializes these, so this re-check runs at the actual
         // moment each save reaches the front of the queue — the last point
         // where "already at target" can still be caught before writing.
-        const result = await (saveChain = saveChain.then(() =>
+        const result: SaveLeadResult = await (saveChain = saveChain.then(() =>
           ctx.counters.companiesSaved >= targetCount
             ? { saved: false, contactCount: 0, reason: "target already reached" }
-            : persistLead(ctx, candidateCompany, [candidateContact])
+            : persistLead(ctx, candidateCompany, [candidateContact]),
         ));
         emit({ type: "tool_end", name: "save_lead", result });
+        if (result.saved) {
+          await db
+            .from("prospecting_runs")
+            .update({
+              processed_count: ctx.counters.companiesSaved,
+              contact_count: ctx.counters.contactsSaved,
+              stage: "enriching",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", runId);
+        }
+        if (result.reason === "credits_exhausted") {
+          stopReason = "not enough credits to save more leads";
+          outOfCredits = true;
+        }
       }
     );
 
-    if (cancelled) break;
+    if (cancelled || outOfCredits) break;
   }
 
   if (ctx.counters.companiesSaved === 0 && !cancelled && stopReason === "target reached") {

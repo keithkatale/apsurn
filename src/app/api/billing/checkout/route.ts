@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
@@ -54,6 +55,9 @@ export async function POST(request: Request) {
       process.env.DODO_PAYMENTS_RETURN_URL?.trim() ||
       `${appOrigin()}/dashboard/campaigns?billing=success`;
 
+    const cookieStore = await cookies();
+    const datafastVisitorId = cookieStore.get("datafast_visitor_id")?.value;
+
     const session = await client.checkoutSessions.create({
       product_cart: [{ product_id: productId, quantity: 1 }],
       brand_id: dodoBrandId(),
@@ -72,6 +76,7 @@ export async function POST(request: Request) {
       metadata: {
         user_id: userId,
         plan_key: planKey,
+        ...(datafastVisitorId ? { datafast_visitor_id: datafastVisitorId } : {}),
       },
     } as Parameters<typeof client.checkoutSessions.create>[0]);
 

@@ -8,8 +8,8 @@ import {
 } from "@/lib/auth/google-signin";
 
 export async function GET(request: NextRequest) {
-  const nextRaw = request.nextUrl.searchParams.get("next") || "/dashboard";
-  const next = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard";
+  const nextRaw = request.nextUrl.searchParams.get("next") || "/dashboard/copilot";
+  const next = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard/copilot";
   const origin = publicAppOrigin(request);
 
   try {

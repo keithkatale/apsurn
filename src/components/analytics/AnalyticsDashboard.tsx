@@ -215,7 +215,7 @@ export function AnalyticsDashboard() {
               <pre className="mt-3 overflow-auto rounded-xl bg-neutral-950 p-3 text-xs text-neutral-100">
                 {trackingSnippet(typeof window === "undefined" ? "" : window.location.origin, selectedSite.site_id)}
               </pre>
-              <ThreeDButton variant="solid" className="mt-3 rounded-xl" onClick={copySnippet}>
+              <ThreeDButton variant="solid" className="mt-3 rounded-full" onClick={copySnippet}>
                 {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
                 {copied ? "Copied" : "Copy code"}
               </ThreeDButton>

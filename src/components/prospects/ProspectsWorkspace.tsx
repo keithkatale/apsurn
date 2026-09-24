@@ -11,7 +11,7 @@ import { ProspectChatPanel } from "@/components/prospects/ProspectChatPanel";
 import type { ProspectSearchCriteria } from "@/components/prospects/ProspectComposeModal";
 import { ProspectPlanPanel } from "@/components/prospects/ProspectPlanPanel";
 import { WeeklyScheduleForm } from "@/components/prospects/WeeklyScheduleForm";
-import { LEAD_STATUSES, type LeadStatus, type ProspectRow } from "@/components/prospects/types";
+import { matchesOutreachTab, OUTREACH_OPTIONS, type OutreachState, type ProspectRow } from "@/components/prospects/types";
 
 type LeftPanelMode = "idle" | "form" | "structured-run" | "chat";
 
@@ -29,7 +29,8 @@ export function ProspectsWorkspace({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [profileIds, setProfileIds] = useState<{ contactId: string; companyId: string } | null>(null);
   const [search, setSearch] = useState("");
-  const [stageFilter, setStageFilter] = useState<LeadStatus | "all">("all");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [tableTab, setTableTab] = useState<string>("all");
 
   const refetch = useCallback(async () => {
     try {
@@ -59,15 +60,33 @@ export function ProspectsWorkspace({
   // change, or by anything else that still writes that default) is treated
   // exactly like "qualified". Only an explicit past "rejected" stays hidden,
   // since that was a deliberate action, not a pending one.
+  const lists = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const company of active) {
+      if (company.list_id && !seen.has(company.list_id)) seen.set(company.list_id, company.list_name || "List");
+    }
+    return [...seen.entries()].map(([id, label]) => ({ id: `list:${id}`, label }));
+  }, [active]);
+
+  const tableTabs = useMemo(
+    () => [{ id: "all", label: "All leads" }, ...OUTREACH_OPTIONS.map((option) => ({ id: option.id, label: option.label })), ...lists],
+    [lists],
+  );
+
   const qualified = useMemo(() => {
+    const listId = tableTab.startsWith("list:") ? tableTab.slice(5) : null;
+    const outreachTab = OUTREACH_OPTIONS.some((option) => option.id === tableTab) ? (tableTab as OutreachState) : null;
     return active
-      .filter((p) => p.status !== "rejected" && matchesQuery(p))
+      .filter((p) => p.status !== "rejected" && matchesQuery(p) && (!listId || p.list_id === listId))
       .map((p) => ({
         ...p,
-        contacts: stageFilter === "all" ? p.contacts : p.contacts.filter((c) => c.lead_status === stageFilter),
+        contacts: p.contacts.filter((c) => {
+          if (outreachTab && !matchesOutreachTab(c, outreachTab)) return false;
+          return true;
+        }),
       }))
       .filter((p) => p.contacts.length > 0);
-  }, [active, matchesQuery, stageFilter]);
+  }, [active, matchesQuery, tableTab]);
 
   const allContacts = useMemo(() => qualified.flatMap((p) => p.contacts), [qualified]);
 
@@ -124,34 +143,71 @@ export function ProspectsWorkspace({
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="flex flex-col gap-3 px-1 py-1">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="shrink-0 text-lg font-semibold text-neutral-900">Prospects</h1>
-            {active.length > 0 && (
-              <>
-                <div className="relative min-w-[200px] flex-1 max-w-sm">
-                  <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-neutral-400" />
-                  <input
-                    className="input w-full py-1.5"
-                    style={{ paddingLeft: "2rem" }}
-                    placeholder="Search by name or company…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
-                </div>
-                <select
-                  className="input w-auto py-1.5"
-                  value={stageFilter}
-                  onChange={(e) => setStageFilter(e.target.value as LeadStatus | "all")}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
+              <p className="text-sm text-neutral-500">
+                apsurn <span className="px-1 text-neutral-300">/</span>
+                <span className="font-semibold text-neutral-900">Prospects</span>
+              </p>
+              {searchOpen ? (
+                <input
+                  autoFocus
+                  className="input w-44 py-1.5"
+                  placeholder="Search…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onBlur={() => {
+                    if (!search.trim()) setSearchOpen(false);
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  aria-label="Search prospects"
+                  onClick={() => setSearchOpen(true)}
+                  className="rounded-full p-2 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
                 >
-                  <option value="all">All stages</option>
-                  {LEAD_STATUSES.map((status) => (
-                    <option key={status} value={status} className="capitalize">
-                      {status}
-                    </option>
-                  ))}
-                </select>
-              </>
-            )}
+                  <Search className="size-4" />
+                </button>
+              )}
+            </div>
+            {active.length > 0 ? (
+              <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
+                {tableTabs.map((tab) => {
+                  const activeTab = tableTab === tab.id;
+                  const tone =
+                    tab.id === "in_campaign"
+                      ? activeTab
+                        ? "bg-[#E8F1FC] text-[#4379EE]"
+                        : "text-[#4379EE] hover:bg-[#E8F1FC]"
+                      : tab.id === "contacted"
+                        ? activeTab
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "text-emerald-700 hover:bg-emerald-50"
+                        : tab.id === "not_contacted"
+                          ? activeTab
+                            ? "bg-amber-50 text-amber-800"
+                            : "text-amber-800 hover:bg-amber-50"
+                          : tab.id === "not_in_campaign"
+                            ? activeTab
+                              ? "bg-neutral-200 text-neutral-800"
+                              : "text-neutral-600 hover:bg-neutral-100"
+                            : activeTab
+                              ? "bg-neutral-900 text-white"
+                              : "text-neutral-600 hover:bg-neutral-100";
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setTableTab(tab.id)}
+                      className={`shrink-0 rounded-full px-3 py-1 text-[12px] font-medium ${tone}`}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
             <div className="ml-auto flex items-center gap-2">
               {selected.size > 0 ? (
                 <BulkActionBar
@@ -187,14 +243,12 @@ export function ProspectsWorkspace({
                 </div>
               ) : null}
 
-              {qualified.length > 0 && (
-                <ContactsTable
-                  prospects={qualified}
-                  selected={selected}
-                  onSelectedChange={setSelected}
-                  onOpenProfile={(row) => setProfileIds({ contactId: row.contact.id, companyId: row.company.id })}
-                />
-              )}
+              <ContactsTable
+                prospects={qualified}
+                selected={selected}
+                onSelectedChange={setSelected}
+                onOpenProfile={(row) => setProfileIds({ contactId: row.contact.id, companyId: row.company.id })}
+              />
             </div>
           )}
         </div>

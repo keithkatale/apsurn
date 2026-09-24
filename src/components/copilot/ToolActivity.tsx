@@ -1,34 +1,42 @@
 import { Check, Loader2 } from "lucide-react";
+import { AGENT_DISPLAY_NAME, toolAgent, toolLabel } from "@/lib/agents/labels";
+import type { SpecialistId } from "@/lib/agents/types";
 
-const COPILOT_TOOL_LABELS: Record<string, string> = {
-  get_account_snapshot: "Checking your account",
-  list_prospect_companies: "Looking up companies",
-  list_contacts: "Looking up contacts",
-  get_sequence_overview: "Checking sequences",
-  get_analytics_summary: "Checking analytics",
-  update_contact_status: "Updating contact status",
-  archive_contacts: "Archiving contacts",
-  archive_prospect_companies: "Archiving companies",
-  create_sequence: "Creating sequence",
-  enroll_contacts: "Enrolling contacts",
-};
+function displayAgent(name: string, agent?: string): string | null {
+  const id = (agent || toolAgent(name)) as SpecialistId | undefined;
+  if (!id) return null;
+  return AGENT_DISPLAY_NAME[id] ?? id;
+}
 
 export function ToolActivity({
   name,
   status,
-  labels = COPILOT_TOOL_LABELS,
+  agent,
+  selected = false,
+  onSelect,
 }: {
   name: string;
   status: "running" | "done";
-  labels?: Record<string, string>;
+  agent?: string;
+  selected?: boolean;
+  onSelect?: () => void;
 }) {
-  const label = labels[name] ?? name;
+  const label = toolLabel(name);
+  const specialist = displayAgent(name, agent);
   const running = status === "running";
+  const title = specialist ? `${specialist} · ${label}` : label;
 
   return (
-    <div
-      className={`copilot-tool-chip inline-flex w-fit max-w-full items-center gap-1.5 border border-[var(--copilot-card-border)] px-2 py-1 ${
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={`copilot-tool-chip inline-flex w-fit max-w-full items-center gap-1.5 border px-2 py-1 text-left transition-colors ${
         running ? "copilot-tool-shimmer" : ""
+      } ${
+        selected
+          ? "border-[var(--copilot-accent)] bg-[color-mix(in_srgb,var(--copilot-accent)_12%,transparent)]"
+          : "border-[var(--copilot-card-border)] hover:border-[var(--copilot-accent)] hover:bg-[var(--copilot-dropdown-hover)]"
       }`}
     >
       <span className="inline-flex size-3.5 shrink-0 items-center justify-center">
@@ -38,10 +46,10 @@ export function ToolActivity({
           <Check className="size-3 text-emerald-600" />
         )}
       </span>
-      <p className="text-[11px] font-medium leading-tight text-[var(--copilot-foreground)]">
-        {label}
+      <p className="text-[13px] font-medium leading-tight text-[var(--copilot-foreground)]">
+        {title}
         {running ? "…" : ""}
       </p>
-    </div>
+    </button>
   );
 }

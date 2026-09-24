@@ -1,13 +1,18 @@
 /**
  * Ordered by priority, and this order is what the UI renders. LinkedIn first,
- * then Reddit and X; YouTube is supporting material rather than a primary
- * source for buying signals.
+ * then Reddit and X. YouTube remains in the union for existing mention rows
+ * but is no longer scanned.
  */
 export const MARKET_PLATFORMS = ["linkedin", "reddit", "twitter", "youtube"] as const;
 export type MarketPlatform = (typeof MARKET_PLATFORMS)[number];
 
-/** Pre-selected platforms for a new keyword or a scan. YouTube is opt-in: it is supporting material, not a priority source. */
-export const DEFAULT_MARKET_PLATFORMS: MarketPlatform[] = ["linkedin", "reddit", "twitter"];
+/** Platforms Market Insights actually pulls. YouTube is kept in the type for stored rows only. */
+export const SCAN_MARKET_PLATFORMS: MarketPlatform[] = ["linkedin", "reddit", "twitter"];
+
+/** Pre-selected platforms for a new keyword or a scan. */
+export const DEFAULT_MARKET_PLATFORMS: MarketPlatform[] = [...SCAN_MARKET_PLATFORMS];
+
+export type ScanDepth = "broad" | "deep";
 
 export const MARKET_SENTIMENTS = ["positive", "neutral", "negative"] as const;
 export type MarketSentiment = (typeof MARKET_SENTIMENTS)[number];
@@ -42,6 +47,20 @@ export interface MarketEngagement {
 export interface MarketComment {
   author: string | null;
   content: string;
+}
+
+export interface DiscoveredMention {
+  platform: MarketPlatform;
+  url: string;
+  authorName: string | null;
+  authorHandle: string | null;
+  authorAvatarUrl: string | null;
+  mediaUrl: string | null;
+  content: string;
+  postedAt: string | null;
+  engagement: MarketEngagement;
+  comments: MarketComment[];
+  sentiment: MarketSentiment | null;
 }
 
 export interface MarketMentionRow {

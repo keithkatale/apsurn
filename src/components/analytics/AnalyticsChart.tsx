@@ -67,7 +67,7 @@ export function AnalyticsChart({
           target="_blank"
           rel="noopener noreferrer"
           variant="soft"
-          className="shrink-0 rounded-xl"
+          className="shrink-0 rounded-full"
         >
           <Activity className="size-4" />
           Realtime view

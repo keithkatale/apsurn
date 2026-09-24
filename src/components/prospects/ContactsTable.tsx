@@ -4,7 +4,8 @@ import { useMemo } from "react";
 import { CompanyFavicon } from "./CompanyFavicon";
 import { ContactAvatar } from "./ContactAvatar";
 import { LeadStatusPicker } from "./LeadStatusPicker";
-import type { ContactRow, ProspectRow } from "./types";
+import { OutreachPicker } from "./OutreachPicker";
+import { OUTREACH_OPTIONS, type ContactRow, type OutreachState, type ProspectRow } from "./types";
 
 export type FlatRow = {
   contact: ContactRow;
@@ -51,8 +52,6 @@ export function ContactsTable({
     onSelectedChange(new Set(rows.map((r) => r.contact.id)));
   }
 
-  if (rows.length === 0) return null;
-
   return (
     <div className="flex flex-col gap-2 overflow-hidden rounded-xl border border-neutral-200 bg-white">
       <div className="overflow-x-auto">
@@ -79,11 +78,19 @@ export function ContactsTable({
               <th className="px-3 py-2.5 font-medium">Email</th>
               <th className="px-3 py-2.5 font-medium">Phone</th>
               <th className="px-3 py-2.5 font-medium">Stage</th>
+              <th className="px-3 py-2.5 font-medium">Outreach</th>
               <th className="px-3 py-2.5 font-medium">Why</th>
               <th className="px-3 py-2.5 font-medium">Fit</th>
             </tr>
           </thead>
           <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={readOnly ? 9 : 10} className="px-3 py-8 text-center text-sm text-neutral-500">
+                  No leads in this table.
+                </td>
+              </tr>
+            ) : null}
             {rows.map(({ contact, company }, index) => {
               const isSelected = selected.has(contact.id);
               return (
@@ -158,6 +165,15 @@ export function ContactsTable({
                       <span className="text-[12px] capitalize text-neutral-700">{contact.lead_status}</span>
                     ) : (
                       <LeadStatusPicker contactId={contact.id} value={contact.lead_status} />
+                    )}
+                  </td>
+                  <td className="px-3 py-3 align-middle">
+                    {readOnly ? (
+                      <span className="text-[12px] text-neutral-700">
+                        {OUTREACH_OPTIONS.find((option) => option.id === (contact.outreach ?? "not_contacted"))?.label}
+                      </span>
+                    ) : (
+                      <OutreachPicker contactId={contact.id} value={(contact.outreach ?? "not_contacted") as OutreachState} />
                     )}
                   </td>
                   <td

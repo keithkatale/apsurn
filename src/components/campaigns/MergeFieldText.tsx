@@ -5,6 +5,7 @@ import { cn } from "@/lib/cn";
 import {
   isMergeFieldKey,
   leadMergeVars,
+  MERGE_FIELD_LABELS,
   parseMergeSegments,
   type LeadMergeSource,
   type MergeFieldKey,
@@ -71,6 +72,24 @@ function FieldChip({
     >
       {label}
     </button>
+  );
+}
+
+/** Preview chips that show the field name (First name, Company), not a lead’s value and not {{raw}}. */
+export function MergeFieldPreview({ value, className }: { value: string; className?: string }) {
+  const segments = parseMergeSegments(value);
+  if (!value.trim()) return null;
+  return (
+    <span className={cn("inline leading-relaxed", className)}>
+      {segments.map((segment, index) => {
+        if (segment.type === "text") return <span key={`t-${index}`}>{segment.value}</span>;
+        return (
+          <span key={`${segment.key}-${index}`} className="merge-field-chip merge-field-chip--filled mx-0.5 inline-flex max-w-[12rem] items-center truncate rounded-md px-2 py-0.5 text-[12px] font-medium align-baseline">
+            {MERGE_FIELD_LABELS[segment.key]}
+          </span>
+        );
+      })}
+    </span>
   );
 }
 

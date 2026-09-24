@@ -5,6 +5,8 @@
  * per-list prospect_companies/contacts.
  */
 
+import { spendCredits } from "@/lib/billing/credits";
+import { CREDIT_COSTS } from "@/lib/billing/plans";
 import { isSuppressed, saveCanonicalCompany, saveCanonicalContact } from "../pipeline";
 import type { CandidateCompany, CandidateContact } from "../types";
 import type { AgentRunContext } from "./context";
@@ -14,6 +16,8 @@ export interface SaveLeadResult {
   saved: boolean;
   contactCount: number;
   reason?: string;
+  creditsSpent?: number;
+  creditBalance?: number;
 }
 
 /**
@@ -49,7 +53,10 @@ export async function persistLead(
   // their email couldn't be proven costs more than sending cautiously to one
   // that turns out wrong; the emailStatus is kept on the row either way so
   // outreach can treat a risky address differently (e.g. lower volume).
-  const candidateContacts = contacts.filter((c) => Boolean(c.email) || Boolean(c.phone));
+  // A named buyer is a lead even when the email lookup misses. Requiring an
+  // address here is what left runs at 0/10 after the contact database had
+  // already returned the person.
+  const candidateContacts = contacts.filter((c) => Boolean(c.fullName) && (Boolean(c.email) || Boolean(c.phone) || Boolean(c.title) || Boolean(c.linkedinUrl)));
   // Drop contacts whose email/phone is on the global suppression list.
   const actionable: CandidateContact[] = [];
   for (const c of candidateContacts) {
@@ -146,10 +153,34 @@ export async function persistLead(
   ctx.counters.companiesSaved += 1;
   ctx.counters.contactsSaved += contactCount;
 
-  // Remember the directory host (if the lead came from one) for future runs.
-  const directoryHost = typeof company.sourceRef.directoryHost === "string" ? company.sourceRef.directoryHost : null;
-  const directoryUrl = typeof company.sourceRef.directoryUrl === "string" ? company.sourceRef.directoryUrl : "";
-  if (directoryHost) await rememberDirectory(ctx.db, directoryHost, directoryUrl, ctx.criteria);
+  try {
+    const creditBalance = await spendCredits({
+      userId: ctx.userId,
+      amount: CREDIT_COSTS.prospect_company,
+      action: "prospect_company",
+      metadata: {
+        domain: company.domain,
+        listId: ctx.listId,
+        runId: ctx.runId,
+        contactCount,
+      },
+    });
 
-  return { saved: true, contactCount };
+    const directoryHost = typeof company.sourceRef.directoryHost === "string" ? company.sourceRef.directoryHost : null;
+    const directoryUrl = typeof company.sourceRef.directoryUrl === "string" ? company.sourceRef.directoryUrl : "";
+    if (directoryHost) await rememberDirectory(ctx.db, directoryHost, directoryUrl, ctx.criteria);
+
+    return { saved: true, contactCount, creditsSpent: CREDIT_COSTS.prospect_company, creditBalance };
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (code === "credits_exhausted") {
+      await ctx.db.from("contacts").delete().eq("prospect_company_id", snapshot.id);
+      await ctx.db.from("prospect_companies").delete().eq("id", snapshot.id);
+      ctx.savedDomains.delete(company.domain);
+      ctx.counters.companiesSaved -= 1;
+      ctx.counters.contactsSaved -= contactCount;
+      return { saved: false, contactCount: 0, reason: "credits_exhausted" };
+    }
+    throw error;
+  }
 }

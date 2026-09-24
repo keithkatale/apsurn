@@ -39,7 +39,7 @@ export async function proxy(request: NextRequest) {
   }
   if (user && (request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/signup")) {
     const next = request.nextUrl.searchParams.get("next");
-    const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+    const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard/copilot";
     return NextResponse.redirect(new URL(safeNext, request.url));
   }
   return response;

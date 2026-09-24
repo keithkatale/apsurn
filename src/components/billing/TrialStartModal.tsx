@@ -7,6 +7,7 @@ import { DodoPayments } from "dodopayments-checkout";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { PricingCardShell } from "@/components/ui/pricing-card-shell";
 import { PLANS, TRIAL_DAYS, type PlanKey } from "@/lib/billing/plans";
+import { trackGoal } from "@/lib/analytics/datafast";
 import { ensureDodoCheckout } from "@/lib/billing/dodo-checkout-client";
 import { cn } from "@/lib/cn";
 
@@ -51,6 +52,7 @@ export function TrialStartModal({
         throw new Error(data?.error || "Could not start checkout");
       }
       ensureDodoCheckout();
+      trackGoal("initiate_checkout", { plan: nextPlan, trial: true });
       await DodoPayments.Checkout.open({ checkoutUrl: data.checkoutUrl });
       onClose();
     } catch (err) {
@@ -187,5 +189,6 @@ export async function openPlanCheckout(plan: PlanKey, trial = true) {
   });
   const data = (await res.json().catch(() => null)) as { checkoutUrl?: string; error?: string } | null;
   if (!res.ok || !data?.checkoutUrl) throw new Error(data?.error || "Checkout failed");
+  trackGoal("initiate_checkout", { plan, trial });
   await DodoPayments.Checkout.open({ checkoutUrl: data.checkoutUrl });
 }

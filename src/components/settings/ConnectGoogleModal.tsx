@@ -189,7 +189,7 @@ export function ConnectGoogleModal({
                 href="https://myaccount.google.com/apppasswords"
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#4379EE] px-3.5 py-2.5 text-[13px] font-semibold text-white shadow-[0_1px_1px_rgba(20,50,150,0.35),0_3px_6px_rgba(20,50,150,0.28),inset_0_1px_2px_rgba(255,255,255,0.28)] hover:bg-[#3567D6]"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#4379EE] px-3.5 py-2.5 text-[13px] font-semibold text-white hover:bg-[#3567D6]"
               >
                 <span className="flex size-5 items-center justify-center rounded-full bg-white">
                   <GoogleMark className="size-3.5" />

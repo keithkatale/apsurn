@@ -11,6 +11,7 @@ import type { ContactRow, LeadStatus, ProspectRow } from "@/components/prospects
 import { ScanOverlay, type ScanLogEntry, type ScanState } from "@/components/progress/ScanOverlay";
 import { PricingCardShell } from "@/components/ui/pricing-card-shell";
 import { type CampaignDefinition } from "@/lib/onboarding/campaign-templates";
+import { trackGoal } from "@/lib/analytics/datafast";
 import { cn } from "@/lib/cn";
 import { SetupStepper } from "./SetupStepper";
 import type { BlueprintData } from "./BlueprintReviewForm";
@@ -255,6 +256,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
         body: JSON.stringify({ companyId, ...patch, approve: true }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Could not save blueprint");
+      trackGoal("blueprint_approved");
       setScan((prev) =>
         prev?.phase === "scanning"
           ? { ...prev, progress: 55, logs: [...prev.logs, { id: uid(), text: "Matching similar services…" }] }
