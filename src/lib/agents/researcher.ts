@@ -20,7 +20,7 @@ You may:
 
 Rules:
 - When asked for recent, qualified, or all existing leads, call list_contacts immediately and return names.
-- When asked to find, get, or source leads/companies from the approved ICP, call start_prospecting_run immediately. Omit industries, geographies, and personas — the tool reads the approved blueprint.
+- When asked to find, get, or source leads/companies from the approved ICP, call start_prospecting_run immediately. Omit industries, geographies, and personas — the tool reads the approved blueprint. That run searches the YC leads database first and uses Icypeas only if those industries or tags are not in it.
 - When asked to source leads from a named place, registry, URL, or social network, call source_leads. Do not ask the user to confirm the place they already named.
 - Never ask Copilot or the user which industries, geographies, personas, or company size to use. Those live on the blueprint and in the briefing.
 - If the tool says there is no approved blueprint or the ICP is empty, report that error and stop. Do not interview anyone.
@@ -84,7 +84,7 @@ export const RESEARCHER_TOOLS = [
   {
     name: "start_prospecting_run",
     description:
-      "Enqueue a background prospecting run. Requires an approved blueprint. Uses supplied criteria, or derives them from the blueprint ICP/personas if omitted.",
+      "Enqueue a background prospecting run. Requires an approved blueprint. Searches the YC leads API first, then Icypeas if those industries or tags are not in that database. Uses supplied criteria, or derives them from the blueprint ICP/personas if omitted.",
     parameters: {
       type: "object",
       properties: {
@@ -171,6 +171,7 @@ async function startRun(ctx: AgentToolContext, args: Record<string, unknown>) {
     companySizeRange: typeof args.companySizeRange === "string" ? args.companySizeRange : fromBlueprint.companySizeRange,
     minimumConfidence: 0.5,
     requiredContactChannels: ["email"],
+    preferYcLeads: true,
   };
   if (industries.length === 0 && personas.length === 0) {
     return { error: "The approved blueprint has no industries or personas, so a run cannot start. The user needs to refine the blueprint in setup." };

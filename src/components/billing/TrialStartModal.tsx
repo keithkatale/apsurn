@@ -6,13 +6,13 @@ import { X } from "lucide-react";
 import { DodoPayments } from "dodopayments-checkout";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { PricingCardShell } from "@/components/ui/pricing-card-shell";
-import { PLANS, TRIAL_DAYS, type PlanKey } from "@/lib/billing/plans";
+import { ENTERPRISE_PLAN, OFFERED_PLAN_KEYS, PLANS, TRIAL_DAYS, type PlanKey } from "@/lib/billing/plans";
 import { trackGoal } from "@/lib/analytics/datafast";
 import { ensureDodoCheckout } from "@/lib/billing/dodo-checkout-client";
 import { cn } from "@/lib/cn";
 
-/** Growth | Startup | Pro — Startup stays in the center. */
-const MODAL_PLAN_ORDER: PlanKey[] = ["growth", "startup", "pro"];
+/** Growth | Startup — Startup stays in the center. */
+const MODAL_PLAN_ORDER: PlanKey[] = [...OFFERED_PLAN_KEYS];
 
 export function TrialStartModal({
   open,
@@ -86,8 +86,7 @@ export function TrialStartModal({
             Choose a plan to send
           </h2>
           <p className="mt-2 text-[14px] leading-relaxed text-neutral-600 sm:text-[15px]">
-            No free plan. Start a {TRIAL_DAYS}-day trial, cancel anytime, then continue on your monthly plan with AI
-            credits.
+            No free plan. Startup and Growth start with a {TRIAL_DAYS}-day trial. Enterprise starts at ${ENTERPRISE_PLAN.priceUsd}/month after a call.
           </p>
         </div>
 
@@ -172,6 +171,55 @@ export function TrialStartModal({
               </div>
             );
           })}
+          <PricingCardShell
+            className="h-full"
+            footer={
+              <div className="flex flex-col gap-3">
+                <ThreeDButton
+                  href={ENTERPRISE_PLAN.bookingUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  variant="soft"
+                  size="md"
+                  className="h-11 w-full rounded-[12px] text-[15px] font-medium tracking-[-0.03em]"
+                >
+                  Book a call
+                </ThreeDButton>
+                <div className="flex flex-col gap-2 px-1 pt-1">
+                  {ENTERPRISE_PLAN.features.map((feature) => (
+                    <div key={feature} className="flex items-start gap-2.5">
+                      <div className="mt-0.5 size-[18px] shrink-0">
+                        <Image
+                          src="/landing/pricing-check.svg"
+                          alt=""
+                          width={18}
+                          height={18}
+                          className="size-[18px] object-contain"
+                        />
+                      </div>
+                      <span className="text-[13px] leading-snug tracking-[-0.03em] text-neutral-600">{feature}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            }
+          >
+            <div className="flex flex-col gap-3">
+              <h3 className="text-[20px] font-semibold tracking-[-0.04em] text-neutral-900 font-heading leading-tight">
+                {ENTERPRISE_PLAN.name}
+              </h3>
+              <p className="text-[13px] leading-snug tracking-[-0.03em] text-neutral-600">{ENTERPRISE_PLAN.description}</p>
+            </div>
+            <div className="mt-auto flex flex-col gap-1 pt-4">
+              <span className="text-[12px] font-medium tracking-[-0.03em] text-neutral-500">Starting at</span>
+              <div className="flex items-baseline gap-1">
+                <span className="text-[32px] font-semibold tracking-[-0.04em] text-neutral-900 leading-none">
+                  ${ENTERPRISE_PLAN.priceUsd}
+                </span>
+                <span className="text-[13px] tracking-[-0.03em] text-neutral-500">/month</span>
+              </div>
+            </div>
+          </PricingCardShell>
         </div>
 
         {error && <p className="mt-4 text-center text-[13px] text-red-600">{error}</p>}

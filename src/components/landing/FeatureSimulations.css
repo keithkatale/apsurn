@@ -1,0 +1,351 @@
+.feature-sim {
+  display: flex;
+  height: 100%;
+  min-height: 280px;
+  flex-direction: column;
+  gap: 10px;
+  background: #101010;
+  color: #ececec;
+  padding: 16px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.feature-sim .sim-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.feature-sim .sim-kicker {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8d8d8d;
+}
+
+.feature-sim .sim-live {
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.feature-sim .sim-live.is-run {
+  background: #1a2436;
+  color: #8fb4ff;
+}
+
+.feature-sim .sim-live.is-done {
+  background: #1c2a1f;
+  color: #7dcea0;
+}
+
+.feature-sim .sim-url {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 36px;
+  border-radius: 10px;
+  background: #1a1a1a;
+  padding: 0 12px;
+  color: #f4f4f4;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.feature-sim .sim-caret {
+  display: inline-block;
+  width: 1px;
+  height: 0.9em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: #4379ee;
+  animation: sim-blink 0.9s steps(1) infinite;
+}
+
+.feature-sim .sim-block,
+.feature-sim .sim-lead,
+.feature-sim .sim-mail,
+.feature-sim .sim-reply,
+.feature-sim .sim-product,
+.feature-sim .sim-body {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.45s ease, transform 0.45s ease;
+}
+
+.feature-sim .is-on {
+  opacity: 1;
+  transform: none;
+}
+
+.feature-sim .sim-block {
+  border-radius: 12px;
+  background: #1a1a1a;
+  padding: 10px 12px;
+}
+
+.feature-sim .sim-block p,
+.feature-sim .sim-product span {
+  margin: 0 0 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6f6f6f;
+}
+
+.feature-sim .sim-block strong,
+.feature-sim .sim-product strong {
+  display: block;
+  color: #f4f4f4;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.feature-sim .sim-block span,
+.feature-sim .sim-product p {
+  display: block;
+  margin-top: 2px;
+  color: #9a9a9a;
+  font-size: 12px;
+}
+
+.feature-sim .sim-scroller {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, transparent, #000 8%, #000 88%, transparent);
+}
+
+.feature-sim .sim-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.feature-sim .sim-rows-scroll {
+  animation: lead-scroll 22s linear infinite;
+}
+
+.feature-sim .sim-lead {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    "avatar who pill"
+    "avatar why pill";
+  column-gap: 10px;
+  row-gap: 2px;
+  align-items: center;
+  border-radius: 12px;
+  background: #1a1a1a;
+  padding: 10px 12px;
+}
+
+.feature-sim .sim-lead.is-skip.is-on {
+  opacity: 0.55;
+}
+
+.feature-sim .sim-avatar,
+.feature-sim .sim-face {
+  grid-area: avatar;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+}
+
+.feature-sim .sim-avatar {
+  display: grid;
+  place-items: center;
+  background: #1a2740;
+  color: #9ec0ff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.feature-sim .sim-face {
+  object-fit: cover;
+}
+
+.feature-sim .sim-who {
+  grid-area: who;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.feature-sim .sim-who strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f4f4f4;
+}
+
+.feature-sim .sim-who em,
+.feature-sim .sim-why {
+  font-style: normal;
+  font-size: 11px;
+  color: #8a8a8a;
+}
+
+.feature-sim .sim-why {
+  grid-area: why;
+}
+
+.feature-sim .sim-pill {
+  grid-area: pill;
+  border-radius: 999px;
+  background: #1c2a1f;
+  color: #7dcea0;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.feature-sim .sim-pill.is-skip {
+  background: #2a1c1c;
+  color: #e09a9a;
+}
+
+.feature-sim .sim-mail,
+.feature-sim .sim-reply,
+.feature-sim .sim-product {
+  border-radius: 12px;
+  background: #1a1a1a;
+  padding: 12px;
+}
+
+.feature-sim .sim-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.feature-sim .sim-person span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.feature-sim .sim-person strong {
+  color: #f4f4f4;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.feature-sim .sim-person em {
+  font-style: normal;
+  font-size: 11px;
+  color: #8a8a8a;
+}
+
+.feature-sim .sim-subject,
+.feature-sim .sim-field {
+  margin: 0;
+  color: #f4f4f4;
+  font-weight: 600;
+}
+
+.feature-sim .sim-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 2.6em;
+}
+
+.feature-sim .sim-field em {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6f6f6f;
+}
+
+.feature-sim .sim-body {
+  min-height: 5.4em;
+}
+
+.feature-sim .sim-send {
+  margin-top: 12px;
+  border: 0;
+  border-radius: 10px;
+  background: #4379ee;
+  color: #ffffff;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.feature-sim .sim-body,
+.feature-sim .sim-reply p,
+.feature-sim .sim-product p {
+  margin: 6px 0 0;
+  color: #9a9a9a;
+  font-size: 12px;
+}
+
+.feature-sim .sim-reply {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  background: #162033;
+}
+
+.feature-sim .sim-reply span {
+  font-size: 11px;
+  font-weight: 600;
+  color: #8fb4ff;
+}
+
+.feature-sim .sim-reply p {
+  margin: 2px 0 0;
+  color: #f4f4f4;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.feature-sim .sim-product strong {
+  color: #f4f4f4;
+  font-size: 13px;
+}
+
+@media (max-width: 767px) {
+  .feature-sim .sim-lead {
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      "avatar who"
+      "avatar why"
+      "avatar pill";
+  }
+
+  .feature-sim .sim-pill {
+    justify-self: start;
+    margin-top: 4px;
+  }
+}
+
+@keyframes sim-blink {
+  50% { opacity: 0; }
+}
+
+@keyframes lead-scroll {
+  from { transform: translateY(0); }
+  to { transform: translateY(calc(-50% - 4px)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feature-sim .sim-rows-scroll {
+    animation: none;
+  }
+}

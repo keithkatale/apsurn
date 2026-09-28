@@ -8,8 +8,8 @@ import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { canvasVisibleSteps, isOnboardingAutoFollowup, sortCampaignSteps } from "@/lib/campaigns/sequence-steps";
 import { cn } from "@/lib/cn";
 import { htmlToPlain } from "@/lib/outreach/email-html";
-import { draftStorageKey } from "@/lib/outreach/merge-fields";
-import type { CampaignDraft, CampaignEmailStep, CampaignLead } from "@/components/campaigns/CampaignWorkspace";
+import { draftStorageKey, MERGE_FIELD_KEYS, MERGE_FIELD_LABELS } from "@/lib/outreach/merge-fields";
+import type { CampaignEmailStep, CampaignLead } from "@/components/campaigns/CampaignWorkspace";
 
 function EmailFieldSkeleton({ lines = 1 }: { lines?: number }) {
   return (
@@ -53,7 +53,6 @@ export function SequenceCanvas({
   steps,
   onStepsChange,
   lead,
-  drafts,
   generatingKeys,
   onGenerateStep,
   onSaveStepDraft,
@@ -75,7 +74,6 @@ export function SequenceCanvas({
   steps: CampaignEmailStep[];
   onStepsChange: (steps: CampaignEmailStep[]) => void;
   lead: CampaignLead | null;
-  drafts: Record<string, CampaignDraft>;
   generatingKeys: Set<string>;
   onGenerateStep: (stepId: string, regenerate: boolean) => void;
   onSaveStepDraft: (stepId: string, subject: string, body: string) => void;
@@ -170,122 +168,136 @@ export function SequenceCanvas({
             )}
           </div>
           {lead ? (
-            <>
-              <div className="flex items-center justify-between border-b border-neutral-100 bg-[#F8F9FC] px-5 py-3.5">
-                <div className="flex min-w-0 items-center gap-3">
-                  <ContactAvatar name={lead.fullName} linkedinUrl={lead.linkedinUrl} email={lead.email} className="size-10" />
-                  <div className="min-w-0">
-                    <p className="truncate text-[15px] font-semibold text-neutral-900">{lead.fullName || "Unknown"}</p>
-                    <p className="truncate text-[12px] text-neutral-500">
-                      {lead.title || "Role unknown"}
-                      {lead.companyName ? ` · ${lead.companyName}` : ""}
-                    </p>
-                  </div>
-                </div>
-                <span className="shrink-0 text-[12px] text-neutral-400">{senderName}</span>
-              </div>
-              <div className="px-5 py-2">
-                <div className="flex items-center gap-3 border-b border-neutral-100 py-2.5">
-                  <span className="w-10 shrink-0 text-[13px] font-medium text-neutral-400">To</span>
-                  <span className="min-w-0 truncate text-[14px] text-neutral-800">{lead.email || "No email yet"}</span>
-                </div>
-                <div className="flex items-center gap-3 border-b border-neutral-100 py-2.5">
-                  <span className="w-10 shrink-0 text-[13px] font-medium text-neutral-400">Subj</span>
-                  {drafting ? (
-                    <div className="min-w-0 flex-1">
-                      <EmailFieldSkeleton />
-                    </div>
-                  ) : (
-                    <MergeFieldText
-                      key={`subj-${lead.id}-${subject.includes("{{") ? "merge" : "plain"}`}
-                      value={subject}
-                      onChange={onSubjectChange}
-                      lead={lead}
-                      placeholder="Subject"
-                    />
-                  )}
-                </div>
-                <div className="py-4">
-                  {drafting ? (
-                    <EmailFieldSkeleton lines={6} />
-                  ) : (
-                    <MergeFieldText
-                      key={`body-${lead.id}-${body.includes("{{") ? "merge" : "plain"}`}
-                      value={/<\/?[a-z][\s\S]*>/i.test(body) ? htmlToPlain(body) : body}
-                      onChange={onBodyChange}
-                      lead={lead}
-                      multiline
-                      placeholder="Write this email…"
-                    />
-                  )}
+            <div className="flex items-center justify-between border-b border-neutral-100 bg-[#F8F9FC] px-5 py-3.5">
+              <div className="flex min-w-0 items-center gap-3">
+                <ContactAvatar name={lead.fullName} linkedinUrl={lead.linkedinUrl} email={lead.email} className="size-10" />
+                <div className="min-w-0">
+                  <p className="truncate text-[15px] font-semibold text-neutral-900">{lead.fullName || "Unknown"}</p>
+                  <p className="truncate text-[12px] text-neutral-500">
+                    Preview for this lead. The same message goes to everyone else.
+                  </p>
                 </div>
               </div>
-              <div className="flex items-center justify-between gap-3 border-t border-neutral-100 px-5 py-3">
-                <p
-                  className={cn(
-                    "min-w-0 truncate text-[12px]",
-                    sendMessage && /fail|error|not found|cannot|expired|invalid|trial|billing|credit|plan/i.test(sendMessage)
-                      ? "text-red-600"
-                      : sendMessage?.startsWith("Sent")
-                        ? "text-emerald-600"
-                        : "text-neutral-500",
-                  )}
-                >
-                  {sendMessage
-                    ? sendMessage
-                    : inboxEmail
-                      ? `Sends from ${inboxEmail}`
-                      : "Connect Gmail to send as you."}
-                </p>
-                {inboxEmail || !billingActive ? (
-                  <ThreeDButton
-                    type="button"
-                    variant="solid"
-                    size="sm"
-                    className="send-attention-pulse"
-                    disabled={
-                      billingActive &&
-                      (sending || drafting || !subject.trim() || !htmlToPlain(body) || !lead.email)
-                    }
-                    onClick={() => {
-                      if (!billingActive) {
-                        onStartTrial?.();
-                        return;
-                      }
-                      onSend();
-                    }}
-                  >
-                    {sending ? (
-                      "Sending…"
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5">
-                        Send
-                        <span className="material-symbols-outlined text-[16px] leading-none" aria-hidden>
-                          send
-                        </span>
-                      </span>
-                    )}
-                  </ThreeDButton>
-                ) : (
-                  <ThreeDButton href="/dashboard/campaigns?panel=settings" variant="solid" size="sm">
-                    Connect to Google
-                  </ThreeDButton>
-                )}
-              </div>
-            </>
+              <span className="shrink-0 text-[12px] text-neutral-400">{senderName}</span>
+            </div>
           ) : (
-            <div className="px-5 py-10 text-center">
-              <p className="text-[13px] font-medium text-neutral-800">Select a person to write an email</p>
-              <p className="mt-1 text-[12px] text-neutral-500">Follow-ups stay empty until you pick someone — then each one is written for that lead.</p>
+            <div className="border-b border-neutral-100 bg-[#F8F9FC] px-5 py-3.5">
+              <p className="text-[13px] font-semibold text-neutral-900">Message for everyone in this campaign</p>
+              <p className="mt-0.5 text-[12px] text-neutral-500">
+                Write it once. Name, title, and company fill in for each lead when it sends.
+              </p>
             </div>
           )}
+          <div className="px-5 py-2">
+            <div className="flex items-center gap-3 border-b border-neutral-100 py-2.5">
+              <span className="w-10 shrink-0 text-[13px] font-medium text-neutral-400">To</span>
+              <span className="min-w-0 truncate text-[14px] text-neutral-800">
+                {lead ? lead.email || "No email yet" : "Each lead in this campaign"}
+              </span>
+            </div>
+            <div className="flex items-center gap-3 border-b border-neutral-100 py-2.5">
+              <span className="w-10 shrink-0 text-[13px] font-medium text-neutral-400">Subj</span>
+              {drafting ? (
+                <div className="min-w-0 flex-1">
+                  <EmailFieldSkeleton />
+                </div>
+              ) : (
+                <MergeFieldText
+                  value={subject}
+                  onChange={onSubjectChange}
+                  lead={lead}
+                  placeholder="Subject — use {{first_name}} or {{company}}"
+                />
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5 py-2">
+              {MERGE_FIELD_KEYS.map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => onBodyChange(`${body}${body && !body.endsWith(" ") ? " " : ""}{{${key}}}`)}
+                  className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600 hover:bg-[#E8F1FC] hover:text-[#4379EE]"
+                >
+                  {MERGE_FIELD_LABELS[key]}
+                </button>
+              ))}
+            </div>
+            <div className="py-2">
+              {drafting ? (
+                <EmailFieldSkeleton lines={6} />
+              ) : (
+                <MergeFieldText
+                  value={/<\/?[a-z][\s\S]*>/i.test(body) ? htmlToPlain(body) : body}
+                  onChange={onBodyChange}
+                  lead={lead}
+                  multiline
+                  placeholder="Write the email. Insert a field above so each lead gets their own version."
+                />
+              )}
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-3 border-t border-neutral-100 px-5 py-3">
+            <p
+              className={cn(
+                "min-w-0 truncate text-[12px]",
+                sendMessage && /fail|error|not found|cannot|expired|invalid|trial|billing|credit|plan/i.test(sendMessage)
+                  ? "text-red-600"
+                  : sendMessage?.startsWith("Sent")
+                    ? "text-emerald-600"
+                    : "text-neutral-500",
+              )}
+            >
+              {sendMessage
+                ? sendMessage
+                : !lead
+                  ? "Select a lead to send one, or use Send all."
+                  : inboxEmail
+                    ? `Sends from ${inboxEmail}`
+                    : "Connect Gmail to send as you."}
+            </p>
+            {inboxEmail || !billingActive ? (
+              <ThreeDButton
+                type="button"
+                variant="solid"
+                size="sm"
+                className="send-attention-pulse"
+                disabled={
+                  billingActive &&
+                  (sending || drafting || !subject.trim() || !htmlToPlain(body) || !lead?.email)
+                }
+                onClick={() => {
+                  if (!billingActive) {
+                    onStartTrial?.();
+                    return;
+                  }
+                  onSend();
+                }}
+              >
+                {sending ? (
+                  "Sending…"
+                ) : (
+                  <span className="inline-flex items-center gap-1.5">
+                    Send
+                    <span className="material-symbols-outlined text-[16px] leading-none" aria-hidden>
+                      send
+                    </span>
+                  </span>
+                )}
+              </ThreeDButton>
+            ) : (
+              <ThreeDButton href="/dashboard/campaigns?panel=settings" variant="solid" size="sm">
+                Connect to Google
+              </ThreeDButton>
+            )}
+          </div>
         </article>
 
         {followups.map((step, index) => {
           const draftKey = lead ? draftStorageKey(lead.id, campaignId, step.id) : null;
-          const stepDraft = draftKey ? drafts[draftKey] : null;
           const stepBusy = Boolean(draftKey && generatingKeys.has(draftKey));
-          const hasContent = Boolean(stepDraft?.subject?.trim() || stepDraft?.body?.trim());
+          const stepSubject = step.subject ?? "";
+          const stepBody = /<\/?[a-z][\s\S]*>/i.test(step.body) ? htmlToPlain(step.body) : step.body;
+          const hasContent = Boolean(stepSubject.trim() || stepBody.trim());
 
           return (
             <div key={step.id} className="flex w-full flex-col items-stretch">
@@ -332,43 +344,31 @@ export function SequenceCanvas({
                   </div>
                 </div>
                 <div className="px-5 py-2">
-                  {!lead ? (
-                    <div className="py-8 text-center">
-                      <p className="text-[13px] font-medium text-neutral-800">Select a person first</p>
-                      <p className="mt-1 text-[12px] text-neutral-500">This follow-up is written per lead from their profile — nothing is pre-filled.</p>
-                    </div>
-                  ) : stepBusy ? (
+                  {stepBusy ? (
                     <div className="py-4">
                       <EmailFieldSkeleton lines={5} />
                     </div>
-                  ) : hasContent ? (
+                  ) : (
                     <>
                       <div className="flex items-center gap-3 border-b border-neutral-100 py-2.5">
                         <span className="w-10 shrink-0 text-[13px] font-medium text-neutral-400">Subj</span>
                         <MergeFieldText
-                          value={stepDraft!.subject}
-                          onChange={(next) => onSaveStepDraft(step.id, next, stepDraft!.body)}
+                          value={stepSubject}
+                          onChange={(next) => onSaveStepDraft(step.id, next, stepBody)}
                           lead={lead}
                           placeholder="Follow-up subject"
                         />
                       </div>
                       <div className="py-3">
                         <MergeFieldText
-                          value={stepDraft!.body}
-                          onChange={(next) => onSaveStepDraft(step.id, stepDraft!.subject, next)}
+                          value={stepBody}
+                          onChange={(next) => onSaveStepDraft(step.id, stepSubject, next)}
                           lead={lead}
                           multiline
-                          placeholder="Write a follow-up…"
+                          placeholder="Write the follow-up. Fields fill in for each lead."
                         />
                       </div>
                     </>
-                  ) : (
-                    <div className="py-8 text-center">
-                      <p className="text-[13px] font-medium text-neutral-800">No follow-up drafted yet</p>
-                      <p className="mt-1 text-[12px] text-neutral-500">
-                        Write one for {lead.fullName?.split(/\s+/)[0] || "this lead"} with AI, or leave it empty for now.
-                      </p>
-                    </div>
                   )}
                 </div>
               </article>

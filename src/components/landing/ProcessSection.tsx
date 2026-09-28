@@ -68,9 +68,9 @@ export function ProcessSection() {
           {steps.map((step) => (
             <div
               key={step.number}
-              className="flex flex-col gap-4 sm:gap-5 rounded-2xl bg-white p-3.5 sm:p-4 shadow-[0px_8px_24px_0px_rgba(0,0,0,0.06)] border border-[#EEEEEE] transition-transform hover:-translate-y-1 duration-200"
+              className="flex flex-col gap-4 sm:gap-5 rounded-2xl bg-white p-3.5 sm:p-4 shadow-[0px_8px_24px_0px_rgba(0,0,0,0.06)] transition-transform hover:-translate-y-1 duration-200"
             >
-              <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-neutral-100 border-2 border-[#F4F4F4] shadow-inner">
+              <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-neutral-100 shadow-inner">
                 <Image
                   src={step.image}
                   alt={step.title}

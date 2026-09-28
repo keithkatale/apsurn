@@ -6,6 +6,18 @@ export function isDashboardPath(pathname = typeof window === "undefined" ? "" : 
   return pathname === "/dashboard" || pathname.startsWith("/dashboard/");
 }
 
+export function isSetupPath(pathname = typeof window === "undefined" ? "" : window.location.pathname) {
+  return pathname === "/setup" || pathname.startsWith("/setup/");
+}
+
+export function isLandingPath(pathname = typeof window === "undefined" ? "" : window.location.pathname) {
+  return pathname === "/" || pathname === "";
+}
+
+export function isAuthPath(pathname = typeof window === "undefined" ? "" : window.location.pathname) {
+  return pathname === "/login" || pathname === "/signup";
+}
+
 export function readStoredTheme(): ThemePreference {
   try {
     const value = localStorage.getItem(THEME_STORAGE_KEY);
@@ -25,7 +37,12 @@ export function resolvedDark(preference: ThemePreference) {
 }
 
 export function applyTheme(preference: ThemePreference, pathname?: string) {
-  const dark = isDashboardPath(pathname) && resolvedDark(preference);
+  const path = pathname ?? (typeof window === "undefined" ? "" : window.location.pathname);
+  const dark =
+    isSetupPath(path) ||
+    (isLandingPath(path) || isAuthPath(path)
+      ? preference !== "light"
+      : isDashboardPath(path) && resolvedDark(preference));
   document.documentElement.classList.toggle("dark", dark);
 }
 
@@ -38,4 +55,4 @@ export function persistTheme(preference: ThemePreference) {
   applyTheme(preference);
 }
 
-export const THEME_BOOTSTRAP_SCRIPT = `(function(){try{var p=location.pathname;if(p!=="/dashboard"&&p.indexOf("/dashboard/")!==0)return;var t=localStorage.getItem("${THEME_STORAGE_KEY}");var d=t==="dark"||(t!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.documentElement.classList.add("dark");}catch(e){}})();`;
+export const THEME_BOOTSTRAP_SCRIPT = `(function(){try{var p=location.pathname;if(p==="/setup"||p.indexOf("/setup/")===0){document.documentElement.classList.add("dark");return;}if(p==="/"||p===""||p==="/login"||p==="/signup"){if(localStorage.getItem("${THEME_STORAGE_KEY}")!=="light")document.documentElement.classList.add("dark");return;}if(p!=="/dashboard"&&p.indexOf("/dashboard/")!==0)return;var t=localStorage.getItem("${THEME_STORAGE_KEY}");var d=t==="dark"||(t!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.documentElement.classList.add("dark");}catch(e){}})();`;

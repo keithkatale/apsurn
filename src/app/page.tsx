@@ -16,7 +16,7 @@ export const metadata = {
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-white text-neutral-900 selection:bg-neutral-900 selection:text-white">
+    <div className="landing-page min-h-screen bg-white text-neutral-900 selection:bg-neutral-900 selection:text-white">
       <Navbar />
       <HeroFeaturesSection />
       <WhyUsSection />

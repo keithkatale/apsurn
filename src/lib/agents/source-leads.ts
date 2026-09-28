@@ -4,6 +4,7 @@ import { searchLinkedInMentions } from "@/lib/market/linkedin";
 import { searchRedditMentions } from "@/lib/market/reddit";
 import { searchTwitterMentions } from "@/lib/market/twitter";
 import { findEmail, findPeopleAtCompany } from "@/lib/prospecting/icypeas";
+import { searchYcLeads } from "@/lib/prospecting/yc-leads";
 import { findCompanies, LEAD_SOURCES, type LeadSourceId } from "@/lib/prospecting/sources";
 import { assertSafePublicUrl, crawlSite } from "@/lib/scraper/crawl";
 import { extractCompaniesFromPage } from "@/lib/prospecting/agent/shared";
@@ -214,19 +215,47 @@ export async function sourceLeads(ctx: AgentToolContext, args: Record<string, un
         emailCredits = built.emailCredits;
       }
     } else {
-      const source = matchSource(place) ?? "yc";
-      const companies = await findCompanies({
-        source,
-        industries,
-        geographies,
-        keywords: [place],
-        taxonomy: industries[0],
-        state: geographies[0],
-        limit,
-      });
-      const built = await rowsFromCompanies(companies, personas, resolveEmails, ctx.userId);
-      rows = built.rows;
-      emailCredits = built.emailCredits;
+      const namedSource = matchSource(place);
+      if (!namedSource || namedSource === "yc") {
+        const yc = await searchYcLeads(
+          {
+            industries: industries.length > 0 ? industries : [place],
+            geographies,
+            personas,
+            preferYcLeads: true,
+          },
+          limit,
+        );
+        if (yc.matched && yc.companies.length > 0) {
+          rows = yc.companies.slice(0, limit).map((company) => ({
+            id: crypto.randomUUID(),
+            fullName: company.contact?.fullName ?? null,
+            title: company.contact?.title ?? null,
+            companyName: company.name,
+            domain: company.domain,
+            email: company.contact?.email ?? null,
+            emailStatus: company.contact?.email ? "risky" : null,
+            phone: null,
+            sourceUrl: company.contact?.linkedinUrl || company.website,
+            source: "yc_leads",
+          }));
+        }
+      }
+      if (rows.length === 0) {
+        const source = namedSource ?? "yc";
+        const companies = await findCompanies({
+          source,
+          industries,
+          geographies,
+          keywords: [place],
+          taxonomy: industries[0],
+          state: geographies[0],
+          limit,
+        });
+        const built = await rowsFromCompanies(companies, personas, resolveEmails, ctx.userId);
+        rows = built.rows;
+        emailCredits = built.emailCredits;
+      }
     }
   } catch (error) {
     const billed = creditsError(error);

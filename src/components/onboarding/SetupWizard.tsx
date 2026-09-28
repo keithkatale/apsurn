@@ -120,12 +120,21 @@ function mapProspects(raw: unknown): ProspectRow[] {
   });
 }
 
-function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+function displayCompanyName(name: unknown, domain: string) {
+  if (typeof name === "string" && name.trim()) return name.trim();
+  const host = stripProtocol(domain).split(".")[0] ?? "";
+  if (!host) return domain;
+  return host.charAt(0).toUpperCase() + host.slice(1);
+}
+
+function BlueprintFact({ label, value, className }: { label: string; value: string; className?: string }) {
+  const text = value.trim();
+  if (!text) return null;
   return (
-    <label className={cn("flex flex-col gap-0.5 text-xs", className)}>
-      <span className="font-medium text-neutral-600">{label}</span>
-      {children}
-    </label>
+    <div className={cn("flex flex-col gap-0.5", className)}>
+      <span className="text-[11px] font-medium text-neutral-500">{label}</span>
+      <p className="whitespace-pre-wrap text-[13px] leading-snug text-neutral-900">{text}</p>
+    </div>
   );
 }
 
@@ -149,6 +158,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
   const [scan, setScan] = useState<ScanState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
+  const [companyName, setCompanyName] = useState("");
   const [blueprint, setBlueprint] = useState<BlueprintData | null>(null);
   const [industries, setIndustries] = useState("");
   const [companySizeRange, setCompanySizeRange] = useState("");
@@ -160,7 +170,15 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
   const [campaigns, setCampaigns] = useState<CampaignDefinition[]>([]);
   const [campaignLoading, setCampaignLoading] = useState(false);
   const [prospects, setProspects] = useState<ProspectRow[]>([]);
+  const [competitorsReady, setCompetitorsReady] = useState(false);
+  const [accountsReady, setAccountsReady] = useState(false);
   const confirmLock = useRef(false);
+  const advanceRef = useRef({
+    approveAndContinue: () => {},
+    loadCampaigns: () => {},
+    findAccounts: () => {},
+    finishSetup: () => {},
+  });
 
   const valid = useMemo(() => isValidDomain(domain), [domain]);
 
@@ -229,6 +247,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not analyze the website");
       setCompanyId(data.company.id);
+      setCompanyName(displayCompanyName(data.company?.name, domain));
       applyBlueprint(data.blueprint as BlueprintData);
       setScan(null);
     } catch (err) {
@@ -247,6 +266,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
     if (!companyId || !blueprint || confirmLock.current) return;
     confirmLock.current = true;
     const patch = currentBlueprintPatch();
+    setCompetitorsReady(false);
     setStep(2);
     setScan(scanningState(["Searching companies in the same category…"], 20));
     try {
@@ -267,10 +287,16 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
       if (!found.ok) throw new Error(data.error ?? "Could not find competitors");
       const names = Array.isArray(data.competitors) ? data.competitors.filter((x: unknown): x is string => typeof x === "string") : [];
       setCompetitorsText(listToText(names));
+      setCompetitorsReady(true);
       setScan(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save blueprint");
-      setScan(null);
+      setCompetitorsReady(false);
+      setScan({
+        phase: "error",
+        progress: 100,
+        logs: [],
+        error: err instanceof Error ? err.message : "Could not save blueprint",
+      });
     } finally {
       confirmLock.current = false;
     }
@@ -328,6 +354,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
 
   async function findAccounts() {
     if (!blueprint) return;
+    setAccountsReady(false);
     setStep(4);
     setScan(scanningState(["Finding companies that match your ICP…"], 10));
     try {
@@ -346,6 +373,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
             personas,
             minimumConfidence: 0.5,
             requiredContactChannels: ["email"],
+            preferYcLeads: true,
           },
         }),
       });
@@ -419,6 +447,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
         }
       }
       await refresh();
+      setAccountsReady(true);
       setScan(null);
     } catch (err) {
       setScan({
@@ -446,26 +475,49 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
     }
   }
 
+  const showScan = Boolean(scan && (scan.phase === "scanning" || scan.phase === "error"));
+  const blueprintReview = step === 1 && started && Boolean(blueprint) && !showScan;
+
+  advanceRef.current = {
+    approveAndContinue: () => {
+      void approveAndContinue();
+    },
+    loadCampaigns: () => {
+      void loadCampaigns();
+    },
+    findAccounts: () => {
+      void findAccounts();
+    },
+    finishSetup: () => {
+      void finishSetup();
+    },
+  };
+
   useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (event.key !== "Enter" || event.metaKey || event.ctrlKey) return;
-      const tag = (event.target as HTMLElement | null)?.tagName;
-      if (tag === "TEXTAREA") return;
-      if (step === 1 && blueprint && !scan) {
-        event.preventDefault();
-        void approveAndContinue();
-      }
-      if (step === 3 && campaigns.length > 0 && !campaignLoading) {
-        event.preventDefault();
-        void findAccounts();
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [step, blueprint, scan, campaigns.length, campaignLoading]);
+    if (step !== 1 || !blueprintReview) return;
+    const id = window.setTimeout(() => advanceRef.current.approveAndContinue(), 3000);
+    return () => window.clearTimeout(id);
+  }, [step, blueprintReview]);
+
+  useEffect(() => {
+    if (step !== 2 || !competitorsReady || showScan) return;
+    const id = window.setTimeout(() => advanceRef.current.loadCampaigns(), 2000);
+    return () => window.clearTimeout(id);
+  }, [step, competitorsReady, showScan]);
+
+  useEffect(() => {
+    if (step !== 3 || campaignLoading || campaigns.length === 0 || error) return;
+    const id = window.setTimeout(() => advanceRef.current.findAccounts(), 2000);
+    return () => window.clearTimeout(id);
+  }, [step, campaignLoading, campaigns.length, error]);
+
+  useEffect(() => {
+    if (step !== 4 || !accountsReady || showScan) return;
+    const id = window.setTimeout(() => advanceRef.current.finishSetup(), 2000);
+    return () => window.clearTimeout(id);
+  }, [step, accountsReady, showScan]);
 
   const competitorNames = textToList(competitorsText);
-  const showScan = Boolean(scan && (scan.phase === "scanning" || scan.phase === "error"));
   const scanCentered =
     (showScan && step !== 4) || (step === 3 && campaignLoading && campaigns.length === 0);
   const accountRows =
@@ -497,14 +549,34 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
         </div>
       )}
       {error && !showScan && (
-        <div className="mb-3 shrink-0 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        <div className="mb-3 flex shrink-0 items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <span>{error}</span>
+          <button
+            type="button"
+            className="shrink-0 font-medium underline"
+            onClick={() => {
+              setError(null);
+              if (step === 3) void loadCampaigns();
+              if (step === 4) void findAccounts();
+              if (step === 5) void finishSetup();
+            }}
+          >
+            Try again
+          </button>
+        </div>
       )}
 
       <div
         className={cn(
           "min-h-0 flex-1",
           step === 1 && !started && "flex items-center justify-center pb-[8vh]",
-          scanCentered || step === 4 ? "flex flex-col overflow-hidden" : step === 1 && !started ? "" : "overflow-y-auto overscroll-contain",
+          scanCentered || step === 4
+            ? "flex flex-col overflow-hidden"
+            : blueprintReview
+              ? "flex items-center justify-center overflow-y-auto"
+              : step === 1 && !started
+                ? ""
+                : "overflow-y-auto overscroll-contain",
         )}
       >
       {step === 1 && !started && (
@@ -553,47 +625,31 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
         </SetupScanFrame>
       )}
 
-      {step === 1 && started && blueprint && !showScan && (
-        <div className="setup-rise mx-auto w-full max-w-xl px-1">
-          <PricingCardShell
-            highlight
-            className="p-2.5"
-            innerClassName="gap-2 p-3 sm:p-3.5"
-            footer={
-              <div className="flex items-center justify-between gap-3 px-0.5">
-                <p className="text-xs text-[#605f5f]">Press Enter when it looks right.</p>
-                <ThreeDButton type="button" variant="solid" size="sm" onClick={() => void approveAndContinue()}>
-                  Continue
-                </ThreeDButton>
+      {blueprintReview && blueprint && (
+        <div className="setup-rise mx-auto flex w-full max-w-xl flex-col items-center px-1 py-4">
+          <PricingCardShell highlight className="h-auto w-full p-2.5" innerClassName="flex-none gap-3 p-3 sm:p-3.5">
+            <div className="flex items-center gap-3">
+              <CompanyFavicon domain={domain} name={companyName || domain} className="size-10 rounded-lg text-sm" />
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-[#4379EE]">Company blueprint</p>
+                <h2 className="truncate text-[17px] font-semibold tracking-[-0.03em] text-neutral-900">
+                  {companyName || domain}
+                </h2>
               </div>
-            }
-          >
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-[#4379EE]">Company blueprint</p>
+            </div>
             {blueprint.confidence === "heuristic_fallback" && (
               <p className="rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
-                Built with a fallback model. Edit anything that looks off.
+                Built with a fallback model.
               </p>
             )}
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <Field label="Target industries" className="sm:col-span-2">
-                <input className="input py-1.5 text-xs" value={industries} onChange={(e) => setIndustries(e.target.value)} />
-              </Field>
-              <Field label="Company size">
-                <input className="input py-1.5 text-xs" value={companySizeRange} onChange={(e) => setCompanySizeRange(e.target.value)} />
-              </Field>
-              <Field label="Geographies">
-                <input className="input py-1.5 text-xs" value={geographies} onChange={(e) => setGeographies(e.target.value)} />
-              </Field>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <BlueprintFact label="Target industries" value={industries} className="sm:col-span-2" />
+              <BlueprintFact label="Company size" value={companySizeRange} />
+              <BlueprintFact label="Geographies" value={geographies} />
             </div>
-            <Field label="Value proposition">
-              <textarea className="input min-h-11 py-1.5 text-xs" value={valueProp} onChange={(e) => setValueProp(e.target.value)} />
-            </Field>
-            <Field label="Positioning">
-              <textarea className="input min-h-11 py-1.5 text-xs" value={positioning} onChange={(e) => setPositioning(e.target.value)} />
-            </Field>
-            <Field label="Product summary">
-              <textarea className="input min-h-11 py-1.5 text-xs" value={productSummary} onChange={(e) => setProductSummary(e.target.value)} />
-            </Field>
+            <BlueprintFact label="Value proposition" value={valueProp} />
+            <BlueprintFact label="Positioning" value={positioning} />
+            <BlueprintFact label="Product summary" value={productSummary} />
             {blueprint.personas.length > 0 && (
               <p className="text-xs text-neutral-600">
                 <span className="font-medium text-neutral-700">Personas: </span>
@@ -606,7 +662,14 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
 
       {step === 2 && showScan && (
         <SetupScanFrame>
-          <ScanOverlay compact state={scan!} kicker="Step 2" title="Exploring competitors" runningLabel="Listing" />
+          <ScanOverlay
+            compact
+            state={scan!}
+            kicker="Step 2"
+            title="Exploring competitors"
+            runningLabel="Listing"
+            onRetry={() => void approveAndContinue()}
+          />
         </SetupScanFrame>
       )}
 
@@ -635,7 +698,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
                 </div>
                 <ul className="flex max-h-[280px] flex-col gap-1 overflow-y-auto">
                   {competitorNames.length === 0 && (
-                    <li className="text-[13px] text-neutral-500">None found yet — you can still continue.</li>
+                    <li className="text-[13px] text-neutral-500">None found yet.</li>
                   )}
                   {competitorNames.map((name) => (
                     <li key={name} className="flex items-center gap-2 rounded-lg bg-neutral-50 px-2 py-1.5 text-[13px]">
@@ -675,27 +738,22 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
 
       {step === 4 && (
         <div className="relative flex min-h-0 flex-1 flex-col">
-          <div
-            className={cn(
-              "min-h-0 flex-1 overflow-y-auto overscroll-contain",
-              showScan && "pointer-events-none select-none blur-[2.5px]",
-            )}
-            aria-hidden={showScan}
-          >
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {accountRows.length > 0 ? (
               <ContactsTable
                 prospects={accountRows}
                 selected={new Set()}
                 onSelectedChange={() => {}}
                 readOnly
+                maskEmails={showScan}
               />
             ) : (
               <p className="py-10 text-center text-sm text-neutral-500">No accounts yet</p>
             )}
           </div>
           {showScan && scan && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/25 px-4">
-              <div className="w-[22rem] shrink-0">
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center px-4">
+              <div className="pointer-events-auto w-[22rem] shrink-0">
                 <ScanOverlay
                   compact
                   state={scan}
@@ -724,27 +782,6 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
       )}
       </div>
 
-      {step === 2 && !showScan && (
-        <div className="mx-auto flex w-full max-w-[920px] shrink-0 items-center justify-end gap-3 pt-3">
-          <ThreeDButton type="button" variant="solid" onClick={() => void loadCampaigns()}>
-            Continue
-          </ThreeDButton>
-        </div>
-      )}
-      {step === 3 && !campaignLoading && campaigns.length > 0 && (
-        <div className="mx-auto flex w-full max-w-[760px] shrink-0 items-center justify-end gap-3 pt-3">
-          <ThreeDButton type="button" variant="solid" onClick={() => void findAccounts()}>
-            Find accounts
-          </ThreeDButton>
-        </div>
-      )}
-      {step === 4 && !showScan && (
-        <div className="flex shrink-0 justify-end pt-3">
-          <ThreeDButton type="button" variant="solid" onClick={() => void finishSetup()}>
-            Continue to campaigns
-          </ThreeDButton>
-        </div>
-      )}
     </div>
   );
 }

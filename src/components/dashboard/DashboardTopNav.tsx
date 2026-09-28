@@ -45,26 +45,16 @@ export function DashboardTopNav() {
       <nav className="flex items-center justify-center gap-1">
         {NAV_ITEMS.map((item) => {
           const active = isActivePath(activePath, item.href);
-          if (active) {
-            return (
-              <ThreeDButton
-                key={item.href}
-                href={item.href}
-                variant="solid"
-                size="sm"
-                className="shrink-0 rounded-full px-3 text-base"
-                onClick={(event) => onTabClick(event, item.href)}
-              >
-                {item.label}
-              </ThreeDButton>
-            );
-          }
           return (
             <Link
               key={item.href}
               href={item.href}
               onClick={(event) => onTabClick(event, item.href)}
-              className="shrink-0 rounded-full px-3 py-2 text-base font-medium text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
+              className={
+                active
+                  ? "shrink-0 border-b-2 border-white px-3 py-2 text-base font-medium text-neutral-900"
+                  : "shrink-0 rounded-full px-3 py-2 text-base font-medium text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
+              }
             >
               {item.label}
             </Link>

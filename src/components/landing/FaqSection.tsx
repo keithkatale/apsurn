@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { Plus, Minus, ArrowRight } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
+import { LightThemeOnly } from "@/components/landing/LightThemeOnly";
 import { landingVideoUrl } from "@/lib/landing/videos";
 
 export function FaqSection() {
@@ -24,7 +25,7 @@ export function FaqSection() {
     },
     {
       q: "Is there a free plan?",
-      a: "No. Apsurn does not offer a free plan. Every paid plan starts with a 7-day trial for $1. Cancel anytime during the trial and you won’t be charged the monthly rate. After the trial, Startup ($30), Growth ($79), or Pro ($149) continues monthly with AI credits.",
+      a: "No. Apsurn does not offer a free plan. Startup and Growth start with a 7-day trial for $1. Cancel anytime during the trial and you won’t be charged the monthly rate. After the trial, Startup ($30) or Growth ($79) continues monthly with AI credits. Enterprise starts at $833/month after a call.",
     },
     {
       q: "Can I change or cancel my plan at any time?",
@@ -67,18 +68,19 @@ export function FaqSection() {
               </p>
             </div>
 
-            {/* Illustration */}
-            <div className="relative size-36 sm:size-52">
-              <video
-                src={landingVideoUrl("support.mp4")}
-                autoPlay
-                loop
-                muted
-                playsInline
-                className="size-full object-contain"
-                aria-label="Support illustration"
-              />
-            </div>
+            <LightThemeOnly>
+              <div className="relative size-36 sm:size-52">
+                <video
+                  src={landingVideoUrl("support.mp4")}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="size-full object-contain"
+                  aria-label="Support illustration"
+                />
+              </div>
+            </LightThemeOnly>
 
             {/* Still have questions CTA */}
             <div className="flex flex-col items-start gap-2.5 sm:gap-3 pt-2">
@@ -97,10 +99,8 @@ export function FaqSection() {
               return (
                 <div
                   key={idx}
-                  className={`rounded-2xl border transition-all overflow-hidden ${
-                    isOpen
-                      ? "border-[#4096FF]/40 bg-white shadow-sm"
-                      : "border-[#EEEEEE] bg-white hover:border-neutral-300"
+                  className={`rounded-2xl transition-all overflow-hidden ${
+                    isOpen ? "bg-white shadow-sm" : "bg-white"
                   }`}
                 >
                   <button

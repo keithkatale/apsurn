@@ -17,7 +17,7 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const bodySchema = z.object({
-  plan: z.enum(["startup", "growth", "pro"]).optional(),
+  plan: z.enum(["startup", "growth"]).optional(),
   topup: z.enum(["credits_500", "credits_2000"]).optional(),
   trial: z.boolean().optional(),
 });

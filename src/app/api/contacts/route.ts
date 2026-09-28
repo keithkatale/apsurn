@@ -78,3 +78,110 @@ export async function PATCH(request: NextRequest) {
 
   return NextResponse.json(result);
 }
+
+const createSchema = z.object({
+  fullName: z.string().trim().min(1).max(200),
+  email: z.string().trim().email().max(200),
+  companyName: z.string().trim().min(1).max(200),
+  title: z.string().trim().max(200).optional(),
+  domain: z.string().trim().max(200).optional(),
+});
+
+function hostFromEmail(email: string) {
+  const host = email.split("@")[1]?.trim().toLowerCase().replace(/^www\./, "") ?? "";
+  return host.includes(".") ? host : "";
+}
+
+export async function POST(request: NextRequest) {
+  let userId: string;
+  try {
+    userId = await getCurrentUserId();
+  } catch (error) {
+    if (error instanceof AuthenticationError) return NextResponse.json({ error: error.message }, { status: 401 });
+    throw error;
+  }
+
+  const parsed = createSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Name, email, and company are required" }, { status: 400 });
+  }
+
+  const db = createAdminClient();
+  const { data: company } = await db.from("companies").select("id").eq("user_id", userId).maybeSingle();
+  if (!company) return NextResponse.json({ error: "Set up your company first" }, { status: 400 });
+
+  const email = parsed.data.email.toLowerCase();
+  const domain = (parsed.data.domain || hostFromEmail(email) || "manual.local")
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .split("/")[0]
+    .toLowerCase();
+
+  const { data: existingCompany } = await db
+    .from("prospect_companies")
+    .select("id, name, domain")
+    .eq("user_id", userId)
+    .eq("domain", domain)
+    .is("archived_at", null)
+    .limit(1)
+    .maybeSingle();
+
+  let prospect = existingCompany;
+  if (!prospect) {
+    const { data: created, error } = await db
+      .from("prospect_companies")
+      .insert({
+        user_id: userId,
+        company_id: company.id,
+        name: parsed.data.companyName,
+        domain,
+        website_url: domain === "manual.local" ? null : `https://${domain}`,
+        source: "manual",
+        status: "new",
+      })
+      .select("id, name, domain")
+      .single();
+    if (error || !created) return NextResponse.json({ error: error?.message ?? "Could not save company" }, { status: 500 });
+    prospect = created;
+  }
+
+  const { data: existingContact } = await db
+    .from("contacts")
+    .select("id, full_name, title, email, email_status, linkedin_url")
+    .eq("prospect_company_id", prospect.id)
+    .eq("email", email)
+    .is("archived_at", null)
+    .maybeSingle();
+
+  let contact = existingContact;
+  if (!contact) {
+    const { data: created, error } = await db
+      .from("contacts")
+      .insert({
+        prospect_company_id: prospect.id,
+        full_name: parsed.data.fullName,
+        title: parsed.data.title || null,
+        email,
+        email_status: "unverified",
+        source: "manual",
+        contact_origin: "manual",
+      })
+      .select("id, full_name, title, email, email_status, linkedin_url")
+      .single();
+    if (error || !created) return NextResponse.json({ error: error?.message ?? "Could not save contact" }, { status: 500 });
+    contact = created;
+  }
+
+  return NextResponse.json({
+    contact: {
+      id: contact.id,
+      fullName: contact.full_name,
+      title: contact.title,
+      email: contact.email,
+      emailStatus: contact.email_status ?? "unverified",
+      linkedinUrl: contact.linkedin_url ?? null,
+      companyName: prospect.name,
+      companyDomain: prospect.domain,
+    },
+  });
+}

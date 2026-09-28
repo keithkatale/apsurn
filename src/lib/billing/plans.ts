@@ -4,6 +4,9 @@
  */
 
 export type PlanKey = "startup" | "growth" | "pro";
+
+/** Plans a new customer can start. Pro stays in the catalog for existing subscriptions. */
+export const OFFERED_PLAN_KEYS = ["growth", "startup"] as const satisfies readonly PlanKey[];
 export type TopupKey = "credits_500" | "credits_2000";
 
 export type PlanDefinition = {
@@ -24,6 +27,20 @@ export type TopupDefinition = {
   credits: number;
   productId: { test: string; live: string };
 };
+
+/** Marketing-only. Enterprise is scoped on a call and is not a checkout product. */
+export const ENTERPRISE_PLAN = {
+  name: "Enterprise",
+  priceUsd: 833,
+  description: "For larger outbound teams. We scope the rollout on a call before anything starts.",
+  features: [
+    "Custom credit volume",
+    "Everything in Growth",
+    "Shared team rollout",
+    "Starts with a call",
+  ],
+  bookingUrl: "https://cal.com/keith-katale/30min",
+} as const;
 
 export const TRIAL_DAYS = 7;
 /** Paid trial amount charged up front (Dodo trial_amount, USD). */

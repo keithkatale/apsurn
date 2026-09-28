@@ -18,12 +18,14 @@ export function ContactsTable({
   onSelectedChange,
   onOpenProfile,
   readOnly = false,
+  maskEmails = false,
 }: {
   prospects: ProspectRow[];
   selected: Set<string>;
   onSelectedChange: (next: Set<string>) => void;
   onOpenProfile?: (row: FlatRow) => void;
   readOnly?: boolean;
+  maskEmails?: boolean;
 }) {
   const rows = useMemo<FlatRow[]>(
     () =>
@@ -144,7 +146,11 @@ export function ContactsTable({
                     </span>
                   </td>
                   <td className="max-w-[200px] truncate px-3 py-3 align-middle text-neutral-600">
-                    {contact.email ? (
+                    {maskEmails ? (
+                      <span className="inline-block select-none blur-[5px]" aria-hidden>
+                        {contact.email || "name@company.com"}
+                      </span>
+                    ) : contact.email ? (
                       <span>
                         {contact.email}
                         {contact.email_status !== "unverified" && (

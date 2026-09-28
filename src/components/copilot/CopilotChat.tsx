@@ -5,11 +5,10 @@ import { ArrowRight } from "lucide-react";
 import type { CopilotArtifact } from "@/lib/agents/types";
 import { AgentInspector } from "./AgentInspector";
 import { ArtifactSurface } from "./artifacts/ArtifactSurface";
-import { ArtifactCard } from "./ArtifactCard";
 import { CopilotMarkdown } from "./CopilotMarkdown";
-import { CopilotReasoning } from "./CopilotReasoning";
 import { Composer } from "./Composer";
-import { ToolActivity } from "./ToolActivity";
+import { CopilotTurnProgress } from "./CopilotTurnProgress";
+import { isToolTreeRunning } from "./CopilotThought";
 import { findTool, type ToolCall, type UIMessage } from "./types";
 
 interface HistoryRow {
@@ -407,31 +406,16 @@ function CopilotChatSession({
                 }
                 return (
                   <div key={m.id} className="space-y-2">
-                    {m.reasoning ? <CopilotReasoning text={m.reasoning} /> : null}
-                    {m.tools?.map((tool) => (
-                      <div key={tool.id} className="space-y-2">
-                        <ToolActivity
-                          name={tool.name}
-                          status={tool.status}
-                          agent={tool.agent}
-                          selected={selectedId === tool.id}
-                          onSelect={() => setSelectedId(tool.id)}
-                        />
-                        {tool.reasoning ? <CopilotReasoning text={tool.reasoning} /> : null}
-                        {tool.children?.map((child) => (
-                          <div key={child.id} className="pl-3">
-                            <ToolActivity
-                              name={child.name}
-                              status={child.status}
-                              agent={child.agent}
-                              selected={selectedId === child.id}
-                              onSelect={() => setSelectedId(child.id)}
-                            />
-                          </div>
-                        ))}
-                        <ArtifactCard tool={tool} />
-                      </div>
-                    ))}
+                    {m.reasoning || (m.tools?.length ?? 0) > 0 ? (
+                      <CopilotTurnProgress
+                        reasoning={m.reasoning}
+                        tools={m.tools}
+                        working={false}
+                        historical
+                        selectedId={selectedId}
+                        onSelect={setSelectedId}
+                      />
+                    ) : null}
                     {m.content ? <CopilotMarkdown content={m.content} /> : null}
                     {m.artifacts?.map((artifact) => (
                       <ArtifactSurface
@@ -455,44 +439,20 @@ function CopilotChatSession({
                 );
               })}
 
-              {liveReasoning || reasoningStreaming ? (
-                <CopilotReasoning text={liveReasoning} isStreaming={reasoningStreaming} />
+              {sending || typing || liveReasoning || reasoningStreaming || activeTools.length > 0 ? (
+                <CopilotTurnProgress
+                  reasoning={liveReasoning}
+                  tools={activeTools}
+                  working={
+                    !error &&
+                    (typing || sending || reasoningStreaming || isToolTreeRunning(activeTools)) &&
+                    streamingText === null
+                  }
+                  error={Boolean(error)}
+                  selectedId={selectedId}
+                  onSelect={setSelectedId}
+                />
               ) : null}
-
-              {activeTools.map((tool) => (
-                <div key={tool.id} className="space-y-2">
-                  <ToolActivity
-                    name={tool.name}
-                    status={tool.status}
-                    agent={tool.agent}
-                    selected={selectedId === tool.id}
-                    onSelect={() => setSelectedId(tool.id)}
-                  />
-                  {tool.reasoning ? (
-                    <CopilotReasoning text={tool.reasoning} isStreaming={tool.status === "running"} />
-                  ) : null}
-                  {tool.children?.map((child) => (
-                    <div key={child.id} className="pl-3">
-                      <ToolActivity
-                        name={child.name}
-                        status={child.status}
-                        agent={child.agent}
-                        selected={selectedId === child.id}
-                        onSelect={() => setSelectedId(child.id)}
-                      />
-                    </div>
-                  ))}
-                  <ArtifactCard tool={tool} />
-                </div>
-              ))}
-
-              {typing && streamingText === null && !liveReasoning && !reasoningStreaming && (
-                <div className="copilot-typing" aria-label="Copilot is typing">
-                  <span />
-                  <span />
-                  <span />
-                </div>
-              )}
 
               {liveArtifacts.map((artifact) => (
                 <ArtifactSurface

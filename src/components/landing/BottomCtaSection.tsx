@@ -9,7 +9,7 @@ export function BottomCtaSection() {
   return (
     <section id="cta" className="relative pt-12 sm:pt-16 lg:pt-20 pb-0 overflow-hidden bg-white">
       <div className="mx-auto max-w-[1300px] px-4 sm:px-6 lg:px-8">
-        <div className="relative rounded-[28px] sm:rounded-[40px] overflow-hidden bg-gradient-to-b from-white from-[45%] to-[#CFE2FC] border border-[#E8EFFB] pt-12 sm:pt-16 lg:pt-20 px-4 sm:px-8 pb-0 shadow-[0px_16px_50px_0px_rgba(67,121,238,0.12)]">
+        <div className="landing-cta-frame relative overflow-hidden rounded-[28px] px-4 pb-0 pt-12 shadow-[0px_16px_50px_0px_rgba(67,121,238,0.12)] sm:rounded-[40px] sm:px-8 sm:pt-16 lg:pt-20">
           <div
             className="absolute inset-0 pointer-events-none opacity-20 sm:opacity-25 bg-[radial-gradient(#000000_0.85px,transparent_0.85px)] [background-size:18px_18px] sm:[background-size:20px_20px]"
           />
@@ -48,14 +48,14 @@ export function BottomCtaSection() {
               </ThreeDButton>
               <Link
                 href="#pricing"
-                className="inline-flex h-11 w-full sm:w-auto items-center justify-center rounded-xl border border-[#E6E6E6] bg-white px-6 text-sm font-medium text-black shadow-[0px_6px_10px_0px_rgba(0,0,0,0.05)] transition-all hover:bg-neutral-50 active:bg-neutral-100"
+                className="landing-outline-btn inline-flex h-11 w-full items-center justify-center rounded-xl border border-[#E6E6E6] bg-white px-6 text-sm font-medium text-black shadow-[0px_6px_10px_0px_rgba(0,0,0,0.05)] transition-all hover:bg-neutral-50 active:bg-neutral-100 sm:w-auto"
               >
                 See our plans
               </Link>
             </div>
 
-            <div className="relative mt-8 sm:mt-12 w-full max-w-[885px] rounded-t-[20px] sm:rounded-t-[32px] bg-[#E6E6E6] p-2 sm:p-3 pb-0 border-t-2 border-x-2 border-white shadow-[0px_8px_30px_0px_rgba(0,0,0,0.1)] overflow-hidden">
-              <div className="relative aspect-[16/7] overflow-hidden rounded-t-[14px] sm:rounded-t-[22px] border-t-2 border-x-2 border-white bg-white">
+            <div className="relative mt-8 sm:mt-12 w-full max-w-[885px] rounded-t-[20px] sm:rounded-t-[32px] bg-[#E6E6E6] p-2 sm:p-3 pb-0 shadow-[0px_8px_30px_0px_rgba(0,0,0,0.1)] overflow-hidden">
+              <div className="relative aspect-[16/7] overflow-hidden rounded-t-[14px] sm:rounded-t-[22px] bg-white">
                 <Image
                   src="/landing/dashboard.png"
                   alt="Apsurn campaign workspace"

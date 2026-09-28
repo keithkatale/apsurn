@@ -1,6 +1,6 @@
 "use client";
 
-import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
+import { CopilotThought, reasoningToSteps } from "./CopilotThought";
 
 export function CopilotReasoning({
   text,
@@ -12,9 +12,10 @@ export function CopilotReasoning({
   if (!text.trim() && !isStreaming) return null;
 
   return (
-    <Reasoning className="w-full" isStreaming={isStreaming} defaultOpen={isStreaming}>
-      <ReasoningTrigger />
-      <ReasoningContent>{text || " "}</ReasoningContent>
-    </Reasoning>
+    <CopilotThought
+      working={isStreaming}
+      steps={reasoningToSteps(text)}
+      historical={!isStreaming}
+    />
   );
 }

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Check, ChevronDown, Loader2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Check, ChevronDown, Loader2, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Pencil, Trash2 } from "lucide-react";
 import { CampaignIcon } from "@/components/campaigns/CampaignIcon";
 import { CompanyFavicon } from "@/components/prospects/CompanyFavicon";
 import { ContactAvatar } from "@/components/prospects/ContactAvatar";
@@ -14,6 +15,7 @@ import { PricingCardShell } from "@/components/ui/pricing-card-shell";
 import { canvasVisibleSteps } from "@/lib/campaigns/sequence-steps";
 import { cn } from "@/lib/cn";
 import { htmlToPlain } from "@/lib/outreach/email-html";
+import { tokenizeLeadMentions } from "@/lib/outreach/merge-fields";
 import type { PlanKey } from "@/lib/billing/plans";
 import { notifyCreditsChanged } from "@/components/billing/CreditsBalance";
 
@@ -57,6 +59,88 @@ export type CampaignWorkspaceItem = {
   contactIds: string[];
   steps: CampaignEmailStep[];
 };
+
+function CampaignRowMenu({ onRename, onDelete }: { onRename: () => void; onDelete: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  function openMenu() {
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const menuHeight = 84;
+    const below = rect.bottom + 4;
+    const top = below + menuHeight > window.innerHeight ? Math.max(8, rect.top - menuHeight - 4) : below;
+    setPos({ top, left: Math.max(8, rect.right - 148) });
+    setOpen(true);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-label="Campaign actions"
+        data-open={open}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (open) setOpen(false);
+          else openMenu();
+        }}
+        className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-neutral-400 hover:bg-white hover:text-neutral-700 data-[open=true]:bg-white data-[open=true]:text-neutral-700"
+      >
+        <MoreHorizontal className="size-3.5" />
+      </button>
+      {open &&
+        pos &&
+        createPortal(
+          <>
+            <div className="fixed inset-0 z-40" onClick={(event) => { event.stopPropagation(); setOpen(false); }} />
+            <div
+              onClick={(event) => event.stopPropagation()}
+              style={{ top: pos.top, left: pos.left }}
+              className="fixed z-50 flex w-36 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white py-1 shadow-lg"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  onRename();
+                }}
+                className="flex items-center gap-2 px-3 py-2 text-left text-[13px] text-neutral-700 hover:bg-neutral-50"
+              >
+                <Pencil className="size-3.5" />
+                Edit name
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  onDelete();
+                }}
+                className="flex items-center gap-2 px-3 py-2 text-left text-[13px] text-red-600 hover:bg-neutral-50"
+              >
+                <Trash2 className="size-3.5" />
+                Delete
+              </button>
+            </div>
+          </>,
+          document.body,
+        )}
+    </>
+  );
+}
 
 function formatVolume(n: number | null) {
   if (n == null) return null;
@@ -124,7 +208,7 @@ export function CampaignWorkspace({
 }) {
   const router = useRouter();
   const [railOpen, setRailOpen] = useState(true);
-  const [companyOpen, setCompanyOpen] = useState(true);
+  const [companyOpen, setCompanyOpen] = useState(false);
   const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? "");
   const [leadId, setLeadId] = useState<string | null>(null);
   const [scan, setScan] = useState<ScanState | null>(null);
@@ -136,6 +220,25 @@ export function CampaignWorkspace({
   const [sendMessage, setSendMessage] = useState<string | null>(null);
   const [sendAllMessage, setSendAllMessage] = useState<string | null>(null);
   const [newCampaignOpen, setNewCampaignOpen] = useState(false);
+  const [items, setItems] = useState(campaigns);
+  const [leadMap, setLeadMap] = useState(leadsById);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [contactQuery, setContactQuery] = useState("");
+  const [pickedIds, setPickedIds] = useState<Set<string>>(new Set());
+  const [manualName, setManualName] = useState("");
+  const [manualEmail, setManualEmail] = useState("");
+  const [manualCompany, setManualCompany] = useState("");
+  const [manualTitle, setManualTitle] = useState("");
+  const [addBusy, setAddBusy] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  useEffect(() => {
+    setItems(campaigns);
+  }, [campaigns]);
+  useEffect(() => {
+    setLeadMap(leadsById);
+  }, [leadsById]);
   const [trialOpen, setTrialOpen] = useState(false);
   const [trialPlan, setTrialPlan] = useState<PlanKey>("startup");
   const [billingActive, setBillingActive] = useState(false);
@@ -163,12 +266,12 @@ export function CampaignWorkspace({
     });
   }, [campaigns]);
 
-  const campaign = campaigns.find((item) => item.id === campaignId) ?? campaigns[0] ?? null;
-  const availableLeadCount = Object.keys(leadsById).length;
+  const campaign = items.find((item) => item.id === campaignId) ?? items[0] ?? null;
+  const availableLeadCount = Object.keys(leadMap).length;
   const campaignLeads = useMemo(() => {
     if (!campaign) return [];
-    return campaign.contactIds.map((id) => leadsById[id]).filter(Boolean);
-  }, [campaign, leadsById]);
+    return campaign.contactIds.map((id) => leadMap[id]).filter(Boolean);
+  }, [campaign, leadMap]);
   const lead = campaignLeads.find((item) => item.id === leadId) ?? null;
   const generating = Boolean(scan && scan.phase === "scanning");
   const campaignSteps = campaign ? (stepsByCampaign[campaign.id] ?? canvasVisibleSteps(campaign.steps)) : [];
@@ -199,7 +302,7 @@ export function CampaignWorkspace({
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const trial = params.get("trial");
-    if (trial === "startup" || trial === "growth" || trial === "pro") {
+    if (trial === "startup" || trial === "growth") {
       setTrialPlan(trial);
       if (!billingActive) setTrialOpen(true);
     }
@@ -256,7 +359,7 @@ export function CampaignWorkspace({
     }
     setLeadId((current) => {
       if (current && campaignLeads.some((person) => person.id === current)) return current;
-      return campaignLeads[0]?.id ?? null;
+      return null;
     });
   }, [campaign, leadIdsKey, campaignLeads]);
 
@@ -280,17 +383,31 @@ export function CampaignWorkspace({
       } else {
         notifyCreditsChanged();
       }
-      const next = { subject: String(data.subject ?? ""), body: String(data.body ?? "") };
+      const person = leadMap[contactId];
+      const next = {
+        subject: tokenizeLeadMentions(String(data.subject ?? ""), person),
+        body: tokenizeLeadMentions(htmlToPlain(String(data.body ?? "")), person),
+      };
       const saveKey = data.stepId ? draftKey(contactId, sequenceId, data.stepId) : key;
       setDrafts((prev) => ({ ...prev, [saveKey]: next, [key]: next }));
-      setLeadId((current) => {
-        if (current === contactId && (!resolvedStepId || resolvedStepId === openerStepId)) {
-          setSubject(next.subject);
-          setBody(next.body);
-          setSendMessage(null);
-        }
-        return current;
-      });
+      const targetStepId = (typeof data.stepId === "string" ? data.stepId : resolvedStepId) ?? openerStepId;
+      if (targetStepId && targetStepId !== openerStepId) {
+        setStepsByCampaign((prev) => ({
+          ...prev,
+          [sequenceId]: (prev[sequenceId] ?? []).map((step) =>
+            step.id === targetStepId ? { ...step, subject: next.subject, body: next.body } : step,
+          ),
+        }));
+        void fetch(`/api/campaigns/${sequenceId}/steps/${targetStepId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subjectTemplate: next.subject, bodyTemplate: next.body }),
+        });
+      } else {
+        setSubject(next.subject);
+        setBody(next.body);
+        setSendMessage(null);
+      }
     } catch (error) {
       setLeadId((current) => {
         if (current === contactId && (!resolvedStepId || resolvedStepId === openerStepId)) {
@@ -308,65 +425,47 @@ export function CampaignWorkspace({
     }
   }
 
-  useEffect(() => {
-    if (!campaign || !openerStepId) return;
-    const missing = campaignLeads.filter((person) => {
-      const key = draftKey(person.id, campaign.id, openerStepId);
-      const legacy = draftKey(person.id, campaign.id);
-      return !drafts[key] && !drafts[legacy] && !inFlight.current.has(key);
-    });
-    if (missing.length === 0) return;
-    let cancelled = false;
-    void (async () => {
-      const queue = [...missing];
-      async function worker() {
-        while (!cancelled && queue.length > 0 && campaign) {
-          const person = queue.shift();
-          if (!person) break;
-          await generateDraft(person.id, campaign.id, false, openerStepId);
-        }
-      }
-      await Promise.all([worker(), worker()]);
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- generate missing opener drafts when the campaign's people change
-  }, [campaign?.id, leadIdsKey, openerStepId]);
+  const loadedTemplate = useRef<{ id: string; subject: string; body: string } | null>(null);
 
   useEffect(() => {
-    if (!lead || !campaign) {
+    if (!campaign || !openerStepId) {
+      loadedTemplate.current = null;
       setSubject("");
       setBody("");
       return;
     }
-    const cached = lookupDraft(drafts, lead.id, campaign.id, openerStepId);
-    if (cached) {
-      setSubject(cached.subject);
-      setBody(cached.body);
-    } else if (!generatingKeys.has(draftKey(lead.id, campaign.id, openerStepId))) {
-      setSubject("");
-      setBody("");
-    }
-  }, [lead?.id, campaign?.id, openerStepId]);
+    const opener = (stepsByCampaign[campaign.id] ?? campaign.steps).find((step) => step.id === openerStepId);
+    const nextSubject = opener?.subject ?? "";
+    const nextBody = opener?.body ?? "";
+    loadedTemplate.current = { id: `${campaign.id}:${openerStepId}`, subject: nextSubject, body: nextBody };
+    setSubject(nextSubject);
+    setBody(nextBody);
+    // Load the campaign template when the campaign or opener step changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaign?.id, openerStepId]);
 
   useEffect(() => {
-    if (!lead || !campaign || selectedDrafting) return;
-    const key = draftKey(lead.id, campaign.id, openerStepId);
-    const cached = lookupDraft(draftsRef.current, lead.id, campaign.id, openerStepId);
-    if (!subject.trim() || !body.trim()) return;
-    if (cached && cached.subject === subject && cached.body === body) return;
+    if (!campaign || !openerStepId) return;
+    const key = `${campaign.id}:${openerStepId}`;
+    const loaded = loadedTemplate.current;
+    if (!loaded || loaded.id !== key) return;
+    if (subject === loaded.subject && body === loaded.body) return;
     const timeout = window.setTimeout(() => {
-      const next = { subject, body };
-      setDrafts((prev) => ({ ...prev, [key]: next }));
-      void fetch("/api/outreach/draft", {
+      loadedTemplate.current = { id: key, subject, body };
+      setStepsByCampaign((prev) => ({
+        ...prev,
+        [campaign.id]: (prev[campaign.id] ?? []).map((step) =>
+          step.id === openerStepId ? { ...step, subject, body } : step,
+        ),
+      }));
+      void fetch(`/api/campaigns/${campaign.id}/steps/${openerStepId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contactId: lead.id, campaignId: campaign.id, stepId: openerStepId ?? undefined, subject, body }),
+        body: JSON.stringify({ subjectTemplate: subject, bodyTemplate: body }),
       });
-    }, 700);
+    }, 500);
     return () => window.clearTimeout(timeout);
-  }, [subject, body, lead?.id, campaign?.id, selectedDrafting, openerStepId]);
+  }, [subject, body, campaign, openerStepId]);
 
   async function generateFromBlueprint() {
     if (!hasBlueprint) {
@@ -376,7 +475,7 @@ export function CampaignWorkspace({
     setGenerateError(null);
     setScan(scanning(["Reading your company blueprint…"], 18));
     try {
-      const path = campaigns.length > 0 ? "/api/onboarding/campaigns?add=1" : "/api/onboarding/campaigns";
+      const path = items.length > 0 ? "/api/onboarding/campaigns?add=1" : "/api/onboarding/campaigns";
       const res = await fetch(path, { method: "POST" });
       if (!res.ok || !res.body) {
         const payload = await res.json().catch(() => ({}));
@@ -421,39 +520,31 @@ export function CampaignWorkspace({
     }
   }
 
-  function rememberDraft(nextSubject: string, nextBody: string) {
-    if (!lead || !campaign) return;
-    const key = draftKey(lead.id, campaign.id, openerStepId);
-    setDrafts((prev) => ({ ...prev, [key]: { subject: nextSubject, body: nextBody } }));
-  }
-
   function saveStepDraft(stepId: string, nextSubject: string, nextBody: string) {
-    if (!lead || !campaign) return;
-    const key = draftKey(lead.id, campaign.id, stepId);
-    setDrafts((prev) => ({ ...prev, [key]: { subject: nextSubject, body: nextBody } }));
-    void fetch("/api/outreach/draft", {
+    if (!campaign) return;
+    if (stepId === openerStepId) {
+      setSubject(nextSubject);
+      setBody(nextBody);
+      return;
+    }
+    setStepsByCampaign((prev) => ({
+      ...prev,
+      [campaign.id]: (prev[campaign.id] ?? []).map((step) =>
+        step.id === stepId ? { ...step, subject: nextSubject, body: nextBody } : step,
+      ),
+    }));
+    void fetch(`/api/campaigns/${campaign.id}/steps/${stepId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contactId: lead.id,
-        campaignId: campaign.id,
-        stepId,
-        subject: nextSubject,
-        body: nextBody,
-      }),
+      body: JSON.stringify({ subjectTemplate: nextSubject, bodyTemplate: nextBody }),
     });
   }
 
+  const openerTemplateReady = Boolean(subject.trim() && htmlToPlain(body));
   const readyToSendCount = useMemo(() => {
-    if (!campaign || !openerStepId) return 0;
-    let count = 0;
-    for (const person of campaignLeads) {
-      if (!person.email) continue;
-      const draft = lookupDraft(drafts, person.id, campaign.id, openerStepId);
-      if (draft?.subject?.trim() && draft?.body?.trim()) count += 1;
-    }
-    return count;
-  }, [campaign, campaignLeads, drafts, openerStepId]);
+    if (!openerTemplateReady) return 0;
+    return campaignLeads.filter((person) => person.email).length;
+  }, [campaignLeads, openerTemplateReady]);
 
   async function sendEmail() {
     if (!billingActive) {
@@ -518,15 +609,17 @@ export function CampaignWorkspace({
       return;
     }
 
-    const queue = campaignLeads.flatMap((person) => {
-      if (!person.email) return [];
-      const draft = lookupDraft(drafts, person.id, campaign.id, openerStepId);
-      if (!draft?.subject?.trim() || !draft?.body?.trim()) return [];
-      return [{ person, draft }];
-    });
+    const templateSubject = subject.trim();
+    const templateBody = body.trim();
+    if (!templateSubject || !htmlToPlain(templateBody)) {
+      setSendAllMessage("Write the campaign email first — it is sent to each lead with their details filled in.");
+      return;
+    }
+
+    const queue = campaignLeads.flatMap((person) => (person.email ? [{ person }] : []));
 
     if (queue.length === 0) {
-      setSendAllMessage("Generate emails first — nothing ready to send.");
+      setSendAllMessage("Add contacts with an email before sending.");
       return;
     }
 
@@ -542,8 +635,8 @@ export function CampaignWorkspace({
           body: JSON.stringify({
             contactId: item.person.id,
             campaignId: campaign.id,
-            subject: item.draft.subject.trim(),
-            body: item.draft.body.trim(),
+            subject: templateSubject,
+            body: templateBody,
           }),
         });
         const data = (await res.json().catch(() => null)) as { error?: string; code?: string } | null;
@@ -566,6 +659,128 @@ export function CampaignWorkspace({
       setSendAllMessage(error instanceof Error ? error.message : "Send all failed");
     } finally {
       setSendingAll(false);
+    }
+  }
+
+  const availableContacts = Object.values(leadMap).filter((person) => !campaign?.contactIds.includes(person.id));
+  const filteredContacts = useMemo(() => {
+    const query = contactQuery.trim().toLowerCase();
+    if (!query) return availableContacts;
+    return availableContacts.filter((person) =>
+      [person.fullName, person.email, person.title, person.companyName, person.companyDomain].some((value) =>
+        value?.toLowerCase().includes(query),
+      ),
+    );
+  }, [availableContacts, contactQuery]);
+
+  function enrollIds(sequenceId: string, contactIds: string[]) {
+    return fetch(`/api/sequences/${sequenceId}/enroll`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contactIds }),
+    });
+  }
+
+  function rememberEnrolled(sequenceId: string, people: CampaignLead[]) {
+    if (people.length === 0) return;
+    setLeadMap((prev) => {
+      const next = { ...prev };
+      for (const person of people) next[person.id] = person;
+      return next;
+    });
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === sequenceId
+          ? { ...item, contactIds: [...item.contactIds, ...people.map((person) => person.id).filter((id) => !item.contactIds.includes(id))] }
+          : item,
+      ),
+    );
+    setLeadId(people[0]?.id ?? null);
+  }
+
+  async function saveCampaignName(id: string) {
+    const name = renameDraft.trim();
+    setRenamingId(null);
+    if (!name) return;
+    const current = items.find((item) => item.id === id);
+    if (!current || current.name === name) return;
+    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, name } : item)));
+    const res = await fetch(`/api/sequences/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) {
+      setItems((prev) => prev.map((item) => (item.id === id ? { ...item, name: current.name } : item)));
+      return;
+    }
+    router.refresh();
+  }
+
+  async function deleteCampaign(id: string) {
+    const res = await fetch(`/api/sequences/${id}`, { method: "DELETE" });
+    if (!res.ok) return;
+    const remaining = items.filter((item) => item.id !== id);
+    setItems(remaining);
+    if (campaignId === id) setCampaignId(remaining[0]?.id ?? "");
+    router.refresh();
+  }
+
+  async function addPickedContacts() {
+    if (!campaign || pickedIds.size === 0) return;
+    setAddBusy(true);
+    setAddError(null);
+    try {
+      const ids = [...pickedIds];
+      const res = await enrollIds(campaign.id, ids);
+      const data = (await res.json().catch(() => null)) as { error?: string; enrolled?: number } | null;
+      if (!res.ok) throw new Error(data?.error || "Could not add contacts");
+      if (!data?.enrolled) throw new Error("Those contacts need an email before they can be added.");
+      rememberEnrolled(
+        campaign.id,
+        ids.map((id) => leadMap[id]).filter(Boolean),
+      );
+      setPickedIds(new Set());
+      setAddOpen(false);
+      router.refresh();
+    } catch (error) {
+      setAddError(error instanceof Error ? error.message : "Could not add contacts");
+    } finally {
+      setAddBusy(false);
+    }
+  }
+
+  async function addManualContact() {
+    if (!campaign) return;
+    setAddBusy(true);
+    setAddError(null);
+    try {
+      const res = await fetch("/api/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: manualName,
+          email: manualEmail,
+          companyName: manualCompany,
+          title: manualTitle || undefined,
+        }),
+      });
+      const data = (await res.json().catch(() => null)) as { error?: string; contact?: CampaignLead } | null;
+      if (!res.ok || !data?.contact) throw new Error(data?.error || "Could not save contact");
+      const enrolled = await enrollIds(campaign.id, [data.contact.id]);
+      const enrolledData = (await enrolled.json().catch(() => null)) as { error?: string } | null;
+      if (!enrolled.ok) throw new Error(enrolledData?.error || "Could not add contact to this campaign");
+      rememberEnrolled(campaign.id, [data.contact]);
+      setManualName("");
+      setManualEmail("");
+      setManualCompany("");
+      setManualTitle("");
+      setAddOpen(false);
+      router.refresh();
+    } catch (error) {
+      setAddError(error instanceof Error ? error.message : "Could not add contact");
+    } finally {
+      setAddBusy(false);
     }
   }
 
@@ -638,7 +853,7 @@ export function CampaignWorkspace({
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="flex shrink-0 items-center justify-between px-3 py-2.5">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
-                  Campaigns {campaigns.length ? `· ${campaigns.length}` : ""}
+                  Campaigns {items.length ? `· ${items.length}` : ""}
                 </p>
                 <button
                   type="button"
@@ -649,18 +864,25 @@ export function CampaignWorkspace({
                 </button>
               </div>
               <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-                {campaigns.length === 0 ? (
+                {items.length === 0 ? (
                   <p className="px-2 py-4 text-[12px] text-neutral-500">No campaigns yet. Create one to start outreach.</p>
                 ) : (
                   <ul className="flex flex-col gap-1.5">
-                    {campaigns.map((item) => {
+                    {items.map((item) => {
                       const selected = item.id === campaign?.id;
                       const volume = formatVolume(item.estimatedVolume);
+                      const editing = renamingId === item.id;
                       return (
                         <li key={item.id}>
-                          <button
-                            type="button"
-                            onClick={() => setCampaignId(item.id)}
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => {
+                              if (!editing) setCampaignId(item.id);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" && !editing) setCampaignId(item.id);
+                            }}
                             className={cn(
                               "flex w-full items-start gap-2.5 rounded-lg border px-2.5 py-2.5 text-left",
                               selected ? "border-[#4379EE] bg-[#E8F1FC]" : "border-transparent hover:bg-white",
@@ -674,20 +896,44 @@ export function CampaignWorkspace({
                             />
                             <span className="min-w-0 flex-1">
                               <span className="flex items-start justify-between gap-2">
-                                <span className={cn("text-[13px] leading-snug", selected ? "font-semibold text-[#4379EE]" : "font-semibold text-neutral-800")}>
-                                  {item.name}
-                                </span>
-                                <span className="shrink-0 text-[12px] text-neutral-400">
-                                  {volume ?? item.contactIds.length}
+                                {editing ? (
+                                  <input
+                                    autoFocus
+                                    value={renameDraft}
+                                    onChange={(event) => setRenameDraft(event.target.value)}
+                                    onClick={(event) => event.stopPropagation()}
+                                    onKeyDown={(event) => {
+                                      event.stopPropagation();
+                                      if (event.key === "Enter") void saveCampaignName(item.id);
+                                      if (event.key === "Escape") setRenamingId(null);
+                                    }}
+                                    onBlur={() => void saveCampaignName(item.id)}
+                                    className="min-w-0 flex-1 rounded-md border border-[#4379EE] bg-white px-1.5 py-0.5 text-[13px] font-semibold text-neutral-900 outline-none"
+                                  />
+                                ) : (
+                                  <span className={cn("text-[13px] leading-snug", selected ? "font-semibold text-[#4379EE]" : "font-semibold text-neutral-800")}>
+                                    {item.name}
+                                  </span>
+                                )}
+                                <span className="flex shrink-0 items-center gap-1">
+                                  <span className="text-[12px] text-neutral-400">{volume ?? item.contactIds.length}</span>
+                                  <CampaignRowMenu
+                                    onRename={() => {
+                                      setCampaignId(item.id);
+                                      setRenamingId(item.id);
+                                      setRenameDraft(item.name);
+                                    }}
+                                    onDelete={() => void deleteCampaign(item.id)}
+                                  />
                                 </span>
                               </span>
-                              {(item.description || item.pain) && (
+                              {(item.description || item.pain) && !editing && (
                                 <span className="mt-1 line-clamp-2 text-[12px] leading-snug text-neutral-500">
                                   {item.description || item.pain}
                                 </span>
                               )}
                             </span>
-                          </button>
+                          </div>
                         </li>
                       );
                     })}
@@ -704,7 +950,7 @@ export function CampaignWorkspace({
           <p className="shrink-0 border-b border-red-100 bg-red-50 px-4 py-2 text-sm text-red-700">{generateError}</p>
         )}
 
-        {campaigns.length === 0 ? (
+        {items.length === 0 ? (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
             <p className="text-base font-semibold text-neutral-900">Create a campaign to start outreach</p>
             <p className="max-w-sm text-sm text-neutral-500">
@@ -724,7 +970,7 @@ export function CampaignWorkspace({
                 <div className="min-w-0">
                   <h1 className="truncate text-[15px] font-semibold text-neutral-900">{campaign?.name ?? "Campaign"}</h1>
                   <p className="truncate text-[12px] text-neutral-500">
-                    {campaign?.description || campaign?.pain || "Pick a person to write this campaign’s email."}
+                    {campaign?.description || campaign?.pain || "One message for everyone. Fields fill in per lead."}
                   </p>
                 </div>
               </div>
@@ -762,7 +1008,7 @@ export function CampaignWorkspace({
                   <p
                     className={cn(
                       "max-w-xs text-right text-[11px]",
-                      /fail|error|required|nothing|Connect/i.test(sendAllMessage)
+                      /fail|error|required|nothing|Connect|Write the campaign/i.test(sendAllMessage)
                         ? "text-red-600"
                         : sendAllMessage.startsWith("Sent")
                           ? "text-emerald-600"
@@ -777,32 +1023,52 @@ export function CampaignWorkspace({
 
             <div className="campaign-canvas relative flex min-h-0 flex-1 gap-4 overflow-hidden p-6">
               <section className="relative z-10 flex h-full min-h-0 w-[320px] shrink-0 flex-col overflow-hidden rounded-lg border border-[#EEEEEE] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
-                <div className="shrink-0 border-b border-neutral-100 px-3 py-2.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[#4379EE]">People</p>
-                  <p className="text-[12px] text-neutral-500">{campaignLeads.length} in this campaign</p>
+                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-neutral-100 px-3 py-2.5">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[#4379EE]">People</p>
+                    <p className="text-[12px] text-neutral-500">{campaignLeads.length} in this campaign</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddError(null);
+                      setPickedIds(new Set());
+                      setContactQuery("");
+                      setAddOpen(true);
+                    }}
+                    className="rounded-full bg-neutral-100 px-2.5 py-1 text-[11px] font-semibold text-neutral-700 hover:bg-[#E8F1FC] hover:text-[#4379EE]"
+                  >
+                    Add
+                  </button>
                 </div>
                 <ul className="min-h-0 flex-1 overflow-y-auto p-2">
                   {campaignLeads.length === 0 && (
-                    <li className="px-2 py-6 text-center text-[12px] text-neutral-500">
-                      No people in this campaign yet.
+                    <li className="flex flex-col items-center gap-3 px-3 py-8 text-center">
+                      <p className="text-[12px] text-neutral-500">No people in this campaign yet.</p>
+                      <ThreeDButton
+                        type="button"
+                        variant="solid"
+                        size="sm"
+                        onClick={() => {
+                          setAddError(null);
+                          setPickedIds(new Set());
+                          setAddOpen(true);
+                        }}
+                      >
+                        Add Contacts
+                      </ThreeDButton>
                     </li>
                   )}
                   {campaignLeads.map((person) => {
                     const selected = person.id === lead?.id;
                     const key = campaign ? draftKey(person.id, campaign.id, openerStepId) : "";
-                    const ready = Boolean(lookupDraft(drafts, person.id, campaign?.id ?? "", openerStepId));
+                    const ready = openerTemplateReady && Boolean(person.email);
                     const writing = generatingKeys.has(key) || generatingKeys.has(draftKey(person.id, campaign?.id ?? ""));
                     return (
                       <li key={person.id}>
                         <button
                           type="button"
-                          onClick={() => {
-                            if (selected && campaign) {
-                              void generateDraft(person.id, campaign.id, true, openerStepId);
-                              return;
-                            }
-                            setLeadId(person.id);
-                          }}
+                          onClick={() => setLeadId(selected ? null : person.id)}
                           className={cn(
                             "mb-1 flex w-full items-start gap-2.5 rounded-lg px-2.5 py-3 text-left",
                             selected ? "bg-[#E8F1FC]" : "hover:bg-neutral-50",
@@ -836,13 +1102,127 @@ export function CampaignWorkspace({
               </section>
 
               <section className="relative z-10 min-h-0 min-w-0 flex-1 overflow-hidden">
-                {campaign && (
+                {campaign && addOpen ? (
+                  <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-[#EEEEEE] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+                    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3">
+                      <div>
+                        <p className="text-[13px] font-semibold text-neutral-900">Add contacts</p>
+                        <p className="text-[12px] text-neutral-500">Select people to receive this campaign’s message.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAddOpen(false)}
+                        className="text-[12px] font-semibold text-neutral-500 hover:text-neutral-800"
+                      >
+                        Back to sequence
+                      </button>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2 border-b border-neutral-100 px-4 py-2.5">
+                      <input
+                        value={contactQuery}
+                        onChange={(event) => setContactQuery(event.target.value)}
+                        placeholder="Search name, company, or email"
+                        className="input min-w-0 flex-1 py-2 text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => router.push("/dashboard/prospects?find=1")}
+                        className="shrink-0 rounded-full bg-[#4379EE] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#3567D6]"
+                      >
+                        Prospect for new leads
+                      </button>
+                    </div>
+                    <ul className="min-h-0 flex-1 overflow-y-auto p-2">
+                      {filteredContacts.length === 0 ? (
+                        <li className="px-3 py-10 text-center text-[13px] text-neutral-500">
+                          {availableContacts.length === 0
+                            ? "No other contacts yet. Prospect for new leads, or add someone below."
+                            : "No contacts match that search."}
+                        </li>
+                      ) : (
+                        filteredContacts.map((person) => {
+                          const checked = pickedIds.has(person.id);
+                          const blocked = !person.email;
+                          return (
+                            <li key={person.id}>
+                              <label
+                                className={cn(
+                                  "flex items-center gap-3 rounded-lg px-2 py-2",
+                                  blocked ? "opacity-50" : "cursor-pointer hover:bg-neutral-50",
+                                )}
+                              >
+                                <input
+                                  type="checkbox"
+                                  disabled={blocked || addBusy}
+                                  checked={checked}
+                                  onChange={() => {
+                                    setPickedIds((prev) => {
+                                      const next = new Set(prev);
+                                      if (next.has(person.id)) next.delete(person.id);
+                                      else next.add(person.id);
+                                      return next;
+                                    });
+                                  }}
+                                />
+                                <ContactAvatar
+                                  name={person.fullName}
+                                  linkedinUrl={person.linkedinUrl}
+                                  email={person.email}
+                                  className="size-9"
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-[13px] font-medium text-neutral-900">
+                                    {person.fullName || "Unknown"}
+                                  </span>
+                                  <span className="block truncate text-[12px] text-neutral-500">
+                                    {person.title || "Role unknown"}
+                                    {person.companyName ? ` · ${person.companyName}` : ""}
+                                    {" · "}
+                                    {person.email || "No email"}
+                                  </span>
+                                </span>
+                              </label>
+                            </li>
+                          );
+                        })
+                      )}
+                    </ul>
+                    <div className="shrink-0 border-t border-neutral-100 px-4 py-3">
+                      <div className="grid gap-2 sm:grid-cols-4">
+                        <input className="input py-2 text-sm" placeholder="Name" value={manualName} onChange={(event) => setManualName(event.target.value)} />
+                        <input className="input py-2 text-sm" placeholder="Email" value={manualEmail} onChange={(event) => setManualEmail(event.target.value)} />
+                        <input className="input py-2 text-sm" placeholder="Company" value={manualCompany} onChange={(event) => setManualCompany(event.target.value)} />
+                        <input className="input py-2 text-sm" placeholder="Title" value={manualTitle} onChange={(event) => setManualTitle(event.target.value)} />
+                      </div>
+                      {addError && <p className="mt-2 text-[12px] text-red-600">{addError}</p>}
+                      <div className="mt-3 flex items-center justify-end gap-2">
+                        <ThreeDButton
+                          type="button"
+                          variant="soft"
+                          size="sm"
+                          disabled={addBusy || !manualName.trim() || !manualEmail.trim() || !manualCompany.trim()}
+                          onClick={() => void addManualContact()}
+                        >
+                          Add manually
+                        </ThreeDButton>
+                        <ThreeDButton
+                          type="button"
+                          variant="solid"
+                          size="sm"
+                          disabled={addBusy || pickedIds.size === 0}
+                          onClick={() => void addPickedContacts()}
+                        >
+                          {addBusy ? "Adding…" : `Add${pickedIds.size ? ` ${pickedIds.size}` : ""}`}
+                        </ThreeDButton>
+                      </div>
+                    </div>
+                  </div>
+                ) : campaign ? (
                   <SequenceCanvas
                     campaignId={campaign.id}
                     steps={campaignSteps}
                     onStepsChange={(next) => setStepsByCampaign((prev) => ({ ...prev, [campaign.id]: next }))}
                     lead={lead}
-                    drafts={drafts}
                     generatingKeys={generatingKeys}
                     onGenerateStep={(stepId, regenerate) => {
                       if (lead && campaign) void generateDraft(lead.id, campaign.id, regenerate, stepId);
@@ -852,14 +1232,8 @@ export function CampaignWorkspace({
                     inboxEmail={inboxEmail}
                     subject={subject}
                     body={body}
-                    onSubjectChange={(value) => {
-                      setSubject(value);
-                      rememberDraft(value, body);
-                    }}
-                    onBodyChange={(html) => {
-                      setBody(html);
-                      rememberDraft(subject, html);
-                    }}
+                    onSubjectChange={setSubject}
+                    onBodyChange={setBody}
                     drafting={selectedDrafting}
                     onRegenerateOpener={() => {
                       if (lead && campaign) void generateDraft(lead.id, campaign.id, true, openerStepId);
@@ -870,7 +1244,7 @@ export function CampaignWorkspace({
                     billingActive={billingActive}
                     onStartTrial={() => setTrialOpen(true)}
                   />
-                )}
+                ) : null}
               </section>
             </div>
           </>

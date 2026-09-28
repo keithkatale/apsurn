@@ -1,4 +1,4 @@
-export interface ProspectCriteria { industries: string[]; companySizeRange?: string; geographies: string[]; personas?: string[]; minimumConfidence?: number; requiredContactChannels?: Array<"email" | "phone" | "profile">; }
+export interface ProspectCriteria { industries: string[]; companySizeRange?: string; geographies: string[]; personas?: string[]; minimumConfidence?: number; requiredContactChannels?: Array<"email" | "phone" | "profile">; preferYcLeads?: boolean; }
 export interface ContactEvidence { url: string; excerpt: string; observedAt: string; contentHash?: string; sourceType?: string; }
 export type ContactOrigin = "public" | "inferred" | "customer_confirmed";
 export type ContactStatus = "observed" | "verified" | "accept_all" | "risky" | "invalid" | "stale" | "suppressed";

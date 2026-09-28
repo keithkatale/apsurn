@@ -5,9 +5,9 @@
  *   STEP 1 — find companies matching the ICP.
  *   STEP 2 — find a decision maker at each of those companies.
  *
- * Both steps, plus resolving an email and persisting the lead, are answered
- * by Icypeas' contact database and our own MX/SMTP verifier — real lookups
- * against real records, never a model's guess. AI's role in prospecting ends
+ * Setup runs search the YC leads database first. Icypeas answers the same
+ * two steps only when those industries or tags are not in that database, or
+ * when the run is not a setup run. AI's role in prospecting ends
  * one step earlier than this file: generating the company blueprint and the
  * search criteria a user approves (src/app/api/onboarding/blueprint,
  * src/app/api/prospecting/plan). By the time a run starts, the criteria are
@@ -35,6 +35,7 @@ import {
 import { matchIcypeasIndustries } from "../icypeas-industries";
 import { normalizeDomain, resolveEmail } from "./shared";
 import { persistLead, type SaveLeadResult } from "./persist";
+import { searchYcLeads, ycLeadsConfigured, type YcLeadCompany } from "../yc-leads";
 import type { CandidateCompany, CandidateContact, ContactStatus, ExtractedPerson, ProspectCriteria, RunStatus } from "../types";
 import type { AgentRunContext } from "./context";
 
@@ -203,6 +204,153 @@ async function mapWithConcurrency<T>(items: T[], limit: number, shouldStop: () =
   await Promise.all(lanes);
 }
 
+function normalizedName(fullName: string) {
+  return fullName
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/** Setup runs: pull YC companies and their founders before Icypeas. Returns done when this pass should end the run. */
+async function saveYcLeadsFirst(input: {
+  ctx: AgentRunContext;
+  db: SupabaseClient;
+  runId: string;
+  criteria: ProspectCriteria;
+  targetCount: number;
+  emit: (event: AgentStreamEvent) => void;
+  checkStopped: () => Promise<string | null>;
+}): Promise<{ done: boolean; cancelled: boolean; stopReason: string }> {
+  const { ctx, db, runId, criteria, targetCount, emit, checkStopped } = input;
+  emit({ type: "tool_start", name: "find_companies", args: { source: "yc_leads", industries: criteria.industries } });
+
+  let matched = false;
+  let companies: YcLeadCompany[] = [];
+  try {
+    const result = await searchYcLeads(criteria, Math.max(targetCount * 2, targetCount));
+    matched = result.matched;
+    companies = result.companies.filter((company) => {
+      const domain = normalizeDomain(company.domain);
+      return Boolean(domain) && !ctx.savedDomains.has(domain!);
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "YC leads search failed";
+    emit({ type: "tool_end", name: "find_companies", result: { count: 0, fallback: "icypeas", error: message } });
+    return { done: false, cancelled: false, stopReason: message };
+  }
+
+  if (!matched || companies.length === 0) {
+    emit({
+      type: "tool_end",
+      name: "find_companies",
+      result: { count: 0, fallback: "icypeas", note: "No YC companies matched these industries or tags." },
+    });
+    return { done: false, cancelled: false, stopReason: "no companies matched the ICP" };
+  }
+
+  emit({
+    type: "tool_end",
+    name: "find_companies",
+    result: {
+      source: "yc_leads",
+      count: companies.length,
+      companies: companies.map((company) => ({ name: company.name, domain: company.domain })),
+    },
+  });
+
+  let saveChain: Promise<SaveLeadResult> = Promise.resolve({ saved: false, contactCount: 0 });
+  for (const company of companies) {
+    const stopped = await checkStopped();
+    if (stopped) return { done: true, cancelled: stopped === "cancelled", stopReason: stopped };
+    if (ctx.counters.companiesSaved >= targetCount) {
+      return { done: true, cancelled: false, stopReason: "target reached" };
+    }
+    const domain = normalizeDomain(company.domain);
+    const contact = company.contact;
+    if (!domain || !contact) {
+      ctx.counters.warnings += 1;
+      continue;
+    }
+
+    emit({
+      type: "tool_start",
+      name: "find_people",
+      args: { domain, source: "yc_leads" },
+    });
+    emit({
+      type: "tool_end",
+      name: "find_people",
+      result: { count: 1, people: [{ fullName: contact.fullName, title: contact.title }] },
+    });
+
+    const now = new Date().toISOString();
+    const candidateCompany: CandidateCompany = {
+      name: company.name,
+      domain,
+      websiteUrl: company.website || `https://${domain}`,
+      industry: company.industry ?? criteria.industries[0] ?? null,
+      employeeRange: company.teamSize ? `${company.teamSize} employees` : criteria.companySizeRange ?? null,
+      location: company.location ?? criteria.geographies[0] ?? null,
+      icpFitScore: 0.8,
+      dataConfidence: 0.8,
+      source: "yc_leads",
+      sourceRef: { discovery: "yc_leads", companyIndustry: company.industry },
+    };
+    const candidateContact: CandidateContact = {
+      fullName: contact.fullName,
+      normalizedName: normalizedName(contact.fullName),
+      title: contact.title,
+      location: company.location,
+      email: contact.email,
+      emailStatus: contact.email ? "risky" : "observed",
+      phone: null,
+      linkedinUrl: contact.linkedinUrl,
+      origin: "inferred",
+      confidence: contact.email ? 0.55 : 0.45,
+      evidence: [
+        {
+          url: contact.linkedinUrl || company.website || `https://${domain}`,
+          excerpt: `${contact.fullName}${contact.title ? ` — ${contact.title}` : ""}`,
+          observedAt: now,
+          sourceType: "yc_leads",
+        },
+      ],
+      source: "yc_leads",
+      sourceRef: { discovery: "yc_leads", emailConfidence: contact.email ? "pattern_firstname_at_domain" : null },
+    };
+
+    emit({ type: "tool_start", name: "save_lead", args: { company: { name: company.name, domain }, contacts: [{ fullName: contact.fullName }] } });
+    const result: SaveLeadResult = await (saveChain = saveChain.then(() =>
+      ctx.counters.companiesSaved >= targetCount
+        ? { saved: false, contactCount: 0, reason: "target already reached" }
+        : persistLead(ctx, candidateCompany, [candidateContact]),
+    ));
+    emit({ type: "tool_end", name: "save_lead", result });
+    if (result.saved) {
+      await db
+        .from("prospecting_runs")
+        .update({
+          processed_count: ctx.counters.companiesSaved,
+          contact_count: ctx.counters.contactsSaved,
+          stage: "enriching",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", runId);
+    }
+    if (result.reason === "credits_exhausted") {
+      return { done: true, cancelled: false, stopReason: "not enough credits to save more leads" };
+    }
+  }
+
+  return {
+    done: ctx.counters.companiesSaved >= targetCount,
+    cancelled: false,
+    stopReason: "target reached",
+  };
+}
+
 export async function runDirectoryAgent(opts: {
   db: SupabaseClient;
   runId: string;
@@ -263,7 +411,47 @@ export async function runDirectoryAgent(opts: {
     return null;
   };
 
+  if (criteria.preferYcLeads && ycLeadsConfigured()) {
+    const ycResult = await saveYcLeadsFirst({
+      ctx,
+      db,
+      runId,
+      criteria,
+      targetCount,
+      emit,
+      checkStopped,
+    });
+    if (ycResult.done) {
+      return {
+        found: ctx.counters.companiesSaved,
+        contactCount: ctx.counters.contactsSaved,
+        warnings: ctx.counters.warnings,
+        cancelled: ycResult.cancelled,
+        stopReason: ycResult.stopReason,
+      };
+    }
+  }
+
+  if (ctx.counters.companiesSaved >= targetCount) {
+    return {
+      found: ctx.counters.companiesSaved,
+      contactCount: ctx.counters.contactsSaved,
+      warnings: ctx.counters.warnings,
+      cancelled: false,
+      stopReason: "target reached",
+    };
+  }
+
   if (!isEmailFinderConfigured()) {
+    if (ctx.counters.companiesSaved > 0) {
+      return {
+        found: ctx.counters.companiesSaved,
+        contactCount: ctx.counters.contactsSaved,
+        warnings: ctx.counters.warnings,
+        cancelled: false,
+        stopReason: "target reached",
+      };
+    }
     throw new Error(
       "The contact database is not configured (ICYPEAS_API_KEY is unset). Finding companies and their decision makers has no other source now that AI is not used for this — set the key, or ask an admin to."
     );

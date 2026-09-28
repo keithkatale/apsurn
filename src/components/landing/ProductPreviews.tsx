@@ -12,7 +12,7 @@ import {
 
 export function BlueprintPreview() {
   return (
-    <div className="relative flex min-h-[280px] flex-col overflow-hidden rounded-xl border-2 border-white bg-[#EEEEEE] p-3 sm:min-h-[360px] sm:rounded-2xl sm:p-5">
+    <div className="relative flex min-h-[280px] flex-col overflow-hidden rounded-xl bg-[#EEEEEE] p-3 sm:min-h-[360px] sm:rounded-2xl sm:p-5">
       <div className="flex flex-1 flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-lg">
         <div className="flex items-center gap-2 border-b border-neutral-100 bg-[#F8F9FC] px-3 py-2.5 sm:px-4">
           <Globe className="size-3.5 text-[#4379EE]" />
@@ -78,7 +78,7 @@ export function ProspectsPreview() {
   ];
 
   return (
-    <div className="relative flex min-h-[280px] flex-col overflow-hidden rounded-xl border-2 border-white bg-[#EEEEEE] p-3 sm:min-h-[360px] sm:rounded-2xl sm:p-5">
+    <div className="relative flex min-h-[280px] flex-col overflow-hidden rounded-xl bg-[#EEEEEE] p-3 sm:min-h-[360px] sm:rounded-2xl sm:p-5">
       <div className="flex flex-1 flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-lg">
         <div className="flex items-center justify-between gap-2 border-b border-neutral-100 px-3 py-2.5 sm:px-4">
           <div className="flex items-center gap-2">
@@ -127,7 +127,7 @@ export function ProspectsPreview() {
 
 export function SequencePreview() {
   return (
-    <div className="relative flex min-h-[280px] flex-col overflow-hidden rounded-xl border-2 border-white bg-[#EEEEEE] p-3 sm:min-h-[360px] sm:rounded-2xl sm:p-5">
+    <div className="relative flex min-h-[280px] flex-col overflow-hidden rounded-xl bg-[#EEEEEE] p-3 sm:min-h-[360px] sm:rounded-2xl sm:p-5">
       <div className="flex flex-1 flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-lg">
         <div className="flex items-center justify-between border-b border-neutral-100 bg-[#F8F9FC] px-3 py-2.5 sm:px-4">
           <div className="flex min-w-0 items-center gap-2.5">

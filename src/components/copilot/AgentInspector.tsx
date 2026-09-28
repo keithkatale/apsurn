@@ -2,7 +2,7 @@ import { X } from "lucide-react";
 import { AGENT_DISPLAY_NAME, toolAgent, toolLabel } from "@/lib/agents/labels";
 import type { SpecialistId } from "@/lib/agents/types";
 import { ArtifactCard } from "./ArtifactCard";
-import { CopilotReasoning } from "./CopilotReasoning";
+import { agentThoughtSteps, CopilotThought } from "./CopilotThought";
 import { InspectorValue, inspectorArgEntries } from "./InspectorValue";
 import { ToolActivity } from "./ToolActivity";
 import type { ToolCall } from "./types";
@@ -92,7 +92,15 @@ export function AgentInspector({
           </section>
         ) : null}
 
-        {tool.reasoning ? <CopilotReasoning text={tool.reasoning} isStreaming={tool.status === "running"} /> : null}
+        {tool.reasoning || tool.status === "running" || (tool.children?.length ?? 0) > 0 ? (
+          <CopilotThought
+            working={tool.status === "running"}
+            label={agent === "Copilot" ? "Thinking…" : `${agent}…`}
+            doneLabel={agent === "Copilot" ? "Thought for" : agent}
+            steps={agentThoughtSteps(tool)}
+            historical={tool.status === "done"}
+          />
+        ) : null}
 
         {(tool.children?.length ?? 0) > 0 ? (
           <section>

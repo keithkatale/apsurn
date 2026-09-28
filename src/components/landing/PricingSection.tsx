@@ -3,15 +3,14 @@
 import Image from "next/image";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { trackGoal } from "@/lib/analytics/datafast";
-import { PLANS, TRIAL_DAYS, type PlanKey } from "@/lib/billing/plans";
+import { ENTERPRISE_PLAN, OFFERED_PLAN_KEYS, PLANS, TRIAL_DAYS, type PlanKey } from "@/lib/billing/plans";
 import { useState } from "react";
 
 export function PricingSection() {
   const [busyPlan, setBusyPlan] = useState<PlanKey | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const planOrder: PlanKey[] = ["growth", "startup", "pro"];
-  const plans = planOrder.map((key) => {
+  const plans = OFFERED_PLAN_KEYS.map((key) => {
     const plan = PLANS[key];
     return {
       key,
@@ -67,8 +66,7 @@ export function PricingSection() {
 
           <div className="max-w-[380px]">
             <p className="text-base sm:text-lg font-medium text-[#605f5f] tracking-[-0.04em] leading-[1.35] font-sans">
-              No free plan — every plan starts with a {TRIAL_DAYS}-day trial for outbound credits. Cancel anytime. Credit
-              top-ups are available inside the app after you subscribe.
+              No free plan. Startup and Growth start with a {TRIAL_DAYS}-day trial. Enterprise starts at ${ENTERPRISE_PLAN.priceUsd}/month after a call.
             </p>
           </div>
         </div>
@@ -81,8 +79,8 @@ export function PricingSection() {
               key={plan.name}
               className={`relative flex flex-col justify-between overflow-hidden rounded-[20px] p-4 transition-transform duration-200 ${
                 plan.highlight
-                  ? "bg-[#E8F1FC] border-2 border-[#CFE2FC] shadow-[0px_4px_20px_0px_rgba(0,0,0,0.15)] md:-translate-y-1"
-                  : "bg-gradient-to-t from-[#FAFAFA] to-[#F4F4F4] border border-[#E6E6E6]"
+                  ? "bg-[#E8F1FC] shadow-[0px_4px_20px_0px_rgba(0,0,0,0.15)] md:-translate-y-1"
+                  : "bg-gradient-to-t from-[#FAFAFA] to-[#F4F4F4]"
               }`}
             >
               <div
@@ -144,6 +142,60 @@ export function PricingSection() {
               </div>
             </div>
           ))}
+          <div className="relative flex flex-col justify-between overflow-hidden rounded-[20px] bg-gradient-to-t from-[#FAFAFA] to-[#F4F4F4] p-4">
+            <div className="absolute inset-x-0 bottom-0 h-[270px] pointer-events-none rounded-b-[20px] opacity-20 sm:opacity-25 bg-[radial-gradient(#000000_0.85px,transparent_0.85px)] [background-size:17px_17px]" />
+            <div className="relative z-10 flex flex-col gap-6 w-full">
+              <div className="flex flex-col justify-between gap-6 rounded-[12px] bg-white p-4 sm:p-5 shadow-[0px_1px_3px_rgba(0,0,0,0.03)] min-h-[175px]">
+                <div className="flex flex-col gap-3.5">
+                  <h3 className="text-[22px] font-semibold tracking-[-0.04em] text-black font-heading leading-tight">
+                    {ENTERPRISE_PLAN.name}
+                  </h3>
+                  <p className="text-[15px] sm:text-[16px] text-[#605f5f] tracking-[-0.03em] leading-snug font-sans">
+                    {ENTERPRISE_PLAN.description}
+                  </p>
+                </div>
+                <div className="flex flex-col gap-1 pt-1">
+                  <span className="text-[13px] font-medium tracking-[-0.03em] text-[#605f5f]">Starting at</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-[34px] sm:text-[36px] font-semibold tracking-[-0.04em] text-black font-sans leading-none">
+                      ${ENTERPRISE_PLAN.priceUsd}
+                    </span>
+                    <span className="text-[14px] text-[#605f5f] tracking-[-0.03em] font-sans">/month</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col gap-3 px-1 pb-2">
+                <ThreeDButton
+                  href={ENTERPRISE_PLAN.bookingUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  variant="soft"
+                  size="md"
+                  className="w-full h-11 rounded-[12px] text-[16px] font-medium tracking-[-0.03em]"
+                >
+                  Book a call
+                </ThreeDButton>
+                <div className="flex flex-col gap-2 p-2 pt-3">
+                  {ENTERPRISE_PLAN.features.map((feature) => (
+                    <div key={feature} className="flex items-center gap-2.5">
+                      <div className="size-[20px] shrink-0">
+                        <Image
+                          src="/landing/pricing-check.svg"
+                          alt=""
+                          width={20}
+                          height={20}
+                          className="size-[20px] object-contain"
+                        />
+                      </div>
+                      <span className="text-[15px] sm:text-[16px] text-[#605f5f] tracking-[-0.03em] leading-snug font-sans">
+                        {feature}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>

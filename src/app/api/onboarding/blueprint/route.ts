@@ -69,12 +69,16 @@ export async function POST(request: NextRequest) {
 
     if (blueprintError) throw new Error(blueprintError.message);
 
+    const companyName = blueprint.companyName ?? company.name ?? null;
     await supabase
       .from("companies")
-      .update({ status: "ready", name: blueprint.companyName ?? company.name })
+      .update({ status: "ready", name: companyName })
       .eq("id", company.id);
 
-    return NextResponse.json({ company, blueprint: savedBlueprint });
+    return NextResponse.json({
+      company: { ...company, status: "ready", name: companyName },
+      blueprint: savedBlueprint,
+    });
   } catch (err) {
     console.error("[onboarding/blueprint] failed", err);
     await supabase.from("companies").update({ status: "failed" }).eq("id", company.id);

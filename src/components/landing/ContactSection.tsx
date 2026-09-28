@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { Mail, MapPin } from "lucide-react";
+import { LightThemeOnly } from "@/components/landing/LightThemeOnly";
 import { landingVideoUrl } from "@/lib/landing/videos";
 
 export function ContactSection() {
@@ -93,20 +94,22 @@ export function ContactSection() {
               </p>
             </div>
 
-            <div className="relative size-36 sm:size-52">
-              <video
-                src={landingVideoUrl("contactform.mp4")}
-                autoPlay
-                loop
-                muted
-                playsInline
-                className="size-full object-contain"
-                aria-label="Contact illustration"
-              />
-            </div>
+            <LightThemeOnly>
+              <div className="relative size-36 sm:size-52">
+                <video
+                  src={landingVideoUrl("contactform.mp4")}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="size-full object-contain"
+                  aria-label="Contact illustration"
+                />
+              </div>
+            </LightThemeOnly>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-              <div className="flex flex-col gap-2 rounded-2xl border border-[#EEEEEE] bg-white p-4 shadow-xs sm:p-5">
+              <div className="flex flex-col gap-2 rounded-2xl bg-white p-4 shadow-xs sm:p-5">
                 <div className="flex size-8 items-center justify-center rounded-lg bg-blue-50 text-[#4096FF] sm:size-9">
                   <Mail className="size-4" />
                 </div>
@@ -116,7 +119,7 @@ export function ContactSection() {
                 <span className="text-sm font-bold text-neutral-900">hello@apsurn.com</span>
               </div>
 
-              <div className="flex flex-col gap-2 rounded-2xl border border-[#EEEEEE] bg-white p-4 shadow-xs sm:p-5">
+              <div className="flex flex-col gap-2 rounded-2xl bg-white p-4 shadow-xs sm:p-5">
                 <div className="flex size-8 items-center justify-center rounded-lg bg-blue-50 text-[#4096FF] sm:size-9">
                   <MapPin className="size-4" />
                 </div>
@@ -129,7 +132,7 @@ export function ContactSection() {
           </div>
 
           <div className="w-full lg:col-span-7">
-            <div className="overflow-hidden rounded-2xl border border-[#EEEEEE] bg-white shadow-sm sm:rounded-3xl">
+            <div className="overflow-hidden rounded-2xl bg-white shadow-sm sm:rounded-3xl">
               <div
                 id="my-cal-inline-30min"
                 className="h-[620px] w-full overflow-auto sm:h-[700px]"

@@ -1,0 +1,30 @@
+.copilot-thought {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45em;
+  color: var(--copilot-muted);
+}
+
+.copilot-thought__lattice {
+  margin-top: 0.12em;
+}
+
+.copilot-thought__lattice .lattice-loader__label,
+.copilot-thought__lattice .lattice-loader__timer,
+.copilot-thought__lattice .lattice-loader__sr {
+  display: none;
+}
+
+.copilot-thought__line {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.copilot-thought__line .thought-line__steps {
+  white-space: normal;
+}
+
+.copilot-thought__line .thought-line__step-text {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

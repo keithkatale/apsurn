@@ -21,6 +21,7 @@ const requestSchema = z.object({
     personas: z.array(z.string().trim().min(1).max(120)).max(10).default([]),
     minimumConfidence: z.number().min(0).max(1).default(0.5),
     requiredContactChannels: z.array(z.enum(["email", "phone", "profile"])).default(["email"]),
+    preferYcLeads: z.boolean().optional(),
   }),
 });
 
