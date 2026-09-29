@@ -1767,3 +1767,42 @@ html.dark .auth-divider span {
 html.dark .auth-skeleton {
   background: #1b1b1b;
 }
+
+@keyframes hero-film-unmute-pulse {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.55);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.08);
+    box-shadow: 0 0 0 16px rgba(255, 255, 255, 0);
+  }
+}
+
+.hero-film-unmute,
+html.dark .hero-film-unmute {
+  background: #ffffff;
+  color: #111111;
+  animation: hero-film-unmute-pulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-film-unmute,
+  html.dark .hero-film-unmute {
+    animation: none;
+    transform: translate(-50%, -50%);
+  }
+}
+
+.hero-film-progress,
+html.dark .hero-film-progress {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.hero-film-progress > span,
+html.dark .hero-film-progress > span {
+  display: block;
+  height: 100%;
+  background: #ffffff;
+}
