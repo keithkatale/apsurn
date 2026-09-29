@@ -37,7 +37,7 @@ export function CreditTopupPanel({ className }: { className?: string }) {
     <div className={className}>
       <p className="text-[13px] font-semibold text-neutral-900">Credit top-ups</p>
       <p className="mt-1 text-[12px] text-neutral-500">
-        Extra credits for heavy months. Available only with an active plan or trial.
+        Extra credits for heavy months. Available once a card is saved on your plan.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         {(Object.keys(TOPUPS) as TopupKey[]).map((key) => {

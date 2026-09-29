@@ -186,7 +186,7 @@ export default function TermsPage() {
 
             <Section id="fees" title="11. Trials and fees">
               <p>
-                Features may be offered as a free trial or paid plan. If we charge, prices, limits, and
+                Features may be offered with free starting credits or a paid plan. If we charge, prices, limits, and
                 renewal terms will be shown at checkout or in an order form. Unless required by law, fees
                 are non-refundable once a billing period starts. We may change prices on notice for later
                 periods.

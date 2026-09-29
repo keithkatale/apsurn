@@ -44,6 +44,7 @@ export function SettingsPanel() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [connectOpen, setConnectOpen] = useState(false);
   const [inboxBusy, setInboxBusy] = useState(false);
+  const [portalBusy, setPortalBusy] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("panel") === "settings" || searchParams.get("inbox") === "connected") {
@@ -159,9 +160,31 @@ export function SettingsPanel() {
           <section className="mb-6 border-t border-neutral-100 pt-5">
             <h3 className="text-sm font-semibold text-neutral-900">Billing & credits</h3>
             <p className="mt-1 text-sm text-neutral-600">
-              No free plan — AI and sending need an active subscription or $1 / 7-day trial. Top-ups are sold only in-app.
+              Plans start with $20 in free credits. Your card is charged when those credits run out. Top-ups are sold only in-app.
             </p>
-            <CreditTopupPanel className="mt-3" />
+            <ThreeDButton
+              type="button"
+              variant="soft"
+              size="sm"
+              className="mt-3"
+              disabled={portalBusy}
+              onClick={async () => {
+                setPortalBusy(true);
+                setLoadError(null);
+                try {
+                  const res = await fetch("/api/billing/portal", { method: "POST" });
+                  const data = (await res.json().catch(() => null)) as { url?: string; error?: string } | null;
+                  if (!res.ok || !data?.url) throw new Error(data?.error || "Could not open subscription settings");
+                  window.location.href = data.url;
+                } catch (error) {
+                  setLoadError(error instanceof Error ? error.message : "Could not open subscription settings");
+                  setPortalBusy(false);
+                }
+              }}
+            >
+              {portalBusy ? "Opening…" : "Manage subscription"}
+            </ThreeDButton>
+            <CreditTopupPanel className="mt-4" />
           </section>
 
           <section className="mb-6 border-t border-neutral-100 pt-5">

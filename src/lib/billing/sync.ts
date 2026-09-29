@@ -1,11 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getDodoClient } from "@/lib/billing/dodo";
-import { grantCredits } from "@/lib/billing/credits";
-import {
-  creditsFromProductId,
-  planKeyFromProductId,
-  type PlanKey,
-} from "@/lib/billing/plans";
+import { grantStarterCreditsIfNew } from "@/lib/billing/grants";
+import { planKeyFromProductId, type PlanKey } from "@/lib/billing/plans";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -86,26 +82,7 @@ export async function syncSubscriptionFromDodo(params: {
   );
 
   if (status === "active") {
-    const amount = creditsFromProductId(productId);
-    if (amount) {
-      const ref = `${subscriptionId}:plan_activation`;
-      const { data: existing } = await db
-        .from("credit_ledger")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("reason", "plan_activation")
-        .contains("metadata", { ref })
-        .limit(1)
-        .maybeSingle();
-      if (!existing) {
-        await grantCredits({
-          userId,
-          amount,
-          reason: "plan_activation",
-          metadata: { product_id: productId, ref, subscription_id: subscriptionId },
-        });
-      }
-    }
+    await grantStarterCreditsIfNew(userId, subscriptionId);
   }
 
   return { active: status === "active", planKey };

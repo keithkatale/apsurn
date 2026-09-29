@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requestPlanCharge } from "@/lib/billing/charge-plan";
 
 /**
  * Grant or spend credits. Positive delta = grant, negative = spend.
@@ -63,13 +64,32 @@ export async function spendCredits(params: {
   metadata?: Record<string, unknown>;
 }): Promise<number> {
   if (params.amount <= 0) return (await adjustCredits({ userId: params.userId, delta: 0, reason: "noop" })) || 0;
-  return adjustCredits({
-    userId: params.userId,
-    delta: -params.amount,
-    reason: "spend",
-    action: params.action,
-    metadata: params.metadata,
-  });
+  try {
+    const next = await adjustCredits({
+      userId: params.userId,
+      delta: -params.amount,
+      reason: "spend",
+      action: params.action,
+      metadata: params.metadata,
+    });
+    if (next === 0) {
+      await requestPlanCharge(params.userId);
+    }
+    return next;
+  } catch (error) {
+    const code = (error as Error & { code?: string }).code;
+    if (code === "credits_exhausted") {
+      const charging = await requestPlanCharge(params.userId);
+      if (charging) {
+        const err = new Error(
+          "Your free credits are used up. Your card is being charged for your plan — try again in a moment.",
+        );
+        (err as Error & { code: string }).code = "credits_exhausted";
+        throw err;
+      }
+    }
+    throw error;
+  }
 }
 
 export async function grantCredits(params: {

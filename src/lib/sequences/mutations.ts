@@ -192,34 +192,50 @@ export async function enrollContacts(
   userId: string,
   sequenceId: string,
   contactIds: string[]
-): Promise<MutationResult<{ enrolled: number; skipped: number }>> {
+): Promise<MutationResult<{ enrolled: number; skipped: number; missingEmail: number }>> {
   const { data: sequence } = await db.from("sequences").select("id").eq("id", sequenceId).eq("user_id", userId).maybeSingle();
   if (!sequence) return { ok: false, error: "Sequence not found", status: 404 };
 
   const owned = await listOwnedContactsByIds(db, userId, contactIds);
-  const eligibleIds = owned.filter((row) => row.archived_at === null && !!row.email).map((row) => row.id);
+  const eligibleIds = owned
+    .filter((row) => row.archived_at === null && Boolean(row.email?.trim()))
+    .map((row) => row.id);
+  const missingEmail = contactIds.length - eligibleIds.length;
 
   if (eligibleIds.length === 0) {
-    return { ok: true, data: { enrolled: 0, skipped: contactIds.length } };
+    return { ok: true, data: { enrolled: 0, skipped: contactIds.length, missingEmail } };
   }
 
-  const { data: inserted, error } = await db
+  const { data: already } = await db
     .from("enrollments")
-    .upsert(
-      eligibleIds.map((contactId) => ({
+    .select("contact_id")
+    .eq("sequence_id", sequenceId)
+    .in("contact_id", eligibleIds);
+  const alreadyIds = new Set((already ?? []).map((row) => row.contact_id));
+  const toInsert = eligibleIds.filter((contactId) => !alreadyIds.has(contactId));
+
+  if (toInsert.length > 0) {
+    const { error } = await db.from("enrollments").insert(
+      toInsert.map((contactId) => ({
         sequence_id: sequenceId,
         contact_id: contactId,
         status: "active",
         current_step: 0,
         next_send_at: new Date().toISOString(),
       })),
-      { onConflict: "sequence_id,contact_id", ignoreDuplicates: true }
-    )
-    .select("id");
-  if (error) return { ok: false, error: error.message, status: 500 };
+    );
+    if (error && error.code !== "23505") return { ok: false, error: error.message, status: 500 };
+  }
 
-  const enrolled = inserted?.length ?? 0;
-  return { ok: true, data: { enrolled, skipped: contactIds.length - enrolled } };
+  const { count, error: countError } = await db
+    .from("enrollments")
+    .select("id", { count: "exact", head: true })
+    .eq("sequence_id", sequenceId)
+    .in("contact_id", eligibleIds);
+  if (countError) return { ok: false, error: countError.message, status: 500 };
+
+  const enrolled = count ?? alreadyIds.size;
+  return { ok: true, data: { enrolled, skipped: contactIds.length - enrolled, missingEmail } };
 }
 
 export async function persistCampaignDefinition(

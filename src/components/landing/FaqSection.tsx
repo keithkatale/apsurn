@@ -25,11 +25,11 @@ export function FaqSection() {
     },
     {
       q: "Is there a free plan?",
-      a: "No. Apsurn does not offer a free plan. Startup and Growth start with a 7-day trial for $1. Cancel anytime during the trial and you won’t be charged the monthly rate. After the trial, Startup ($30) or Growth ($79) continues monthly with AI credits. Enterprise starts at $833/month after a call.",
+      a: "No. Apsurn does not offer a free plan. Startup and Growth start with $20 in free credits after you save a card. Your card is charged the plan price when those credits run out — Startup is $30 and Growth is $79 — and that refill adds the plan’s monthly credits. Enterprise starts at $833/month after a call.",
     },
     {
       q: "Can I change or cancel my plan at any time?",
-      a: "Yes, you can upgrade, downgrade, or cancel your subscription whenever you like directly from your dashboard with no hidden contracts or fees. Cancel during the trial and you won’t be charged.",
+      a: "Yes. Open Settings and choose Manage subscription to update your card, change plans, or cancel. Your card is not charged until the free credits run out.",
     },
     {
       q: "Who is apsurn for?",

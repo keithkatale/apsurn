@@ -1,6 +1,7 @@
 /**
  * Apsurn billing catalog — Dodo product IDs + credit allotments.
- * No free plan. Every subscription starts with a $1 / 7-day paid trial.
+ * A new plan saves a card and starts with $20 in free credits.
+ * The plan price is charged when those credits run out.
  */
 
 export type PlanKey = "startup" | "growth" | "pro";
@@ -42,9 +43,12 @@ export const ENTERPRISE_PLAN = {
   bookingUrl: "https://cal.com/keith-katale/30min",
 } as const;
 
-export const TRIAL_DAYS = 7;
-/** Paid trial amount charged up front (Dodo trial_amount, USD). */
-export const TRIAL_AMOUNT_USD = 1;
+/**
+ * Free credits issued when a card is saved. 1,000 AI credits at the
+ * $40 / 2,000 top-up rate, framed as $20.
+ */
+export const STARTER_CREDIT_USD = 20;
+export const STARTER_CREDITS = 1_000;
 
 /** Leads allowed during setup before an active subscription. */
 export const SETUP_FREE_LEAD_CAP = 6;
@@ -65,17 +69,17 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     name: "Startup",
     priceUsd: 30,
     creditsPerMonth: 2_000,
-    description: `For founders starting outbound. ${TRIAL_DAYS}-day trial, then $30/mo — cancel anytime.`,
+    description: "For founders starting outbound. $20 in free credits, then $30 when those credits run out.",
     features: [
-      "2,000 AI credits / month",
+      "$20 in free credits to start",
+      "2,000 AI credits after your card is charged",
       "Personalized email drafts",
       "Campaign sequences",
       "Lead enrichment",
-      `${TRIAL_DAYS}-day trial included`,
     ],
     highlight: true,
     productId: {
-      // $1 paid trial products (free-trial IDs retired)
+      // Subscription products. Checkout saves a card (mandate only) and does not charge the trial.
       test: "pdt_0NoAYvskQ1M4UjDv03ivE",
       live: "pdt_0NoAYsFpAjLoZGvfAPzag",
     },
@@ -85,14 +89,14 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     name: "Growth",
     priceUsd: 79,
     creditsPerMonth: 8_000,
-    description: `For teams running outbound every week. ${TRIAL_DAYS}-day trial, then $79/mo.`,
+    description: "For teams running outbound every week. $20 in free credits, then $79 when those credits run out.",
     highlight: false,
     features: [
-      "8,000 AI credits / month",
+      "$20 in free credits to start",
+      "8,000 AI credits after your card is charged",
       "Everything in Startup",
       "Higher prospecting volume",
       "Priority AI throughput",
-      `${TRIAL_DAYS}-day trial included`,
     ],
     productId: {
       test: "pdt_0NoAYvzgGaMeY7tcvFWpv",
@@ -104,13 +108,13 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     name: "Pro",
     priceUsd: 149,
     creditsPerMonth: 20_000,
-    description: `For power users and agencies. ${TRIAL_DAYS}-day trial, then $149/mo.`,
+    description: "For power users and agencies. $20 in free credits, then $149 when those credits run out.",
     features: [
-      "20,000 AI credits / month",
+      "$20 in free credits to start",
+      "20,000 AI credits after your card is charged",
       "Everything in Growth",
       "Best for multi-campaign volume",
       "Credit top-ups available in-app",
-      `${TRIAL_DAYS}-day trial included`,
     ],
     productId: {
       test: "pdt_0NoAYw3qfKvVdbpMwH6zn",

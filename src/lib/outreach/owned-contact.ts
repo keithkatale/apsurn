@@ -57,11 +57,12 @@ export async function listOwnedContactsByIds(
   const companyIds = [...new Set(rows.map((row) => row.prospect_company_id))];
   if (companyIds.length === 0) return [];
 
-  const { data: companies, error: companyError } = await db
-    .from("prospect_companies")
-    .select("id")
-    .eq("user_id", userId)
-    .in("id", companyIds);
+  const { data: account } = await db.from("companies").select("id").eq("user_id", userId).maybeSingle();
+  let companyQuery = db.from("prospect_companies").select("id").in("id", companyIds);
+  companyQuery = account?.id
+    ? companyQuery.or(`user_id.eq.${userId},company_id.eq.${account.id}`)
+    : companyQuery.eq("user_id", userId);
+  const { data: companies, error: companyError } = await companyQuery;
   if (companyError) throw new Error(companyError.message);
   const owned = new Set((companies ?? []).map((row) => row.id));
   return rows.filter((row) => owned.has(row.prospect_company_id));

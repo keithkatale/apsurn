@@ -6,8 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { appOrigin, getDodoClient } from "@/lib/billing/dodo";
 import {
   PLANS,
+  STARTER_CREDIT_USD,
   TOPUPS,
-  TRIAL_DAYS,
   dodoBrandId,
   productIdForPlan,
   productIdForTopup,
@@ -19,7 +19,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 const bodySchema = z.object({
   plan: z.enum(["startup", "growth"]).optional(),
   topup: z.enum(["credits_500", "credits_2000"]).optional(),
-  trial: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {
@@ -38,7 +37,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid checkout request" }, { status: 400 });
     }
 
-    const { plan, topup, trial } = parsed.data;
+    const { plan, topup } = parsed.data;
     if (!plan && !topup) {
       return NextResponse.json({ error: "Choose a plan or top-up" }, { status: 400 });
     }
@@ -48,7 +47,6 @@ export async function POST(request: Request) {
 
     const productId = plan ? productIdForPlan(plan as PlanKey) : productIdForTopup(topup as TopupKey);
     const planKey = plan ?? "topup";
-    const withTrial = Boolean(trial || plan); // subscriptions always carry product trial; force 7 days
 
     const client = getDodoClient();
     const returnUrl =
@@ -63,8 +61,11 @@ export async function POST(request: Request) {
       brand_id: dodoBrandId(),
       ...(plan
         ? {
+            // Override the product's paid trial. Save the card and charge
+            // the plan price later, when the free credits run out.
             subscription_data: {
-              trial_period_days: withTrial ? TRIAL_DAYS : undefined,
+              trial_period_days: 0,
+              on_demand: { mandate_only: true },
             },
           }
         : {}),
@@ -112,7 +113,7 @@ export async function POST(request: Request) {
       checkoutUrl,
       sessionId: (session as { session_id?: string }).session_id,
       plan: plan ? PLANS[plan as PlanKey].name : TOPUPS[topup as TopupKey].name,
-      trialDays: plan ? TRIAL_DAYS : 0,
+      starterCreditUsd: plan ? STARTER_CREDIT_USD : 0,
     });
   } catch (error) {
     if (error instanceof AuthenticationError) {

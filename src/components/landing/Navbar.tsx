@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, Menu, Moon, Sun, X } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { useTheme } from "@/components/theme/theme-provider";
+import { createClient } from "@/lib/supabase/client";
 
 function LandingThemeButton() {
   const { theme, setTheme } = useTheme();
@@ -26,8 +27,31 @@ function LandingThemeButton() {
 
 export function Navbar({ embedded = false }: { embedded?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
   const pathname = usePathname();
   const showTheme = pathname === "/";
+  const showDashboard = pathname === "/" && signedIn;
+
+  useEffect(() => {
+    if (pathname !== "/") return;
+    let supabase: ReturnType<typeof createClient>;
+    try {
+      supabase = createClient();
+    } catch {
+      return;
+    }
+    let cancelled = false;
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!cancelled) setSignedIn(Boolean(data.session));
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSignedIn(Boolean(session));
+    });
+    return () => {
+      cancelled = true;
+      data.subscription.unsubscribe();
+    };
+  }, [pathname]);
 
   const navLinks = [
     { href: "#hero", label: "Home" },
@@ -68,8 +92,8 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
           {/* Desktop Action Buttons */}
           <div className="hidden md:flex items-center gap-2">
             {showTheme ? <LandingThemeButton /> : null}
-            <ThreeDButton href="/signup?next=/setup" variant="solid" size="sm" className="landing-nav-cta rounded-xl px-4 shadow-none">
-              <span>Get free trial</span>
+            <ThreeDButton href={showDashboard ? "/dashboard" : "/signup?next=/setup"} variant="solid" size="sm" className="landing-nav-cta rounded-xl px-4 shadow-none">
+              <span>{showDashboard ? "Dashboard" : "Get $20 credits"}</span>
               <ArrowRight className="size-3.5" />
             </ThreeDButton>
           </div>
@@ -105,13 +129,13 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
 
             <div className="pt-2">
               <ThreeDButton
-                href="/signup?next=/setup"
+                href={showDashboard ? "/dashboard" : "/signup?next=/setup"}
                 variant="solid"
                 size="md"
                 onClick={() => setIsOpen(false)}
                 className="landing-nav-cta w-full rounded-xl shadow-none"
               >
-                <span>Get free trial</span>
+                <span>{showDashboard ? "Dashboard" : "Get $20 credits"}</span>
                 <ArrowRight className="size-3.5" />
               </ThreeDButton>
             </div>

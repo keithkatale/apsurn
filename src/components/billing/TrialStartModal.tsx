@@ -6,7 +6,7 @@ import { X } from "lucide-react";
 import { DodoPayments } from "dodopayments-checkout";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { PricingCardShell } from "@/components/ui/pricing-card-shell";
-import { ENTERPRISE_PLAN, OFFERED_PLAN_KEYS, PLANS, TRIAL_DAYS, type PlanKey } from "@/lib/billing/plans";
+import { ENTERPRISE_PLAN, OFFERED_PLAN_KEYS, PLANS, STARTER_CREDIT_USD, type PlanKey } from "@/lib/billing/plans";
 import { trackGoal } from "@/lib/analytics/datafast";
 import { ensureDodoCheckout } from "@/lib/billing/dodo-checkout-client";
 import { cn } from "@/lib/cn";
@@ -45,14 +45,14 @@ export function TrialStartModal({
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: nextPlan, trial: true }),
+        body: JSON.stringify({ plan: nextPlan }),
       });
       const data = (await res.json().catch(() => null)) as { checkoutUrl?: string; error?: string } | null;
       if (!res.ok || !data?.checkoutUrl) {
         throw new Error(data?.error || "Could not start checkout");
       }
       ensureDodoCheckout();
-      trackGoal("initiate_checkout", { plan: nextPlan, trial: true });
+      trackGoal("initiate_checkout", { plan: nextPlan, starterCreditUsd: STARTER_CREDIT_USD });
       await DodoPayments.Checkout.open({ checkoutUrl: data.checkoutUrl });
       onClose();
     } catch (err) {
@@ -86,7 +86,7 @@ export function TrialStartModal({
             Choose a plan to send
           </h2>
           <p className="mt-2 text-[14px] leading-relaxed text-neutral-600 sm:text-[15px]">
-            No free plan. Startup and Growth start with a {TRIAL_DAYS}-day trial. Enterprise starts at ${ENTERPRISE_PLAN.priceUsd}/month after a call.
+            No free plan. Save a card and start with ${STARTER_CREDIT_USD} in free credits. Your card is charged when those credits run out. Enterprise starts at ${ENTERPRISE_PLAN.priceUsd}/month after a call.
           </p>
         </div>
 
@@ -132,7 +132,7 @@ export function TrialStartModal({
                           void startTrial(key);
                         }}
                       >
-                        {busy === key ? "Opening…" : `Start ${TRIAL_DAYS}-day trial`}
+                        {busy === key ? "Opening…" : `Start with $${STARTER_CREDIT_USD} credits`}
                       </ThreeDButton>
                       <div className="flex flex-col gap-2 px-1 pt-1">
                         {item.features.map((feature) => (
@@ -228,15 +228,15 @@ export function TrialStartModal({
   );
 }
 
-export async function openPlanCheckout(plan: PlanKey, trial = true) {
+export async function openPlanCheckout(plan: PlanKey) {
   ensureDodoCheckout();
   const res = await fetch("/api/billing/checkout", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ plan, trial }),
+    body: JSON.stringify({ plan }),
   });
   const data = (await res.json().catch(() => null)) as { checkoutUrl?: string; error?: string } | null;
   if (!res.ok || !data?.checkoutUrl) throw new Error(data?.error || "Checkout failed");
-  trackGoal("initiate_checkout", { plan, trial });
+  trackGoal("initiate_checkout", { plan, starterCreditUsd: STARTER_CREDIT_USD });
   await DodoPayments.Checkout.open({ checkoutUrl: data.checkoutUrl });
 }

@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { grantCredits } from "@/lib/billing/credits";
+import { grantCreditsOnce, grantPlanCycleCredits, grantStarterCreditsIfNew } from "@/lib/billing/grants";
 import {
+  PLANS,
   creditsFromProductId,
   planKeyFromProductId,
   type PlanKey,
@@ -102,29 +103,6 @@ async function upsertSubscription(userId: string, data: JsonRecord, statusOverri
   return { planKey, productId, subscriptionId, status };
 }
 
-async function grantPlanCreditsOnce(userId: string, productId: string, reason: string, ref: string) {
-  const amount = creditsFromProductId(productId);
-  if (!amount) return;
-
-  const db = createAdminClient();
-  const { data: existing } = await db
-    .from("credit_ledger")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("reason", reason)
-    .contains("metadata", { ref })
-    .limit(1)
-    .maybeSingle();
-  if (existing) return;
-
-  await grantCredits({
-    userId,
-    amount,
-    reason,
-    metadata: { product_id: productId, ref },
-  });
-}
-
 export async function handleDodoWebhookEvent(payload: {
   type?: string;
   data?: unknown;
@@ -141,12 +119,25 @@ export async function handleDodoWebhookEvent(payload: {
   await upsertCustomer(userId, data);
 
   switch (type) {
-    case "subscription.active":
+    case "subscription.active": {
+      const sub = await upsertSubscription(userId, data, "active");
+      if (sub) await grantStarterCreditsIfNew(userId, sub.subscriptionId);
+      break;
+    }
     case "subscription.renewed": {
       const sub = await upsertSubscription(userId, data, "active");
       if (sub) {
-        const reason = type === "subscription.renewed" ? "plan_renewal" : "plan_activation";
-        await grantPlanCreditsOnce(userId, sub.productId, reason, sub.subscriptionId + ":" + reason);
+        const amount = creditsFromProductId(sub.productId);
+        const period = asString(data.next_billing_date) ?? asString(data.previous_billing_date) ?? "renewal";
+        if (amount) {
+          await grantCreditsOnce({
+            userId,
+            amount,
+            reason: "plan_renewal",
+            ref: `${sub.subscriptionId}:plan_renewal:${period}`,
+            metadata: { product_id: sub.productId },
+          });
+        }
       }
       break;
     }
@@ -163,14 +154,59 @@ export async function handleDodoWebhookEvent(payload: {
       await upsertSubscription(userId, data, "expired");
       break;
     case "payment.succeeded": {
+      const paymentId = asString(data.payment_id) ?? asString(data.invoice_id);
+      const meta = asRecord(data.metadata);
+      const cyclePlan = asString(meta.plan_key) as PlanKey | null;
+      if (asString(meta.kind) === "plan_cycle" && paymentId && cyclePlan && PLANS[cyclePlan]) {
+        await grantPlanCycleCredits(userId, cyclePlan, paymentId);
+        break;
+      }
+      if (paymentId) {
+        const db = createAdminClient();
+        const { data: requested } = await db
+          .from("credit_ledger")
+          .select("metadata")
+          .eq("user_id", userId)
+          .eq("reason", "plan_charge_requested")
+          .contains("metadata", { payment_id: paymentId })
+          .limit(1)
+          .maybeSingle();
+        const requestedPlan = asString(asRecord(requested?.metadata).plan_key) as PlanKey | null;
+        if (requestedPlan && PLANS[requestedPlan]) {
+          await grantPlanCycleCredits(userId, requestedPlan, paymentId);
+          break;
+        }
+      }
+
       // One-time top-ups land here with product_id in cart / payment
       const productId =
         asString(data.product_id) ??
         asString(asRecord((data.product_cart as unknown[])?.[0]).product_id) ??
         asString(asRecord(data.product).product_id);
-      if (productId && creditsFromProductId(productId) && !planKeyFromProductId(productId)) {
-        const paymentId = asString(data.payment_id) ?? asString(data.invoice_id) ?? productId;
-        await grantPlanCreditsOnce(userId, productId, "topup", paymentId);
+      if (productId && creditsFromProductId(productId) && !planKeyFromProductId(productId) && paymentId) {
+        await grantCreditsOnce({
+          userId,
+          amount: creditsFromProductId(productId) ?? 0,
+          reason: "topup",
+          ref: paymentId,
+          metadata: { product_id: productId },
+        });
+      }
+      break;
+    }
+    case "payment.failed": {
+      const paymentId = asString(data.payment_id);
+      const meta = asRecord(data.metadata);
+      if (paymentId && asString(meta.kind) === "plan_cycle") {
+        const db = createAdminClient();
+        const { data: credits } = await db.from("credit_balances").select("balance").eq("user_id", userId).maybeSingle();
+        await db.from("credit_ledger").insert({
+          user_id: userId,
+          delta: 0,
+          balance_after: credits?.balance ?? 0,
+          reason: "plan_charge_failed",
+          metadata: { payment_id: paymentId, plan_key: asString(meta.plan_key) },
+        });
       }
       break;
     }

@@ -10,6 +10,21 @@ import { createClient } from "@/lib/supabase/client";
 import { setNavigationPending } from "@/lib/navigation-progress";
 import { trackGoal } from "@/lib/analytics/datafast";
 
+async function emailHasAccount(email: string): Promise<boolean> {
+  try {
+    const response = await fetch("/api/auth/account-exists", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!response.ok) return true;
+    const data = (await response.json()) as { exists?: boolean };
+    return data.exists !== false;
+  } catch {
+    return true;
+  }
+}
+
 function safeNext(raw: string | null, fallback: string) {
   if (!raw) return fallback;
   if (!raw.startsWith("/") || raw.startsWith("//")) return fallback;
@@ -34,7 +49,7 @@ export function LoginForm({ mode = "signin" }: { mode?: "signin" | "signup" }) {
     () => safeNext(searchParams.get("next"), mode === "signup" ? "/setup" : "/dashboard/copilot"),
     [searchParams, mode],
   );
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => searchParams.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState<string | null>(
@@ -53,6 +68,17 @@ export function LoginForm({ mode = "signin" }: { mode?: "signin" | "signup" }) {
         ? await supabase.auth.signUp({ email, password })
         : await supabase.auth.signInWithPassword({ email, password });
       if (result.error) {
+        const unknownAccount =
+          !isSignup &&
+          (result.error.code === "invalid_credentials" ||
+            /invalid login credentials/i.test(result.error.message));
+        if (unknownAccount && !(await emailHasAccount(email))) {
+          setNavigationPending(true);
+          router.replace(
+            `/signup?email=${encodeURIComponent(email.trim())}&next=${encodeURIComponent("/setup")}`,
+          );
+          return;
+        }
         setBusy(false);
         setMessage(result.error.message);
         return;

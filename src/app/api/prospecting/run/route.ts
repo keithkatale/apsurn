@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
   if (!billing.active && parsed.data.limit > SETUP_FREE_LEAD_CAP) {
     return NextResponse.json(
       {
-        error: `Start a 7-day trial ($1) to find more than ${SETUP_FREE_LEAD_CAP} leads.`,
+        error: `Add a card to start with $20 in free credits before finding more than ${SETUP_FREE_LEAD_CAP} leads.`,
         code: "billing_required",
       },
       { status: 402 },

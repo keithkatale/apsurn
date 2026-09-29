@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
 import { getBillingStatus } from "@/lib/billing/entitlements";
-import { OFFERED_PLAN_KEYS, PLANS, TOPUPS, TRIAL_AMOUNT_USD, TRIAL_DAYS } from "@/lib/billing/plans";
+import { OFFERED_PLAN_KEYS, PLANS, STARTER_CREDIT_USD, STARTER_CREDITS, TOPUPS } from "@/lib/billing/plans";
 
 export async function GET() {
   try {
@@ -9,8 +9,8 @@ export async function GET() {
     const status = await getBillingStatus(userId);
     return NextResponse.json({
       ...status,
-      trialDays: TRIAL_DAYS,
-      trialAmountUsd: TRIAL_AMOUNT_USD,
+      starterCreditUsd: STARTER_CREDIT_USD,
+      starterCredits: STARTER_CREDITS,
       plans: OFFERED_PLAN_KEYS.map((key) => PLANS[key]).map((p) => ({
         key: p.key,
         name: p.name,

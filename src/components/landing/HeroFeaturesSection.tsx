@@ -142,7 +142,7 @@ export function HeroFeaturesSection() {
               href="/signup?next=/setup"
               className="landing-hero-cta inline-flex items-center justify-center rounded-[10px] bg-[#4379EE] px-7 pb-[10px] pt-[9px] text-[12.4px] font-medium leading-[18.2px] text-white hover:bg-[#3567D6]"
             >
-              Get free trial
+              Get $20 credits
             </Link>
             <Link
               href="#why-us"

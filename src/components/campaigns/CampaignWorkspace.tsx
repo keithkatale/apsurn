@@ -733,9 +733,15 @@ export function CampaignWorkspace({
     try {
       const ids = [...pickedIds];
       const res = await enrollIds(campaign.id, ids);
-      const data = (await res.json().catch(() => null)) as { error?: string; enrolled?: number } | null;
+      const data = (await res.json().catch(() => null)) as { error?: string; enrolled?: number; missingEmail?: number } | null;
       if (!res.ok) throw new Error(data?.error || "Could not add contacts");
-      if (!data?.enrolled) throw new Error("Those contacts need an email before they can be added.");
+      if (!data?.enrolled) {
+        throw new Error(
+          data?.missingEmail
+            ? "Those contacts need an email before they can be added."
+            : "Could not add those contacts to this campaign.",
+        );
+      }
       rememberEnrolled(
         campaign.id,
         ids.map((id) => leadMap[id]).filter(Boolean),
@@ -1124,13 +1130,6 @@ export function CampaignWorkspace({
                         placeholder="Search name, company, or email"
                         className="input min-w-0 flex-1 py-2 text-sm"
                       />
-                      <button
-                        type="button"
-                        onClick={() => router.push("/dashboard/prospects?find=1")}
-                        className="shrink-0 rounded-full bg-[#4379EE] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#3567D6]"
-                      >
-                        Prospect for new leads
-                      </button>
                     </div>
                     <ul className="min-h-0 flex-1 overflow-y-auto p-2">
                       {filteredContacts.length === 0 ? (
@@ -1186,6 +1185,15 @@ export function CampaignWorkspace({
                           );
                         })
                       )}
+                      <li className="px-2 pb-2 pt-3">
+                        <button
+                          type="button"
+                          onClick={() => router.push("/dashboard/prospects?find=1")}
+                          className="w-full rounded-lg border border-dashed border-neutral-200 px-3 py-2.5 text-[12px] font-semibold text-neutral-600 hover:border-[#4379EE] hover:text-[#4379EE]"
+                        >
+                          Prospect for new leads
+                        </button>
+                      </li>
                     </ul>
                     <div className="shrink-0 border-t border-neutral-100 px-4 py-3">
                       <div className="grid gap-2 sm:grid-cols-4">

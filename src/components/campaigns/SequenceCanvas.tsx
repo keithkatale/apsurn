@@ -174,7 +174,7 @@ export function SequenceCanvas({
                 <div className="min-w-0">
                   <p className="truncate text-[15px] font-semibold text-neutral-900">{lead.fullName || "Unknown"}</p>
                   <p className="truncate text-[12px] text-neutral-500">
-                    Preview for this lead. The same message goes to everyone else.
+                    {[lead.title, lead.companyName || lead.companyDomain].filter(Boolean).join(" · ") || "Role unknown"}
                   </p>
                 </div>
               </div>

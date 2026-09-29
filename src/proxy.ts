@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -35,14 +36,56 @@ export async function proxy(request: NextRequest) {
     const next = `${request.nextUrl.pathname}${request.nextUrl.search}`;
     dest.search = "";
     dest.searchParams.set("next", next);
-    return NextResponse.redirect(dest);
+    return redirectKeepingCookies(dest, response);
+  }
+  const setupRequired = user ? await needsSetup(user.id) : false;
+  if (user && setupRequired) {
+    const pathname = request.nextUrl.pathname;
+    const onSetup = pathname === "/setup" || pathname.startsWith("/setup/");
+    if (!onSetup) {
+      return redirectKeepingCookies(new URL("/setup", request.url), response);
+    }
   }
   if (user && (request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/signup")) {
     const next = request.nextUrl.searchParams.get("next");
     const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard/copilot";
-    return NextResponse.redirect(new URL(safeNext, request.url));
+    return redirectKeepingCookies(new URL(safeNext, request.url), response);
   }
   return response;
+}
+
+/**
+ * Signed-in users who never finished setup have no company blueprint yet.
+ * The user-scoped client cannot read these tables, so this uses the service role.
+ */
+async function needsSetup(userId: string): Promise<boolean> {
+  try {
+    const admin = createAdminClient();
+    const { data: company, error: companyError } = await admin
+      .from("companies")
+      .select("id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (companyError) return false;
+    if (!company?.id) return true;
+    const { data: blueprint, error: blueprintError } = await admin
+      .from("company_blueprints")
+      .select("id")
+      .eq("company_id", company.id)
+      .maybeSingle();
+    if (blueprintError) return false;
+    return !blueprint?.id;
+  } catch {
+    return false;
+  }
+}
+
+function redirectKeepingCookies(destination: URL, source: NextResponse) {
+  const redirect = NextResponse.redirect(destination);
+  for (const cookie of source.cookies.getAll()) {
+    redirect.cookies.set(cookie);
+  }
+  return redirect;
 }
 
 // Narrow matcher: a broad catch-all under Next 16.3 + Turbopack can leave nested
