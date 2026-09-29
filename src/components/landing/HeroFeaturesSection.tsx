@@ -49,16 +49,22 @@ function HeroLaunchFilm() {
     setProgress(video.currentTime / video.duration);
   }
 
+  function restart() {
+    const video = videoRef.current;
+    if (!video) return;
+    video.loop = true;
+    video.currentTime = 0;
+    setProgress(0);
+    void video.play().catch(() => {});
+  }
+
   function unmute() {
     const video = videoRef.current;
     if (!video) return;
-    video.loop = false;
-    video.currentTime = 0;
     video.muted = false;
     video.volume = 1;
     setSoundOn(true);
-    setProgress(0);
-    void video.play().catch(() => {});
+    restart();
   }
 
   useEffect(() => {
@@ -93,7 +99,7 @@ function HeroLaunchFilm() {
           playsInline
           aria-label="apsurn launch film"
           onTimeUpdate={syncProgress}
-          onEnded={() => setProgress(1)}
+          onEnded={restart}
         />
       )}
       {desktop !== null && src && !soundOn ? (
