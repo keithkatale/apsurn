@@ -1,4 +1,3 @@
-import { Navbar } from "@/components/landing/Navbar";
 import { HeroFeaturesSection } from "@/components/landing/HeroFeaturesSection";
 import { WhyUsSection } from "@/components/landing/WhyUsSection";
 import { ProcessSection } from "@/components/landing/ProcessSection";
@@ -17,7 +16,6 @@ export const metadata = {
 export default function LandingPage() {
   return (
     <div className="landing-page min-h-screen bg-white text-neutral-900 selection:bg-neutral-900 selection:text-white">
-      <Navbar />
       <HeroFeaturesSection />
       <WhyUsSection />
       <ProcessSection />

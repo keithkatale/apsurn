@@ -18,6 +18,12 @@ const manrope = Manrope({
   variable: "--font-manrope",
 });
 
+// Cloud Run supplies NEXT_PUBLIC_* at container start, not at `next build`.
+// The landing page (and this config script) must render per request so those
+// values reach the browser. A static prerender bakes in whatever the image
+// build had — usually nothing.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://apsurn.com"),
   title: "apsurn — AI SDR & Autonomous Prospecting Engine",

@@ -24,7 +24,7 @@ function LandingThemeButton() {
   );
 }
 
-export function Navbar() {
+export function Navbar({ embedded = false }: { embedded?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
   const showTheme = pathname === "/";
@@ -37,10 +37,10 @@ export function Navbar() {
   ];
 
   return (
-    <header className="fixed top-4 sm:top-5 left-0 right-0 z-50 flex justify-center px-4 sm:px-6 pointer-events-none">
-      <div className="landing-nav pointer-events-auto flex w-full max-w-[360px] flex-col rounded-2xl border border-[#EEEEEE] bg-white/95 shadow-[0px_6px_20px_0px_rgba(0,0,0,0.06)] backdrop-blur-md transition-all md:max-w-[760px]">
+    <header className={embedded ? "relative z-20 w-full" : "fixed top-4 sm:top-5 left-0 right-0 z-50 flex justify-center px-4 sm:px-6 pointer-events-none"}>
+      <div className={embedded ? "flex w-full flex-col" : "landing-nav pointer-events-auto flex w-full max-w-[360px] flex-col rounded-2xl border border-[#EEEEEE] bg-white/95 shadow-[0px_6px_20px_0px_rgba(0,0,0,0.06)] backdrop-blur-md transition-all md:max-w-[760px]"}>
         {/* Main Bar */}
-        <div className="flex items-center justify-between gap-4 px-3.5 py-2.5 sm:px-4 sm:py-2.5">
+        <div className={embedded ? "flex items-center justify-between gap-4 py-5" : "flex items-center justify-between gap-4 px-3.5 py-2.5 sm:px-4 sm:py-2.5"}>
           {/* Logo and Nav links */}
           <div className="flex items-center gap-6 sm:gap-7">
             <BrandLogo
@@ -80,7 +80,7 @@ export function Navbar() {
             <button
               type="button"
               onClick={() => setIsOpen(!isOpen)}
-              className="flex h-9 items-center gap-1.5 rounded-xl border border-[#EEEEEE] bg-white px-3 py-1.5 text-xs font-semibold text-neutral-800 shadow-xs active:bg-neutral-50 transition-colors"
+              className={embedded ? "flex h-9 items-center gap-1.5 px-1 text-xs font-semibold text-neutral-800 transition-colors" : "flex h-9 items-center gap-1.5 rounded-xl border border-[#EEEEEE] bg-white px-3 py-1.5 text-xs font-semibold text-neutral-800 shadow-xs active:bg-neutral-50 transition-colors"}
               aria-label="Toggle Navigation Menu"
             >
               <span>Menu</span>
