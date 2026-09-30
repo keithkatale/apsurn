@@ -260,7 +260,7 @@ export function SequenceCanvas({
                 type="button"
                 variant="solid"
                 size="sm"
-                className="send-attention-pulse"
+                className="send-attention-pulse shrink-0 whitespace-nowrap"
                 disabled={
                   billingActive &&
                   (sending || drafting || !subject.trim() || !htmlToPlain(body) || !lead?.email)
@@ -275,6 +275,8 @@ export function SequenceCanvas({
               >
                 {sending ? (
                   "Sending…"
+                ) : !billingActive ? (
+                  "Unlock $20 of credits"
                 ) : (
                   <span className="inline-flex items-center gap-1.5">
                     Send

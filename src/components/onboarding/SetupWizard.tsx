@@ -28,6 +28,13 @@ function isValidDomain(raw: string) {
   return /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/.test(host);
 }
 
+function accountSearchMessage(reason?: string) {
+  const text = reason?.trim();
+  if (!text || text === "target reached") return "No accounts matched this search.";
+  if (/credit/i.test(text)) return "Add a card to start with $20 in free credits before more leads can be saved.";
+  return text;
+}
+
 function competitorDomain(name: string) {
   const trimmed = name.trim();
   if (/[.]/.test(trimmed) && !/\s/.test(trimmed)) return stripProtocol(trimmed);
@@ -407,6 +414,8 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
               name?: string;
               found?: number;
               contactCount?: number;
+              stopReason?: string;
+              error?: string;
             };
             if (event.type === "tool_start" && event.name === "find_companies") {
               setScan((prev) =>
@@ -429,15 +438,23 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
                   : prev,
               );
             }
+            if (event.type === "error") {
+              throw new Error(event.error ?? "Could not find accounts");
+            }
             if (event.type === "done") {
+              const found = event.found ?? 0;
+              if (found === 0) {
+                throw new Error(accountSearchMessage(event.stopReason));
+              }
               setScan({
                 phase: "done",
                 progress: 100,
-                logs: [{ id: uid(), text: `Saved ${event.found ?? 0} companies · ${event.contactCount ?? 0} people` }],
+                logs: [{ id: uid(), text: `Saved ${found} companies · ${event.contactCount ?? 0} people` }],
               });
             }
-          } catch {
-            /* ignore */
+          } catch (err) {
+            if (err instanceof SyntaxError) continue;
+            throw err;
           }
         }
         const now = Date.now();

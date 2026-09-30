@@ -363,6 +363,8 @@ export async function runDirectoryAgent(opts: {
   onEvent?: (event: AgentStreamEvent) => void;
   abortSignal?: AbortSignal;
   wallclockMs?: number;
+  /** False for the unpaid setup cap, so the first leads save before a card exists. */
+  chargeCredits?: boolean;
 }): Promise<AgentRunResult> {
   const { db, runId, listId, userId, listCompanyId, criteria, targetCount, onEvent, abortSignal } = opts;
 
@@ -390,6 +392,7 @@ export async function runDirectoryAgent(opts: {
     counters: { steps: 0, pagesFetched: 0, companiesSaved: 0, contactsSaved: 0, warnings: 0 },
     savedDomains: await loadKnownDomains(db, userId),
     pageCache: new Map(),
+    chargeCredits: opts.chargeCredits !== false,
   };
 
   const emit = (event: AgentStreamEvent) => onEvent?.(event);

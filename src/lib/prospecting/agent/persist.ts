@@ -153,6 +153,10 @@ export async function persistLead(
   ctx.counters.companiesSaved += 1;
   ctx.counters.contactsSaved += contactCount;
 
+  if (!ctx.chargeCredits) {
+    return { saved: true, contactCount, creditsSpent: 0 };
+  }
+
   try {
     const creditBalance = await spendCredits({
       userId: ctx.userId,

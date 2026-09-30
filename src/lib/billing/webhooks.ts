@@ -156,6 +156,7 @@ export async function handleDodoWebhookEvent(payload: {
     case "payment.succeeded": {
       const paymentId = asString(data.payment_id) ?? asString(data.invoice_id);
       const meta = asRecord(data.metadata);
+      if (asString(meta.kind) === "credit_activation") break;
       const cyclePlan = asString(meta.plan_key) as PlanKey | null;
       if (asString(meta.kind) === "plan_cycle" && paymentId && cyclePlan && PLANS[cyclePlan]) {
         await grantPlanCycleCredits(userId, cyclePlan, paymentId);

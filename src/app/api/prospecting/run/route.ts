@@ -140,6 +140,7 @@ export async function POST(request: NextRequest) {
           targetCount,
           onEvent,
           abortSignal: request.signal,
+          chargeCredits: billing.active,
         });
 
         if (result.cancelled) {
@@ -162,6 +163,7 @@ export async function POST(request: NextRequest) {
           contact_count: result.contactCount,
           warning_count: result.warnings,
           completed_at: completedAt,
+          ...(result.found === 0 ? { error_summary: result.stopReason } : {}),
         });
         await db.from("prospect_lists").update({ found_count: result.found, completed_at: completedAt }).eq("id", listId);
 

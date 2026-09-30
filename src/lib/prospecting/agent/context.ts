@@ -29,6 +29,8 @@ export interface AgentRunContext {
   counters: AgentCounters;
   savedDomains: Set<string>; // domains already on this user's account, plus this run
   pageCache: Map<string, FetchedPage>; // url -> fetched page (avoid refetch)
+  /** Setup's free lead cap is saved without a credit balance. Paid runs still spend. */
+  chargeCredits: boolean;
 }
 
 export function budgetExhausted(ctx: AgentRunContext): string | null {

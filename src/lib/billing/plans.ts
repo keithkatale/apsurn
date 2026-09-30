@@ -49,6 +49,8 @@ export const ENTERPRISE_PLAN = {
  */
 export const STARTER_CREDIT_USD = 20;
 export const STARTER_CREDITS = 1_000;
+/** Charged once when a card is saved, so the $20 credit grant can start. */
+export const ACTIVATION_FEE_USD = 1;
 
 /** Leads allowed during setup before an active subscription. */
 export const SETUP_FREE_LEAD_CAP = 6;

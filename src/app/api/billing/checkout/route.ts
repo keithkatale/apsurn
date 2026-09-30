@@ -5,6 +5,7 @@ import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { appOrigin, getDodoClient } from "@/lib/billing/dodo";
 import {
+  ACTIVATION_FEE_USD,
   PLANS,
   STARTER_CREDIT_USD,
   TOPUPS,
@@ -61,11 +62,16 @@ export async function POST(request: Request) {
       brand_id: dodoBrandId(),
       ...(plan
         ? {
-            // Override the product's paid trial. Save the card and charge
-            // the plan price later, when the free credits run out.
+            // Charge $1 today to activate the credits. The plan price is
+            // charged later, when those credits run out.
             subscription_data: {
               trial_period_days: 0,
-              on_demand: { mandate_only: true },
+              on_demand: {
+                mandate_only: false,
+                product_price: ACTIVATION_FEE_USD * 100,
+                product_currency: "USD",
+                product_description: `$${STARTER_CREDIT_USD} in credits to start. $${ACTIVATION_FEE_USD} today. $${PLANS[plan as PlanKey].priceUsd}/month when those credits run out.`,
+              },
             },
           }
         : {}),
