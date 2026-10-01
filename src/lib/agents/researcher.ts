@@ -180,7 +180,7 @@ async function startRun(ctx: AgentToolContext, args: Record<string, unknown>) {
   const billing = await getBillingStatus(userId);
   const requested = typeof args.limit === "number" ? Math.floor(args.limit) : 10;
   if (!billing.active && requested > SETUP_FREE_LEAD_CAP) {
-    return { error: `Add a card to start with $20 in free credits before finding more than ${SETUP_FREE_LEAD_CAP} leads.`, code: "billing_required" };
+    return { error: `Add a card to start with 50 free credits before finding more than ${SETUP_FREE_LEAD_CAP} leads.`, code: "billing_required" };
   }
   const limit = Math.min(30, Math.max(1, billing.active ? requested : Math.min(requested, SETUP_FREE_LEAD_CAP)));
   const listName =

@@ -93,7 +93,7 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
           <div className="hidden md:flex items-center gap-2">
             {showTheme ? <LandingThemeButton /> : null}
             <ThreeDButton href={showDashboard ? "/dashboard" : "/signup?next=/setup"} variant="solid" size="sm" className="landing-nav-cta rounded-xl px-4 shadow-none">
-              <span>{showDashboard ? "Dashboard" : "Get $20 credits"}</span>
+              <span>{showDashboard ? "Dashboard" : "Get 50 credits"}</span>
               <ArrowRight className="size-3.5" />
             </ThreeDButton>
           </div>
@@ -135,7 +135,7 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
                 onClick={() => setIsOpen(false)}
                 className="landing-nav-cta w-full rounded-xl shadow-none"
               >
-                <span>{showDashboard ? "Dashboard" : "Get $20 credits"}</span>
+                <span>{showDashboard ? "Dashboard" : "Get 50 credits"}</span>
                 <ArrowRight className="size-3.5" />
               </ThreeDButton>
             </div>

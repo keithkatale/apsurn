@@ -31,7 +31,7 @@ function isValidDomain(raw: string) {
 function accountSearchMessage(reason?: string) {
   const text = reason?.trim();
   if (!text || text === "target reached") return "No accounts matched this search.";
-  if (/credit/i.test(text)) return "Add a card to start with $20 in free credits before more leads can be saved.";
+  if (/credit/i.test(text)) return "Add a card to start with 50 free credits before more leads can be saved.";
   return text;
 }
 

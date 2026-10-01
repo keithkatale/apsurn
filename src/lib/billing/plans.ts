@@ -1,6 +1,6 @@
 /**
  * Apsurn billing catalog — Dodo product IDs + credit allotments.
- * A new plan saves a card and starts with $20 in free credits.
+ * A new plan saves a card and starts with 50 free credits.
  * The plan price is charged when those credits run out.
  */
 
@@ -44,12 +44,12 @@ export const ENTERPRISE_PLAN = {
 } as const;
 
 /**
- * Free credits issued when a card is saved. 1,000 AI credits at the
- * $40 / 2,000 top-up rate, framed as $20.
+ * Free credits issued when a card is saved. 50 AI credits, worth $1 at the
+ * $40 / 2,000 top-up rate.
  */
-export const STARTER_CREDIT_USD = 20;
-export const STARTER_CREDITS = 1_000;
-/** Charged once when a card is saved, so the $20 credit grant can start. */
+export const STARTER_CREDIT_USD = 1;
+export const STARTER_CREDITS = 50;
+/** Charged once when a card is saved, so the free credit grant can start. */
 export const ACTIVATION_FEE_USD = 1;
 
 /** Leads allowed during setup before an active subscription. */
@@ -71,9 +71,9 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     name: "Startup",
     priceUsd: 30,
     creditsPerMonth: 2_000,
-    description: "For founders starting outbound. $20 in free credits, then $30 when those credits run out.",
+    description: "For founders starting outbound. 50 free credits, then $30 when those credits run out.",
     features: [
-      "$20 in free credits to start",
+      "50 free credits to start",
       "2,000 AI credits after your card is charged",
       "Personalized email drafts",
       "Campaign sequences",
@@ -91,10 +91,10 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     name: "Growth",
     priceUsd: 79,
     creditsPerMonth: 8_000,
-    description: "For teams running outbound every week. $20 in free credits, then $79 when those credits run out.",
+    description: "For teams running outbound every week. 50 free credits, then $79 when those credits run out.",
     highlight: false,
     features: [
-      "$20 in free credits to start",
+      "50 free credits to start",
       "8,000 AI credits after your card is charged",
       "Everything in Startup",
       "Higher prospecting volume",
@@ -110,9 +110,9 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     name: "Pro",
     priceUsd: 149,
     creditsPerMonth: 20_000,
-    description: "For power users and agencies. $20 in free credits, then $149 when those credits run out.",
+    description: "For power users and agencies. 50 free credits, then $149 when those credits run out.",
     features: [
-      "$20 in free credits to start",
+      "50 free credits to start",
       "20,000 AI credits after your card is charged",
       "Everything in Growth",
       "Best for multi-campaign volume",

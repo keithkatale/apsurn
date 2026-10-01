@@ -33,7 +33,7 @@ export function BottomCtaSection() {
             </h2>
 
             <p className="mt-4 sm:mt-5 text-base sm:text-lg text-[#605F5F] max-w-xl font-medium leading-relaxed tracking-tight">
-              Start with $20 in free credits, approve a blueprint, and run verified Gmail sequences — the AI SDR loop for B2B GTM.
+              Start with 50 free credits, approve a blueprint, and run verified Gmail sequences — the AI SDR loop for B2B GTM.
             </p>
 
             <div className="mt-6 sm:mt-7 flex flex-wrap items-center justify-center gap-3 sm:gap-3.5 w-full sm:w-auto">
@@ -43,7 +43,7 @@ export function BottomCtaSection() {
                 size="md"
                 className="w-full sm:w-auto rounded-xl px-6 h-11"
               >
-                <span>Get $20 credits</span>
+                <span>Get 50 credits</span>
                 <ArrowRight className="size-4" />
               </ThreeDButton>
               <Link

@@ -130,7 +130,7 @@ export function SequenceArtifact({
         body: JSON.stringify({ sync: true }),
       });
       const data = await res.json();
-      if (res.status === 402) throw new Error(data.error ?? "Add a card to start with $20 in free credits.");
+      if (res.status === 402) throw new Error(data.error ?? "Add a card to start with 50 free credits.");
       if (!res.ok) throw new Error(data.error ?? "Send pass failed");
       setMessage(typeof data.sent === "number" ? `Sent ${data.sent}.` : "Send pass finished.");
     } catch (error) {

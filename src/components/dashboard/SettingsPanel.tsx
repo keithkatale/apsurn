@@ -160,7 +160,7 @@ export function SettingsPanel() {
           <section className="mb-6 border-t border-neutral-100 pt-5">
             <h3 className="text-sm font-semibold text-neutral-900">Billing & credits</h3>
             <p className="mt-1 text-sm text-neutral-600">
-              Plans start with $20 in free credits. Your card is charged when those credits run out. Top-ups are sold only in-app.
+              Plans start with 50 free credits. Your card is charged when those credits run out. Top-ups are sold only in-app.
             </p>
             <ThreeDButton
               type="button"

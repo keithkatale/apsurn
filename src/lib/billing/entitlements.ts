@@ -40,7 +40,7 @@ export async function getBillingStatus(userId: string): Promise<BillingStatus> {
 export async function requireActiveBilling(userId: string): Promise<BillingStatus> {
   const status = await getBillingStatus(userId);
   if (!status.active) {
-    const err = new Error("Add a card to start with $20 in free credits. Your plan is charged when those credits run out.");
+    const err = new Error("Add a card to start with 50 free credits. Your plan is charged when those credits run out.");
     (err as Error & { code: string }).code = "billing_required";
     throw err;
   }

@@ -276,7 +276,7 @@ export function SequenceCanvas({
                 {sending ? (
                   "Sending…"
                 ) : !billingActive ? (
-                  "Unlock $20 of credits"
+                  "Unlock 50 credits"
                 ) : (
                   <span className="inline-flex items-center gap-1.5">
                     Send

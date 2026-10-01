@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { trackGoal } from "@/lib/analytics/datafast";
-import { ENTERPRISE_PLAN, OFFERED_PLAN_KEYS, PLANS, STARTER_CREDIT_USD, type PlanKey } from "@/lib/billing/plans";
+import { ENTERPRISE_PLAN, OFFERED_PLAN_KEYS, PLANS, STARTER_CREDITS, type PlanKey } from "@/lib/billing/plans";
 import { useState } from "react";
 
 export function PricingSection() {
@@ -21,7 +21,7 @@ export function PricingSection() {
       highlight: Boolean(plan.highlight),
       buttonVariant: (plan.highlight ? "solid" : "soft") as "solid" | "soft",
       features: plan.features,
-      cta: `Start with $${STARTER_CREDIT_USD} credits`,
+      cta: `Start with ${STARTER_CREDITS} credits`,
     };
   });
 
@@ -66,7 +66,7 @@ export function PricingSection() {
 
           <div className="max-w-[380px]">
             <p className="text-base sm:text-lg font-medium text-[#605f5f] tracking-[-0.04em] leading-[1.35] font-sans">
-              No free plan. Startup and Growth start with ${STARTER_CREDIT_USD} in free credits. Your card is charged when those credits run out. Enterprise starts at ${ENTERPRISE_PLAN.priceUsd}/month after a call.
+              No free plan. Startup and Growth start with {STARTER_CREDITS} free credits. Your card is charged when those credits run out. Enterprise starts at ${ENTERPRISE_PLAN.priceUsd}/month after a call.
             </p>
           </div>
         </div>

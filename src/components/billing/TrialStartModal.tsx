@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { DodoPayments } from "dodopayments-checkout";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
-import { ACTIVATION_FEE_USD, PLANS, STARTER_CREDIT_USD, type PlanKey } from "@/lib/billing/plans";
+import { ACTIVATION_FEE_USD, PLANS, STARTER_CREDITS, STARTER_CREDIT_USD, type PlanKey } from "@/lib/billing/plans";
 import { trackGoal } from "@/lib/analytics/datafast";
 import { ensureDodoCheckout } from "@/lib/billing/dodo-checkout-client";
 
@@ -76,10 +76,10 @@ export function TrialStartModal({
           ${selected.priceUsd}/month
         </p>
         <h2 id="unlock-credits-title" className="mt-2 font-heading text-2xl font-semibold tracking-tight text-neutral-900">
-          Get ${STARTER_CREDIT_USD} in free credits
+          Get {STARTER_CREDITS} free credits
         </h2>
         <p className="mt-3 text-[15px] leading-relaxed text-neutral-600">
-          The {selected.name} plan is selected. Enter your card and ${STARTER_CREDIT_USD} in credits start right away.
+          The {selected.name} plan is selected. Enter your card and {STARTER_CREDITS} free credits start right away.
           We charge ${ACTIVATION_FEE_USD} to activate them. The ${selected.priceUsd}/month plan is charged when those credits run out.
         </p>
 

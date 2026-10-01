@@ -25,7 +25,7 @@ export function FaqSection() {
     },
     {
       q: "Is there a free plan?",
-      a: "No. Apsurn does not offer a free plan. Startup and Growth start with $20 in free credits after you save a card. Your card is charged the plan price when those credits run out — Startup is $30 and Growth is $79 — and that refill adds the plan’s monthly credits. Enterprise starts at $833/month after a call.",
+      a: "No. Apsurn does not offer a free plan. Startup and Growth start with 50 free credits after you save a card. Your card is charged the plan price when those credits run out — Startup is $30 and Growth is $79 — and that refill adds the plan’s monthly credits. Enterprise starts at $833/month after a call.",
     },
     {
       q: "Can I change or cancel my plan at any time?",

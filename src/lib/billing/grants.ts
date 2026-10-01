@@ -32,7 +32,7 @@ export async function grantCreditsOnce(params: {
 }
 
 /**
- * First activation gets $20 in free credits. Customers who already received
+ * First activation gets 50 free credits. Customers who already received
  * a paid allotment are left alone.
  */
 export async function grantStarterCreditsIfNew(userId: string, subscriptionId: string): Promise<void> {

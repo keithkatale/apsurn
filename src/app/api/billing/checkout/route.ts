@@ -7,6 +7,7 @@ import { appOrigin, getDodoClient } from "@/lib/billing/dodo";
 import {
   ACTIVATION_FEE_USD,
   PLANS,
+  STARTER_CREDITS,
   STARTER_CREDIT_USD,
   TOPUPS,
   dodoBrandId,
@@ -70,7 +71,7 @@ export async function POST(request: Request) {
                 mandate_only: false,
                 product_price: ACTIVATION_FEE_USD * 100,
                 product_currency: "USD",
-                product_description: `$${STARTER_CREDIT_USD} in credits to start. $${ACTIVATION_FEE_USD} today. $${PLANS[plan as PlanKey].priceUsd}/month when those credits run out.`,
+                product_description: `${STARTER_CREDITS} free credits to start. $${ACTIVATION_FEE_USD} today. $${PLANS[plan as PlanKey].priceUsd}/month when those credits run out.`,
               },
             },
           }
