@@ -55,11 +55,11 @@ export function ContactsTable({
   }
 
   return (
-    <div className="flex flex-col gap-2 overflow-hidden rounded-xl border border-neutral-200 bg-white">
+    <div className="flex flex-col gap-2 overflow-hidden rounded-xl border border-neutral-200">
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-sm leading-tight">
           <thead>
-            <tr className="border-b border-blue-100 bg-blue-50 text-left text-[11px] font-medium uppercase tracking-wide text-blue-700">
+            <tr className="border-b border-neutral-200 text-left text-[11px] font-medium uppercase tracking-wide text-neutral-400">
               {!readOnly && (
                 <th className="w-10 px-3 py-2.5">
                   <input
@@ -93,18 +93,12 @@ export function ContactsTable({
                 </td>
               </tr>
             ) : null}
-            {rows.map(({ contact, company }, index) => {
+            {rows.map(({ contact, company }) => {
               const isSelected = selected.has(contact.id);
               return (
                 <tr
                   key={contact.id}
-                  className={`border-b border-neutral-100 last:border-b-0 hover:bg-neutral-50/80 ${
-                    isSelected
-                      ? "bg-neutral-50"
-                      : index % 2 === 1
-                        ? "bg-neutral-50/40"
-                        : "bg-white"
-                  }`}
+                  className={`border-b border-neutral-100 transition-colors last:border-b-0 hover:bg-neutral-100/60 ${isSelected ? "bg-neutral-100" : ""}`}
                 >
                   {!readOnly && (
                     <td className="px-3 py-3 align-middle">

@@ -197,6 +197,7 @@ export function CampaignWorkspace({
   senderName,
   hasBlueprint,
   inboxEmail,
+  initialCampaignId,
 }: {
   profile: CompanyProfile;
   campaigns: CampaignWorkspaceItem[];
@@ -205,11 +206,14 @@ export function CampaignWorkspace({
   senderName: string;
   hasBlueprint: boolean;
   inboxEmail: string | null;
+  initialCampaignId?: string;
 }) {
   const router = useRouter();
   const [railOpen, setRailOpen] = useState(true);
   const [companyOpen, setCompanyOpen] = useState(false);
-  const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? "");
+  const [campaignId, setCampaignId] = useState(
+    campaigns.find((item) => item.id === initialCampaignId)?.id ?? campaigns[0]?.id ?? "",
+  );
   const [leadId, setLeadId] = useState<string | null>(null);
   const [scan, setScan] = useState<ScanState | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);

@@ -109,10 +109,10 @@ export function ProspectsWorkspace({
   }, [openFind]);
 
   return (
-    <div className="flex h-full overflow-hidden bg-white">
+    <div className="flex h-full overflow-hidden">
       <div
-        className={`shrink-0 overflow-hidden border-r border-neutral-200 bg-white transition-[width] duration-300 ease-out ${
-          panelOpen ? "w-[420px]" : "w-0"
+        className={`shrink-0 overflow-hidden bg-white transition-[width] duration-300 ease-out ${
+          panelOpen ? "w-[420px] border-r border-neutral-200" : "w-0"
         }`}
       >
         <div className="relative flex h-full w-[420px] flex-col">
@@ -145,10 +145,6 @@ export function ProspectsWorkspace({
         <div className="flex flex-col gap-3 px-1 py-1">
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex shrink-0 items-center gap-2">
-              <p className="text-sm text-neutral-500">
-                apsurn <span className="px-1 text-neutral-300">/</span>
-                <span className="font-semibold text-neutral-900">Prospects</span>
-              </p>
               {searchOpen ? (
                 <input
                   autoFocus
@@ -255,8 +251,8 @@ export function ProspectsWorkspace({
       </div>
 
       <div
-        className={`shrink-0 overflow-hidden border-l border-neutral-200 bg-white transition-[width] duration-300 ease-out ${
-          profileRow ? "w-[420px]" : "w-0"
+        className={`shrink-0 overflow-hidden bg-white transition-[width] duration-300 ease-out ${
+          profileRow ? "w-[420px] border-l border-neutral-200" : "w-0"
         }`}
       >
         <div className="h-full w-[420px]">

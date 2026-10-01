@@ -287,7 +287,7 @@ export function SequenceCanvas({
                 )}
               </ThreeDButton>
             ) : (
-              <ThreeDButton href="/dashboard/campaigns?panel=settings" variant="solid" size="sm">
+              <ThreeDButton href="/dashboard/settings" variant="solid" size="sm">
                 Connect to Google
               </ThreeDButton>
             )}

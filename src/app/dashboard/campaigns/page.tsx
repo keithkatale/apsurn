@@ -11,7 +11,12 @@ function asString(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
-export default async function CampaignsPage() {
+export default async function CampaignsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ campaign?: string }>;
+}) {
+  const { campaign: initialCampaignId } = await searchParams;
   const supabase = createAdminClient();
   const userId = await getCurrentUserId();
 
@@ -164,6 +169,7 @@ export default async function CampaignsPage() {
       campaigns={campaigns}
       leadsById={Object.fromEntries(leadsById)}
       initialDrafts={initialDrafts}
+      initialCampaignId={initialCampaignId}
       senderName={senderName}
       hasBlueprint={Boolean(company)}
       inboxEmail={inbox?.email_address ?? null}

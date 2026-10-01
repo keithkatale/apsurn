@@ -8,6 +8,10 @@ export type BillingStatus = {
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
   creditBalance: number;
+  /** Credits ever granted (plans, top-ups, starter credits). */
+  creditsGranted: number;
+  /** Credits ever spent. */
+  creditsSpent: number;
   cancelAtNextBillingDate: boolean;
 };
 
@@ -22,7 +26,7 @@ export async function getBillingStatus(userId: string): Promise<BillingStatus> {
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    db.from("credit_balances").select("balance").eq("user_id", userId).maybeSingle(),
+    db.from("credit_balances").select("balance, lifetime_granted, lifetime_spent").eq("user_id", userId).maybeSingle(),
   ]);
 
   const active = sub?.status === "active";
@@ -33,6 +37,8 @@ export async function getBillingStatus(userId: string): Promise<BillingStatus> {
     trialEndsAt: sub?.trial_ends_at ?? null,
     currentPeriodEnd: sub?.current_period_end ?? null,
     creditBalance: credits?.balance ?? 0,
+    creditsGranted: credits?.lifetime_granted ?? 0,
+    creditsSpent: credits?.lifetime_spent ?? 0,
     cancelAtNextBillingDate: Boolean(sub?.cancel_at_next_billing_date),
   };
 }

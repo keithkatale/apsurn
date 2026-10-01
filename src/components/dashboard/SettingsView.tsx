@@ -2,13 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { X } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { RebuildBlueprintButton } from "@/components/settings/RebuildBlueprintButton";
 import { ConnectGoogleModal, GoogleLogo } from "@/components/settings/ConnectGoogleModal";
 import { CreditTopupPanel } from "@/components/billing/CreditTopupPanel";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
-import { useSettingsPanel } from "./settings-panel-context";
 import { createClient } from "@/lib/supabase/client";
 
 type InboxRow = {
@@ -29,8 +27,7 @@ function formatDate(value: string | null | undefined) {
   });
 }
 
-export function SettingsPanel() {
-  const { open, closeSettings, openSettings } = useSettingsPanel();
+export function SettingsView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState<string | null>(null);
@@ -47,13 +44,6 @@ export function SettingsPanel() {
   const [portalBusy, setPortalBusy] = useState(false);
 
   useEffect(() => {
-    if (searchParams.get("panel") === "settings" || searchParams.get("inbox") === "connected") {
-      openSettings();
-    }
-  }, [searchParams, openSettings]);
-
-  useEffect(() => {
-    if (!open) return;
     let cancelled = false;
     fetch("/api/settings/workspace", { cache: "no-store" })
       .then((res) => res.json())
@@ -70,7 +60,7 @@ export function SettingsPanel() {
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, []);
 
   const inboxError = searchParams.get("error");
 
@@ -104,31 +94,19 @@ export function SettingsPanel() {
     }
   }
 
-  if (!open) return null;
-
   return (
     <>
-    <div className="pointer-events-none absolute inset-0 z-40 flex justify-end">
-      <aside className="pointer-events-auto flex h-full w-[420px] shrink-0 flex-col overflow-hidden border-l border-neutral-200 bg-white">
-        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-neutral-200 bg-white px-4 py-3">
-          <div className="min-w-0">
-            <h2 className="truncate text-base font-semibold text-neutral-900">Settings</h2>
-            {email && <p className="text-xs text-neutral-500">{email}</p>}
-          </div>
-          <button
-            type="button"
-            onClick={closeSettings}
-            aria-label="Close"
-            className="shrink-0 rounded-full p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+    <div className="w-full">
+      <header>
+        <h1 className="font-heading text-3xl font-semibold tracking-tight text-neutral-900">Settings</h1>
+        {email && <p className="mt-1 text-sm text-neutral-500">{email}</p>}
+      </header>
+      <div className="mt-6">
           {loadError && <p className="mb-3 text-sm text-red-600">{loadError}</p>}
           {inboxError && <p className="mb-3 text-sm text-red-600">{inboxError}</p>}
 
-          <section className="mb-6">
+          <div className="grid items-start gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+          <section className="rounded-lg border border-[#EEEEEE] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
             <h3 className="text-sm font-semibold text-neutral-900">Appearance</h3>
             <p className="mt-1 text-sm text-neutral-600">Light, dark, or match the system.</p>
             <div className="mt-3">
@@ -136,7 +114,7 @@ export function SettingsPanel() {
             </div>
           </section>
 
-          <section className="mb-6">
+          <section className="rounded-lg border border-[#EEEEEE] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
             <h3 className="text-sm font-semibold text-neutral-900">Account</h3>
             <p className="mt-1 truncate text-sm text-neutral-600">{email || "Signed in"}</p>
             <ThreeDButton
@@ -157,7 +135,7 @@ export function SettingsPanel() {
             </ThreeDButton>
           </section>
 
-          <section className="mb-6 border-t border-neutral-100 pt-5">
+          <section className="rounded-lg border border-[#EEEEEE] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
             <h3 className="text-sm font-semibold text-neutral-900">Billing & credits</h3>
             <p className="mt-1 text-sm text-neutral-600">
               Plans start with 50 free credits. Your card is charged when those credits run out. Top-ups are sold only in-app.
@@ -187,7 +165,7 @@ export function SettingsPanel() {
             <CreditTopupPanel className="mt-4" />
           </section>
 
-          <section className="mb-6 border-t border-neutral-100 pt-5">
+          <section className="rounded-lg border border-[#EEEEEE] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
             <h3 className="text-sm font-semibold text-neutral-900">Inbox</h3>
             <p className="mt-1 text-sm text-neutral-600">Campaigns send from your Google account.</p>
             {connectedInbox ? (
@@ -237,7 +215,7 @@ export function SettingsPanel() {
             )}
           </section>
 
-          <section className="mb-6 border-t border-neutral-100 pt-5">
+          <section className="rounded-lg border border-[#EEEEEE] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
             <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold text-neutral-900">Company blueprint</h3>
@@ -266,8 +244,8 @@ export function SettingsPanel() {
               </div>
             </dl>
           </section>
-        </div>
-      </aside>
+          </div>
+      </div>
     </div>
     <ConnectGoogleModal
       open={connectOpen}

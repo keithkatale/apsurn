@@ -11,14 +11,14 @@ export async function GET(request: NextRequest) {
     await getCurrentUserId();
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent("/dashboard/campaigns?panel=settings")}`, request.url));
+      return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent("/dashboard/settings")}`, request.url));
     }
     throw error;
   }
 
   try {
     const state = randomBytes(24).toString("hex");
-    const next = request.nextUrl.searchParams.get("next") || "/dashboard/campaigns?panel=settings";
+    const next = request.nextUrl.searchParams.get("next") || "/dashboard/settings";
     const cookieStore = await cookies();
     cookieStore.set(STATE_COOKIE, `${state}|${next}`, {
       httpOnly: true,
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
         ? error.message
         : "Gmail is not configured. Add GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET.";
     return NextResponse.redirect(
-      new URL(`/dashboard/campaigns?panel=settings&error=${encodeURIComponent(message)}`, request.url),
+      new URL(`/dashboard/settings?error=${encodeURIComponent(message)}`, request.url),
     );
   }
 }

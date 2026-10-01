@@ -13,14 +13,14 @@ export async function GET(request: NextRequest) {
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const fail = (message: string) =>
-    NextResponse.redirect(new URL(`/dashboard/campaigns?panel=settings&error=${encodeURIComponent(message)}`, url.origin));
+    NextResponse.redirect(new URL(`/dashboard/settings?error=${encodeURIComponent(message)}`, url.origin));
 
   let userId: string;
   try {
     userId = await getCurrentUserId();
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent("/dashboard/campaigns?panel=settings")}`, url.origin));
+      return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent("/dashboard/settings")}`, url.origin));
     }
     throw error;
   }
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
     return fail(error instanceof Error ? error.message : "Could not connect Gmail");
   }
 
-  const next = nextPath?.startsWith("/") ? nextPath : "/dashboard/campaigns?panel=settings";
+  const next = nextPath?.startsWith("/") ? nextPath : "/dashboard/settings";
   const separator = next.includes("?") ? "&" : "?";
   return NextResponse.redirect(new URL(`${next}${separator}inbox=connected`, url.origin));
 }

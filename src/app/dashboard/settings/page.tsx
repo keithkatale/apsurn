@@ -1,5 +1,10 @@
-import { redirect } from "next/navigation";
+import { Suspense } from "react";
+import { SettingsView } from "@/components/dashboard/SettingsView";
 
-export default function SettingsRedirectPage() {
-  redirect("/dashboard/campaigns?panel=settings");
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={null}>
+      <SettingsView />
+    </Suspense>
+  );
 }

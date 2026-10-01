@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { useCopilotThreads } from "@/components/copilot/CopilotThreadsProvider";
 
 export interface ConversationSummary {
   id: string;
@@ -95,60 +96,40 @@ function RowMenu({
   );
 }
 
-export function CopilotSidebar({
-  conversations,
-  activeId,
-  loading,
-  onSelect,
-  onNewThread,
-  onRename,
-  onDelete,
-}: {
-  conversations: ConversationSummary[];
-  activeId: string | null;
-  loading: boolean;
-  onSelect: (id: string) => void;
-  onNewThread: () => void;
-  onRename: (id: string, newTitle: string) => void;
-  onDelete: (id: string) => void;
-}) {
+/** Compact conversation list for the dashboard nav. Smaller type than the main tabs so threads read as a sub-menu. */
+export function CopilotThreadsMenu() {
+  const { conversations, loading, activeId, select, rename, remove } = useCopilotThreads();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
-
-  function startRename(id: string, currentTitle: string) {
-    setEditingId(id);
-    setDraft(currentTitle);
-  }
 
   function commitRename() {
     const id = editingId;
     const title = draft.trim();
     setEditingId(null);
-    if (id && title) onRename(id, title);
+    if (id && title) void rename(id, title);
   }
 
   return (
-    <div className="flex h-full w-64 shrink-0 flex-col border-r border-[var(--copilot-card-border)] bg-[var(--copilot-card)]">
-      <div className="p-3">
+    <div className="mt-4 flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-center justify-between px-3 pb-1.5">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Conversations</p>
         <button
           type="button"
-          onClick={onNewThread}
-          className="flex w-full items-center gap-2 rounded-lg border border-[var(--copilot-card-border)] bg-[var(--copilot-background)] px-3 py-2 text-[14px] font-medium text-[var(--copilot-foreground)] transition-colors hover:bg-[var(--copilot-dropdown-hover)]"
+          onClick={() => select(null)}
+          aria-label="New thread"
+          title="New thread"
+          className="inline-flex size-5 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
         >
-          <Plus size={16} />
-          New thread
+          <Plus size={13} />
         </button>
       </div>
-
-      <p className="px-4 pb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--copilot-muted)]">Tasks</p>
-
-      <div className="flex-1 overflow-y-auto px-2 pb-3">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {loading && conversations.length === 0 ? (
-          <div className="px-2 py-6 text-center text-[13px] text-[var(--copilot-muted)]">Loading…</div>
+          <p className="px-3 py-2 text-[12px] text-neutral-400">Loading…</p>
         ) : conversations.length === 0 ? (
-          <div className="px-2 py-6 text-center text-[13px] text-[var(--copilot-muted)]">No conversations yet.</div>
+          <p className="px-3 py-2 text-[12px] text-neutral-400">No conversations yet.</p>
         ) : (
-          <ul className="space-y-0.5">
+          <ul className="space-y-px">
             {conversations.map((c) =>
               editingId === c.id ? (
                 <li key={c.id} className="px-1">
@@ -162,28 +143,65 @@ export function CopilotSidebar({
                       if (e.key === "Escape") setEditingId(null);
                     }}
                     maxLength={80}
-                    className="w-full rounded-lg border border-[var(--copilot-accent-dim)] bg-[var(--copilot-background)] px-2.5 py-1.5 text-[13.5px] font-medium text-[var(--copilot-foreground)] outline-none"
+                    className="w-full rounded-md border border-[#4379EE] bg-white px-2 py-1 text-[12px] text-neutral-900 outline-none"
                   />
                 </li>
               ) : (
-                <li key={c.id} className="group flex items-center gap-1">
+                <li key={c.id} className="group flex items-center gap-0.5">
                   <button
                     type="button"
-                    onClick={() => onSelect(c.id)}
-                    className={`min-w-0 flex-1 truncate rounded-lg px-2.5 py-2 text-left text-[13.5px] font-medium text-[var(--copilot-foreground)] transition-colors ${
-                      activeId === c.id ? "bg-[var(--copilot-dropdown-hover)]" : "hover:bg-[var(--copilot-dropdown-hover)]"
-                    }`}
+                    onClick={() => select(c.id)}
                     title={c.title ?? "New conversation"}
+                    className={`min-w-0 flex-1 truncate rounded-md px-3 py-1.5 text-left text-[12px] transition-colors ${
+                      activeId === c.id
+                        ? "bg-neutral-100 font-medium text-neutral-900"
+                        : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
+                    }`}
                   >
                     {c.title ?? "New conversation"}
                   </button>
-                  <RowMenu onRename={() => startRename(c.id, c.title ?? "")} onDelete={() => onDelete(c.id)} />
+                  <RowMenu
+                    onRename={() => {
+                      setEditingId(c.id);
+                      setDraft(c.title ?? "");
+                    }}
+                    onDelete={() => void remove(c.id)}
+                  />
                 </li>
-              )
+              ),
             )}
           </ul>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Phone-width equivalent of the threads menu: a scrollable row of small chips. */
+export function CopilotThreadsChips() {
+  const { conversations, activeId, select } = useCopilotThreads();
+  return (
+    <div className="flex gap-1 overflow-x-auto px-3 pb-2">
+      <button
+        type="button"
+        onClick={() => select(null)}
+        className="inline-flex shrink-0 items-center gap-1 rounded-full bg-neutral-100 px-2.5 py-1 text-[12px] font-medium text-neutral-700"
+      >
+        <Plus size={12} />
+        New
+      </button>
+      {conversations.map((c) => (
+        <button
+          key={c.id}
+          type="button"
+          onClick={() => select(c.id)}
+          className={`max-w-40 shrink-0 truncate rounded-full px-2.5 py-1 text-[12px] ${
+            activeId === c.id ? "bg-neutral-100 font-medium text-neutral-900" : "text-neutral-500"
+          }`}
+        >
+          {c.title ?? "New conversation"}
+        </button>
+      ))}
     </div>
   );
 }

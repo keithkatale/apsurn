@@ -27,16 +27,16 @@ html.dark {
 html.dark {
   --copilot-foreground: #f0f0f0;
   --copilot-muted: #9a9a9a;
-  --copilot-sidebar: #111111;
+  --copilot-sidebar: #151515;
   --copilot-sidebar-border: #2c2c2c;
-  --copilot-card: #1a1a1a;
+  --copilot-card: #212121;
   --copilot-card-border: #2c2c2c;
   --copilot-accent: #4379ee;
   --copilot-accent-dim: #8eb0ff;
-  --copilot-dropdown-bg: #1a1a1a;
-  --copilot-dropdown-hover: #262626;
-  --copilot-nav-active-bg: #222222;
-  --copilot-prompt-box: #1a1a1a;
+  --copilot-dropdown-bg: #212121;
+  --copilot-dropdown-hover: #2e2e2e;
+  --copilot-nav-active-bg: #343434;
+  --copilot-prompt-box: #212121;
   --copilot-card-shadow:
     0 1px 1px rgba(0, 0, 0, 0.35),
     0 8px 24px rgba(0, 0, 0, 0.35);
@@ -243,7 +243,7 @@ html.dark .input:focus {
 }
 
 html.dark .copilot-user-bubble {
-  background: #1c1c1c;
+  background: #212121;
   color: #f0f0f0;
   font-weight: 500;
   box-shadow: none;
@@ -1805,4 +1805,46 @@ html.dark .hero-film-progress > span {
   display: block;
   height: 100%;
   background: #ffffff;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Dashboard dark surfaces: nav #111111, selected tab #343434,            */
+/* content background #151515, cards #212121.                             */
+/* ---------------------------------------------------------------------- */
+
+html.dark [data-dashboard],
+html.dark [data-dashboard] .bg-neutral-50 {
+  background-color: #151515;
+}
+
+html.dark [data-dashboard] [data-dashboard-sidebar] {
+  background-color: #111111;
+}
+
+html.dark [data-dashboard-sidebar] .bg-neutral-100 {
+  background-color: #343434;
+}
+
+html.dark [data-dashboard-sidebar] .hover\:bg-neutral-100:hover {
+  background-color: #262626;
+}
+
+html.dark [data-dashboard-sidebar] .hover\:bg-neutral-200\/80:hover {
+  background-color: #3c3c3c;
+}
+
+html.dark [data-dashboard-sidebar] .bg-neutral-200 {
+  background-color: #1a1a1a;
+}
+
+html.dark [data-dashboard] main .bg-white {
+  background-color: #212121;
+}
+
+html.dark [data-dashboard] main .bg-neutral-100 {
+  background-color: #2e2e2e;
+}
+
+html.dark [data-dashboard] main .copilot-page-shell.bg-white {
+  background-color: #151515;
 }

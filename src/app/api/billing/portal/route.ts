@@ -19,7 +19,7 @@ export async function POST() {
     }
 
     const session = await getDodoClient().customers.customerPortal.create(customerId, {
-      return_url: `${appOrigin()}/dashboard/campaigns?panel=settings`,
+      return_url: `${appOrigin()}/dashboard/settings`,
     });
     const url = session.link;
     if (!url) {
