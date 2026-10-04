@@ -9,7 +9,7 @@ import { BrandLogo } from "@/components/brand/BrandLogo";
 import { useTheme } from "@/components/theme/theme-provider";
 import { createClient } from "@/lib/supabase/client";
 
-function LandingThemeButton() {
+function LandingThemeButton({ compact = false }: { compact?: boolean }) {
   const { theme, setTheme } = useTheme();
   const dark = theme !== "light";
   const Icon = dark ? Sun : Moon;
@@ -18,7 +18,7 @@ function LandingThemeButton() {
       type="button"
       onClick={() => setTheme(dark ? "light" : "dark")}
       aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
-      className="inline-flex size-9 items-center justify-center rounded-xl text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
+      className={compact ? "inline-flex size-8 items-center justify-center rounded-lg text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900" : "inline-flex size-9 items-center justify-center rounded-xl text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900"}
     >
       <Icon className="size-4" />
     </button>
@@ -53,23 +53,29 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
     };
   }, [pathname]);
 
-  const navLinks = [
-    { href: "#hero", label: "Home" },
-    { href: "#why-us", label: "About" },
-    { href: "#pricing", label: "Pricing" },
-    { href: "#contact", label: "Contact" },
-  ];
+  const navLinks = embedded
+    ? [
+        { href: "#how-it-works", label: "How it works" },
+        { href: "#pricing", label: "Pricing" },
+        { href: "#founder", label: "About" },
+      ]
+    : [
+        { href: "#hero", label: "Home" },
+        { href: "#how-it-works", label: "How it works" },
+        { href: "#pricing", label: "Pricing" },
+        { href: "#founder", label: "About" },
+      ];
 
   return (
     <header className={embedded ? "relative z-20 w-full" : "fixed top-4 sm:top-5 left-0 right-0 z-50 flex justify-center px-4 sm:px-6 pointer-events-none"}>
       <div className={embedded ? "flex w-full flex-col" : "landing-nav pointer-events-auto flex w-full max-w-[360px] flex-col rounded-2xl border border-[#EEEEEE] bg-white/95 shadow-[0px_6px_20px_0px_rgba(0,0,0,0.06)] backdrop-blur-md transition-all md:max-w-[760px]"}>
         {/* Main Bar */}
-        <div className={embedded ? "flex items-center justify-between gap-4 py-5" : "flex items-center justify-between gap-4 px-3.5 py-2.5 sm:px-4 sm:py-2.5"}>
+        <div className={embedded ? "flex items-center justify-between gap-3 py-2" : "flex items-center justify-between gap-4 px-3.5 py-2.5 sm:px-4 sm:py-2.5"}>
           {/* Logo and Nav links */}
           <div className="flex items-center gap-6 sm:gap-7">
             <BrandLogo
               href="/"
-              size={24}
+              size={embedded ? 20 : 24}
               priority
               className="transition-opacity hover:opacity-85"
               onClick={() => setIsOpen(false)}
@@ -91,16 +97,38 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
 
           {/* Desktop Action Buttons */}
           <div className="hidden md:flex items-center gap-2">
-            {showTheme ? <LandingThemeButton /> : null}
-            <ThreeDButton href={showDashboard ? "/dashboard" : "/signup?next=/setup"} variant="solid" size="sm" className="landing-nav-cta rounded-xl px-4 shadow-none">
-              <span>{showDashboard ? "Dashboard" : "Get 50 credits"}</span>
-              <ArrowRight className="size-3.5" />
-            </ThreeDButton>
+            {showTheme ? <LandingThemeButton compact={embedded} /> : null}
+            {embedded ? (
+              <>
+                {showDashboard ? null : (
+                  <Link href="/login" className="px-3 text-[14px] font-medium text-neutral-800 hover:text-neutral-950">
+                    Login
+                  </Link>
+                )}
+                <Link
+                  href="#demo"
+                  className="hero-outline-btn inline-flex h-8 items-center rounded-full px-3.5 text-[13px] font-medium"
+                >
+                  See how it works
+                </Link>
+                <Link
+                  href={showDashboard ? "/dashboard" : "/signup?next=/setup"}
+                  className="hero-solid-btn inline-flex h-8 items-center rounded-full px-3.5 text-[13px] font-medium"
+                >
+                  {showDashboard ? "Dashboard" : "Get started"}
+                </Link>
+              </>
+            ) : (
+              <ThreeDButton href={showDashboard ? "/dashboard" : "/signup?next=/setup"} variant="solid" size="sm" className="landing-nav-cta rounded-xl px-4 shadow-none">
+                <span>{showDashboard ? "Dashboard" : "Get 50 free credits"}</span>
+                <ArrowRight className="size-3.5" />
+              </ThreeDButton>
+            )}
           </div>
 
           {/* Mobile Menu Toggle Button (Figma 1:7152) */}
           <div className="flex md:hidden items-center gap-2">
-            {showTheme ? <LandingThemeButton /> : null}
+            {showTheme ? <LandingThemeButton compact={embedded} /> : null}
             <button
               type="button"
               onClick={() => setIsOpen(!isOpen)}
@@ -127,17 +155,36 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
               </Link>
             ))}
 
-            <div className="pt-2">
-              <ThreeDButton
-                href={showDashboard ? "/dashboard" : "/signup?next=/setup"}
-                variant="solid"
-                size="md"
-                onClick={() => setIsOpen(false)}
-                className="landing-nav-cta w-full rounded-xl shadow-none"
-              >
-                <span>{showDashboard ? "Dashboard" : "Get 50 credits"}</span>
-                <ArrowRight className="size-3.5" />
-              </ThreeDButton>
+            <div className="flex flex-col gap-2 pt-2">
+              {embedded && !showDashboard ? (
+                <Link
+                  href="/login"
+                  onClick={() => setIsOpen(false)}
+                  className="rounded-full py-2 text-[15px] font-medium text-neutral-800"
+                >
+                  Login
+                </Link>
+              ) : null}
+              {embedded ? (
+                <Link
+                  href={showDashboard ? "/dashboard" : "/signup?next=/setup"}
+                  onClick={() => setIsOpen(false)}
+                  className="hero-solid-btn inline-flex h-10 items-center justify-center rounded-full text-[15px] font-medium"
+                >
+                  {showDashboard ? "Dashboard" : "Get started"}
+                </Link>
+              ) : (
+                <ThreeDButton
+                  href={showDashboard ? "/dashboard" : "/signup?next=/setup"}
+                  variant="solid"
+                  size="md"
+                  onClick={() => setIsOpen(false)}
+                  className="landing-nav-cta w-full rounded-xl shadow-none"
+                >
+                  <span>{showDashboard ? "Dashboard" : "Get 50 free credits"}</span>
+                  <ArrowRight className="size-3.5" />
+                </ThreeDButton>
+              )}
             </div>
           </div>
         )}

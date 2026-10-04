@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminAccessError } from "@/lib/auth/admin";
 import { AuthenticationError } from "@/lib/auth/session";
@@ -30,7 +31,12 @@ export default async function AdminPage() {
       <header className="border-b border-neutral-200 bg-white px-6 py-4">
         <div className="mx-auto flex max-w-3xl items-center justify-between">
           <BrandLogo href="/dashboard/copilot" size={24} />
-          <span className="text-xs text-neutral-400">{admin.email}</span>
+          <div className="flex items-center gap-4">
+            <Link href="/admin/support" className="text-sm font-medium text-[#4379EE] hover:underline">
+              Support inbox
+            </Link>
+            <span className="text-xs text-neutral-400">{admin.email}</span>
+          </div>
         </div>
       </header>
 

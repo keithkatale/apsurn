@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { Geist, Manrope } from "next/font/google";
 import { PostHogProvider } from "@/components/analytics/PostHogProvider";
+import { SupportChat } from "@/components/support/SupportChat";
 import { NavigationLoaderHost } from "@/components/loaders/navigation-loader-host";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { PUBLIC_CONFIG_GLOBAL, readPublicSupabaseConfig } from "@/lib/supabase/public-config";
@@ -26,8 +27,9 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://apsurn.com"),
-  title: "apsurn — AI SDR & Autonomous Prospecting Engine",
-  description: "Outbound sales on autopilot. Turn your website into a 24/7 autonomous prospecting machine.",
+  title: "apsurn | Outbound for founders who'd rather be building",
+  description:
+    "Paste your website. apsurn finds who should buy, gets their verified emails, and writes the sequence you send from your own Gmail. Built for seed-stage B2B founders.",
   icons: {
     icon: [
       { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
@@ -38,8 +40,9 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "apsurn",
-    title: "apsurn — AI SDR & Autonomous Prospecting Engine",
-    description: "Outbound sales on autopilot. Turn your website into a 24/7 autonomous prospecting machine.",
+    title: "apsurn | Outbound for founders who'd rather be building",
+    description:
+      "Paste your website. apsurn finds who should buy, gets their verified emails, and writes the sequence you send from your own Gmail. Built for seed-stage B2B founders.",
     images: [
       {
         url: "/landing/socialshare.png",
@@ -51,8 +54,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "apsurn — AI SDR & Autonomous Prospecting Engine",
-    description: "Outbound sales on autopilot. Turn your website into a 24/7 autonomous prospecting machine.",
+    title: "apsurn | Outbound for founders who'd rather be building",
+    description:
+      "Paste your website. apsurn finds who should buy, gets their verified emails, and writes the sequence you send from your own Gmail. Built for seed-stage B2B founders.",
     images: ["/landing/socialshare.png"],
   },
 };
@@ -108,6 +112,7 @@ export default function RootLayout({
           <PostHogProvider>
             {children}
             <NavigationLoaderHost />
+            <SupportChat />
           </PostHogProvider>
         </ThemeProvider>
         <Script

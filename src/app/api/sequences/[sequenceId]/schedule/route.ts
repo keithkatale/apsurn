@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { AccountRequiredError, accountRequiredResponse, assertRegisteredUser } from "@/lib/auth/guest";
 import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
 
 const bodySchema = z.object({
@@ -11,7 +12,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   let userId: string;
   try {
     userId = await getCurrentUserId();
+    await assertRegisteredUser(userId);
   } catch (error) {
+    if (error instanceof AccountRequiredError) return NextResponse.json(accountRequiredResponse(), { status: 403 });
     if (error instanceof AuthenticationError) return NextResponse.json({ error: error.message }, { status: 401 });
     throw error;
   }

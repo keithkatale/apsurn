@@ -5,6 +5,7 @@ export type OwnedContact = {
   full_name: string | null;
   title: string | null;
   email: string | null;
+  email_status: string | null;
   qualify_reason: string | null;
   archived_at: string | null;
   company: {
@@ -23,7 +24,7 @@ export async function getOwnedContact(
 ): Promise<OwnedContact | null> {
   const { data: contact, error } = await db
     .from("contacts")
-    .select("id, full_name, title, email, qualify_reason, archived_at, prospect_company_id")
+    .select("id, full_name, title, email, email_status, qualify_reason, archived_at, prospect_company_id")
     .eq("id", contactId)
     .maybeSingle();
   if (error) throw new Error(error.message);

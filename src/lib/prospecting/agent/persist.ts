@@ -47,16 +47,19 @@ export async function persistLead(
     return { saved: false, contactCount: 0, reason: "already in this account" };
   }
 
-  // Any contact with a name, a title, and an address to reach them at is worth
-  // keeping — including an unverified ("risky") guessed email — rather than
-  // only ones a verifier could confirm. Losing a real decision maker because
-  // their email couldn't be proven costs more than sending cautiously to one
-  // that turns out wrong; the emailStatus is kept on the row either way so
-  // outreach can treat a risky address differently (e.g. lower volume).
-  // A named buyer is a lead even when the email lookup misses. Requiring an
-  // address here is what left runs at 0/10 after the contact database had
-  // already returned the person.
-  const candidateContacts = contacts.filter((c) => Boolean(c.fullName) && (Boolean(c.email) || Boolean(c.phone) || Boolean(c.title) || Boolean(c.linkedinUrl)));
+  // An email only counts as a reachable address once the verifier has
+  // actually confirmed it ("verified" or "accept_all" — the same bar
+  // outreach uses to trust an address without re-checking at send time, see
+  // ensureSendableEmail). A "risky" pattern guess or a verifier-rejected
+  // address is dropped here rather than saved and later bouncing as
+  // "Address not found" in outreach. A contact with a phone number is still
+  // kept even without a verified email — the phone channel was never
+  // subject to email verification. Email generation runs verification live
+  // (resolveEmail / saveYcLeadsFirst), so by the time a contact reaches
+  // this filter its status already reflects a real check, not a guess.
+  const candidateContacts = contacts.filter(
+    (c) => Boolean(c.fullName) && ((Boolean(c.email) && (c.emailStatus === "verified" || c.emailStatus === "accept_all")) || Boolean(c.phone))
+  );
   // Drop contacts whose email/phone is on the global suppression list.
   const actionable: CandidateContact[] = [];
   for (const c of candidateContacts) {

@@ -75,8 +75,8 @@ export function Footer() {
                   <Link href="#pricing" className="hover:text-black transition-colors">
                     Pricing
                   </Link>
-                  <Link href="#why-us" className="hover:text-black transition-colors">
-                    Features
+                  <Link href="#how-it-works" className="hover:text-black transition-colors">
+                    How it works
                   </Link>
                   <Link href="#faq" className="hover:text-black transition-colors">
                     FAQ
@@ -90,12 +90,12 @@ export function Footer() {
                   Company
                 </span>
                 <div className="flex flex-col gap-2.5 text-[15px] sm:text-[16px] text-[#605F5F] tracking-[-0.64px]">
-                  <Link href="#why-us" className="hover:text-black transition-colors">
+                  <Link href="#founder" className="hover:text-black transition-colors">
                     About
                   </Link>
-                  <Link href="#contact" className="hover:text-black transition-colors">
+                  <a href="mailto:hello@apsurn.com" className="hover:text-black transition-colors">
                     Contact
-                  </Link>
+                  </a>
                 </div>
               </div>
 
@@ -117,6 +117,12 @@ export function Footer() {
 
             {/* Copyright / Credits */}
             <div className="lg:text-right text-left text-[14px] sm:text-[16px] text-[#605F5F] tracking-[-0.64px]">
+              <p>
+                Made by Keith Katale ·{" "}
+                <a href="mailto:hello@apsurn.com" className="hover:text-black transition-colors">
+                  hello@apsurn.com
+                </a>
+              </p>
               <p>All rights reserved.</p>
             </div>
           </div>

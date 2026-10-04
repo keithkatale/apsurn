@@ -16,6 +16,19 @@ import { cn } from "@/lib/cn";
 import { SetupStepper } from "./SetupStepper";
 import type { BlueprintData } from "./BlueprintReviewForm";
 
+let heroSetupStartedFor = "";
+let guestStart: Promise<Response> | null = null;
+
+function ensureGuestSession() {
+  if (!guestStart) {
+    guestStart = fetch("/api/auth/guest", { method: "POST" }).then((response) => {
+      if (!response.ok) guestStart = null;
+      return response;
+    });
+  }
+  return guestStart;
+}
+
 function stripProtocol(raw: string) {
   return raw.trim().replace(/^https?:\/\//i, "").replace(/^\/+/, "");
 }
@@ -180,6 +193,9 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
   const [competitorsReady, setCompetitorsReady] = useState(false);
   const [accountsReady, setAccountsReady] = useState(false);
   const confirmLock = useRef(false);
+  const fromQuery = useRef(
+    Boolean(initialUrl || searchParams.get("url") || searchParams.get("websiteUrl")),
+  );
   const advanceRef = useRef({
     approveAndContinue: () => {},
     loadCampaigns: () => {},
@@ -188,6 +204,14 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
   });
 
   const valid = useMemo(() => isValidDomain(domain), [domain]);
+
+  useEffect(() => {
+    if (!fromQuery.current || !isValidDomain(domain) || heroSetupStartedFor === domain) return;
+    heroSetupStartedFor = domain;
+    void analyze();
+    // The hero URL should start the same analysis the setup field runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [domain]);
 
   function applyBlueprint(raw: BlueprintData) {
     const next: BlueprintData = {
@@ -222,9 +246,9 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
     };
   }
 
-  async function analyze(e: React.FormEvent) {
-    e.preventDefault();
-    if (!valid) {
+  async function analyze(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (!isValidDomain(domain)) {
       setDomainError(true);
       return;
     }
@@ -246,6 +270,11 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
       }, tick.at),
     );
     try {
+      const guest = await ensureGuestSession();
+      if (!guest.ok) {
+        const guestBody = (await guest.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(guestBody?.error || "Could not start setup");
+      }
       const res = await fetch("/api/onboarding/blueprint", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

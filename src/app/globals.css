@@ -1187,6 +1187,23 @@ html.dark .hover\:bg-\[\#E8F1FC\]:hover {
   background-color: #222222;
 }
 
+.compare-apsurn {
+  background-color: #e8f1fc;
+}
+
+.compare-apsurn-label {
+  color: #3567d6;
+}
+
+html.dark .landing-page .compare-apsurn {
+  background-color: color-mix(in srgb, var(--copilot-accent) 22%, var(--copilot-card));
+  color: var(--copilot-foreground);
+}
+
+html.dark .landing-page .compare-apsurn-label {
+  color: var(--copilot-accent-dim);
+}
+
 html.dark .bg-\[\#F8F9FC\] {
   background-color: #1a1a1a;
 }
@@ -1400,6 +1417,111 @@ html.dark .landing-nav-cta:active {
 
 html.dark .landing-hero {
   background-color: #0a0a0a;
+}
+
+.landing-hero-shell {
+  --hero-inset: clamp(20px, 1.6vw, 32px);
+}
+
+.hero-outline-btn {
+  background-color: #ffffff;
+  color: #171717;
+  border: 1px solid #e6e6e6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.hero-outline-btn:hover {
+  background-color: #fafafa;
+  color: #171717;
+}
+
+html.dark .landing-hero-shell .hero-outline-btn {
+  background-color: transparent;
+  color: #f0f0f0;
+  border-color: #3a3a3a;
+  box-shadow: none;
+}
+
+html.dark .landing-hero-shell .hero-outline-btn:hover {
+  background-color: #222222;
+  color: #ffffff;
+}
+
+.hero-solid-btn {
+  background-color: #111111;
+  color: #ffffff;
+}
+
+.hero-solid-btn:hover {
+  background-color: #2a2a2a;
+  color: #ffffff;
+}
+
+html.dark .landing-hero-shell .hero-solid-btn {
+  background-color: #f4f4f4;
+  color: #111111;
+}
+
+html.dark .landing-hero-shell .hero-solid-btn:hover {
+  background-color: #ffffff;
+  color: #111111;
+}
+
+.hero-prompt,
+html.dark .landing-hero-shell .hero-prompt {
+  background-color: #ffffff;
+  color: #171717;
+}
+
+html.dark .landing-hero-shell .hero-prompt::placeholder {
+  color: #8a8a8a;
+}
+
+.hero-chip,
+html.dark .landing-hero-shell .hero-chip {
+  background-color: #ffffff;
+  color: #171717;
+  border: 1px solid transparent;
+}
+
+.hero-chip:hover,
+html.dark .landing-hero-shell .hero-chip:hover {
+  background-color: #f3f6fb;
+  color: #171717;
+}
+
+.hero-send,
+html.dark .landing-hero-shell .hero-send {
+  background-color: #e8f1fc;
+  color: #3567d6;
+}
+
+.hero-send:hover,
+html.dark .landing-hero-shell .hero-send:hover {
+  background-color: #d7e6fb;
+  color: #3567d6;
+}
+
+.hero-plan-icon {
+  background-color: #f4f4f4;
+  color: #404040;
+}
+
+html.dark .landing-hero-shell .hero-plan-icon {
+  background-color: #2c2c2c;
+  color: #f0f0f0;
+}
+
+.hero-plan-pill {
+  background-color: #ffffff;
+  color: #171717;
+  border: 1px solid #eeeeee;
+}
+
+html.dark .landing-hero-shell .hero-plan-pill {
+  background-color: #1a1a1a;
+  color: #f0f0f0;
+  border-color: #2c2c2c;
 }
 
 html.dark .landing-hero h1 {

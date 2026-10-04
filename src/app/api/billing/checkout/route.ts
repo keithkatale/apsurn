@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { isGuestUser } from "@/lib/auth/guest";
 import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { appOrigin, getDodoClient } from "@/lib/billing/dodo";
@@ -30,8 +31,11 @@ export async function POST(request: Request) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user?.email) {
-      return NextResponse.json({ error: "Account email required for checkout" }, { status: 400 });
+    if (!user?.email || isGuestUser(user)) {
+      return NextResponse.json(
+        { error: "Sign in before unlocking credits.", code: "account_required" },
+        { status: 403 },
+      );
     }
 
     const parsed = bodySchema.safeParse(await request.json().catch(() => ({})));

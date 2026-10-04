@@ -1,67 +1,42 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 
 export function ProcessSection() {
   const steps = [
     {
       number: "01",
-      title: "Connect your website",
-      description: "Paste your domain. We crawl public pages and draft an ICP blueprint for you to approve.",
+      title: "Paste your URL",
+      description: "apsurn reads your public site and drafts your ideal customer profile: who buys, where to find them, and why they'd care. You edit it and approve it.",
       image: "/landing/step1.png",
     },
     {
       number: "02",
-      title: "Find & verify prospects",
-      description: "Grounded search discovers matching companies and people. Only verified contacts make the cut.",
+      title: "Get verified prospects",
+      description: "apsurn finds companies and decision-makers that match your ICP. Emails it can't verify get dropped, which protects your sending reputation.",
       image: "/landing/campaign.png",
     },
     {
       number: "03",
-      title: "Launch email sequences",
-      description: "Enroll leads, generate AI drafts, and send multi-step campaigns from your connected inbox.",
+      title: "Send from your Gmail",
+      description: "apsurn writes a personalized multi-step sequence for every lead. Edit any draft, then launch from your own inbox.",
       image: "/landing/leads.png",
     },
   ];
 
   return (
-    <section className="relative py-16 sm:py-28 overflow-hidden bg-[#FAFAFA]/50 border-y border-[#EEEEEE]">
+    <section id="how-it-works" className="relative py-16 sm:py-28 overflow-hidden bg-[#FAFAFA]/50 border-y border-[#EEEEEE]">
       <div className="absolute inset-x-0 top-0 bottom-0 pointer-events-none -z-10 flex justify-center px-4">
         <div className="relative w-full max-w-[1400px] h-full rounded-[28px] sm:rounded-[40px] bg-gradient-to-b from-white from-[50%] to-[#F4F4F4]" />
       </div>
 
       <div className="mx-auto max-w-[1280px] px-4 sm:px-8">
         <div className="mx-auto max-w-2xl text-center flex flex-col items-center gap-2.5 sm:gap-3">
+          <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#4379EE]">How it works</p>
           <h2 className="text-2xl sm:text-4xl lg:text-[44px] font-bold tracking-tight text-neutral-950 font-heading leading-tight">
-            Get started in{" "}
-            <span className="relative inline-block">
-              3
-              <span className="absolute -bottom-1.5 sm:-bottom-2 left-0 right-0 h-2.5 sm:h-3 pointer-events-none">
-                <Image
-                  src="/landing/step-3-underline.svg"
-                  alt=""
-                  width={27}
-                  height={30}
-                  className="w-full h-auto object-contain"
-                />
-              </span>
-            </span>{" "}
-            <span className="relative inline-block">
-              steps
-              <span className="absolute -bottom-1.5 sm:-bottom-2 left-0 right-0 h-2.5 sm:h-3 pointer-events-none">
-                <Image
-                  src="/landing/step-steps-underline.svg"
-                  alt=""
-                  width={110}
-                  height={30}
-                  className="w-full h-auto object-contain"
-                />
-              </span>
-            </span>
+            From your URL to booked calls in three steps
           </h2>
-          <p className="text-base sm:text-lg text-neutral-600 font-medium max-w-xl">
-            The same autonomous flow you get in the product: blueprint → prospects → outbound sequences.
-          </p>
         </div>
 
         <div className="mt-10 sm:mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
@@ -91,6 +66,14 @@ export function ProcessSection() {
               </div>
             </div>
           ))}
+        </div>
+        <div className="mt-10 flex justify-center">
+          <Link
+            href="/signup?next=/setup"
+            className="landing-hero-cta inline-flex items-center justify-center rounded-[10px] bg-[#4379EE] px-7 py-2.5 text-[13px] font-medium text-white hover:bg-[#3567D6]"
+          >
+            Get 50 free credits
+          </Link>
         </div>
       </div>
     </section>

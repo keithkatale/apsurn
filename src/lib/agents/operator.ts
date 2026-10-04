@@ -11,7 +11,18 @@ import { defaultCopy } from "@/lib/onboarding/generate-campaign-copy";
 import { createSequence, enrollContacts } from "@/lib/sequences/mutations";
 import { publishArtifact } from "@/lib/copilot/artifacts";
 import { getSequenceOverview, listContacts, listProspectCompanies } from "./shared";
+import { AccountRequiredError, assertRegisteredUser } from "@/lib/auth/guest";
 import type { AgentToolContext, SpecialistModule } from "./types";
+
+async function requireAccount(ctx: AgentToolContext) {
+  try {
+    await assertRegisteredUser(ctx.userId);
+    return null;
+  } catch (error) {
+    if (error instanceof AccountRequiredError) return { error: error.message, code: "account_required" as const };
+    throw error;
+  }
+}
 
 const instruction = `You are Operator, apsurn's pipeline specialist.
 
@@ -181,6 +192,8 @@ async function firstInbox(ctx: AgentToolContext, inboxId?: string) {
 }
 
 async function activateSequence(ctx: AgentToolContext, args: Record<string, unknown>) {
+  const blocked = await requireAccount(ctx);
+  if (blocked) return blocked;
   const sequenceId = String(args.sequenceId);
   const { data: sequence } = await ctx.db.from("sequences").select("id, from_inbox_id, status").eq("id", sequenceId).eq("user_id", ctx.userId).maybeSingle();
   if (!sequence) return { error: "Sequence not found." };
@@ -199,6 +212,8 @@ async function activateSequence(ctx: AgentToolContext, args: Record<string, unkn
 }
 
 async function runSendPass(ctx: AgentToolContext, args: Record<string, unknown>) {
+  const blocked = await requireAccount(ctx);
+  if (blocked) return blocked;
   if (args.confirmed !== true) {
     return { error: "Sending needs an explicit yes from the user. Ask Copilot to confirm first.", needsConfirmation: true };
   }
@@ -212,6 +227,8 @@ async function runSendPass(ctx: AgentToolContext, args: Record<string, unknown>)
 }
 
 async function sendNow(ctx: AgentToolContext, args: Record<string, unknown>) {
+  const blocked = await requireAccount(ctx);
+  if (blocked) return blocked;
   if (args.confirmed !== true) {
     return { error: "Sending needs an explicit yes from the user. Ask Copilot to confirm first.", needsConfirmation: true };
   }

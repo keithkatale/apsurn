@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isGuestUser } from "@/lib/auth/guest";
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -24,14 +25,11 @@ export async function proxy(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const protectedPath =
-    request.nextUrl.pathname.startsWith("/setup") ||
-    request.nextUrl.pathname.startsWith("/dashboard");
+  const protectedPath = request.nextUrl.pathname.startsWith("/dashboard");
 
   if (!user && protectedPath) {
     const dest = request.nextUrl.clone();
-    // New users hitting setup from landing CTAs should land on signup, not sign-in.
-    const authPath = request.nextUrl.pathname.startsWith("/setup") ? "/signup" : "/login";
+    const authPath = "/login";
     dest.pathname = authPath;
     const next = `${request.nextUrl.pathname}${request.nextUrl.search}`;
     dest.search = "";
@@ -46,7 +44,7 @@ export async function proxy(request: NextRequest) {
       return redirectKeepingCookies(new URL("/setup", request.url), response);
     }
   }
-  if (user && (request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/signup")) {
+  if (user && !isGuestUser(user) && (request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/signup")) {
     const next = request.nextUrl.searchParams.get("next");
     const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard/copilot";
     return redirectKeepingCookies(new URL(safeNext, request.url), response);

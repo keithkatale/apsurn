@@ -16,6 +16,7 @@
     "@google/genai": "^2.23.0",
     "@hugeicons/core-free-icons": "^4.3.5",
     "@hugeicons/react": "^1.1.10",
+    "@paper-design/shaders-react": "^0.0.81",
     "@radix-ui/react-collapsible": "^1.1.20",
     "@supabase/ssr": "^0.12.6",
     "@supabase/supabase-js": "^2.115.0",

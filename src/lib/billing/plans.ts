@@ -31,14 +31,14 @@ export type TopupDefinition = {
 
 /** Marketing-only. Enterprise is scoped on a call and is not a checkout product. */
 export const ENTERPRISE_PLAN = {
-  name: "Enterprise",
+  name: "Done-with-you sprint",
   priceUsd: 833,
-  description: "For larger outbound teams. We scope the rollout on a call before anything starts.",
+  description: "I run your first outbound campaign with you.",
   features: [
-    "Custom credit volume",
-    "Everything in Growth",
-    "Shared team rollout",
-    "Starts with a call",
+    "Your ICP defined and tested",
+    "75–100 researched accounts",
+    "Two messaging angles tested",
+    "Weekly findings and a final playbook",
   ],
   bookingUrl: "https://cal.com/keith-katale/30min",
 } as const;

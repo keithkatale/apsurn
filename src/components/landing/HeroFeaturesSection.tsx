@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Volume2 } from "lucide-react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { ArrowUp, Volume2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/landing/Navbar";
+import { MeshGradient } from "@/components/ui/mesh-gradient";
 import { landingVideoUrl } from "@/lib/landing/videos";
 
 const DESKTOP_QUERY = "(min-width: 768px)";
@@ -85,7 +87,7 @@ function HeroLaunchFilm() {
   const src = desktop === null ? "" : landingVideoUrl(desktop ? DESKTOP_FILM : MOBILE_FILM);
 
   return (
-    <div ref={frameRef} className="relative mt-[68px] w-full overflow-hidden rounded-[14px] bg-black">
+    <div ref={frameRef} className="relative w-full overflow-hidden rounded-[14px] bg-black">
       {desktop === null || !src ? (
         <div className="aspect-square w-full md:aspect-video" />
       ) : (
@@ -122,37 +124,100 @@ function HeroLaunchFilm() {
   );
 }
 
+const CHIPS = [
+  { label: "Draft my ICP", href: "#how-it-works" },
+  { label: "Find verified emails", href: "#how-it-works" },
+  { label: "Write the sequence", href: "#how-it-works" },
+];
+
 export function HeroFeaturesSection() {
+  const router = useRouter();
+  const [website, setWebsite] = useState("");
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    const url = website.trim();
+    router.push(url ? `/setup?url=${encodeURIComponent(url)}` : "/setup");
+  }
+
   return (
-    <section id="hero" className="landing-hero bg-white px-5 pb-16 pt-2 sm:px-8 sm:pb-20 sm:pt-4">
-      <div className="mx-auto w-full max-w-[1200px]">
+    <section id="hero" className="landing-hero-shell flex h-svh flex-col bg-white px-[var(--hero-inset)]">
+      <div className="mx-auto flex h-full w-full min-h-0 flex-col">
         <Navbar embedded />
-        <div className="mt-14 flex flex-col items-center sm:mt-20">
-          <h1 className="max-w-[820px] text-center font-heading text-[40px] font-medium leading-[1.06] tracking-[-1.28px] text-neutral-950 sm:text-[52px] lg:text-[62.5px] lg:leading-[66.56px]">
-            Get more meetings booked
-            <br />
-            this week
-          </h1>
-          <p className="mt-3 max-w-[620px] text-center text-[14.4px] font-normal leading-[18px] text-[#605F5F]">
-            Turn your website into verified prospects and Gmail sequences —
-            <br className="hidden sm:block" /> an AI SDR loop built for outbound GTM.
-          </p>
-          <div className="mt-4 flex items-center justify-center gap-6">
-            <Link
-              href="/signup?next=/setup"
-              className="landing-hero-cta inline-flex items-center justify-center rounded-[10px] bg-[#4379EE] px-7 pb-[10px] pt-[9px] text-[12.4px] font-medium leading-[18.2px] text-white hover:bg-[#3567D6]"
-            >
-              Get 50 credits
-            </Link>
-            <Link
-              href="#why-us"
-              className="landing-hero-link text-[13px] font-medium leading-[18.2px] text-[#605F5F]"
-            >
-              Learn more
-            </Link>
+        <div className="relative mt-1 min-h-0 flex-1 pb-[var(--hero-inset)]">
+          <div className="relative h-full overflow-hidden rounded-[28px] sm:rounded-[32px]">
+            <MeshGradient
+              className="absolute inset-0"
+              color1="#8eb8ff"
+              color2="#4379EE"
+              color3="#1d4ed8"
+              color4="#0a1a4a"
+              speed={0.55}
+              distortion={0.85}
+              swirl={0.5}
+              scale={1.35}
+              rotation={110}
+            />
+            <div className="relative z-10 flex h-full flex-col items-center justify-center px-5 py-10 text-center sm:px-10">
+              <h1 className="max-w-[920px] font-heading text-[40px] font-semibold leading-[1.08] tracking-[-0.045em] text-white sm:text-[52px] lg:text-[60px]">
+                Outbound and GTM for B2B SaaS startups
+              </h1>
+              <p className="mt-4 max-w-[560px] text-[17px] font-medium text-white/90 sm:text-[20px]">
+                Paste your website. apsurn finds who should buy.
+              </p>
+              <form onSubmit={submit} className="mt-8 w-full max-w-[640px]">
+                <div className="hero-prompt flex items-center gap-3 rounded-2xl px-4 py-3 shadow-[0_12px_40px_rgba(8,20,60,0.18)] sm:px-5 sm:py-4">
+                  <input
+                    value={website}
+                    onChange={(event) => setWebsite(event.target.value)}
+                    placeholder="Paste your website"
+                    aria-label="Your website"
+                    className="hero-prompt min-w-0 flex-1 bg-transparent text-[16px] text-neutral-900 outline-none placeholder:text-neutral-400"
+                  />
+                  <button
+                    type="submit"
+                    aria-label="Start with this website"
+                    className="hero-send inline-flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors"
+                  >
+                    <ArrowUp className="size-4" />
+                  </button>
+                </div>
+              </form>
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                {CHIPS.map((chip) => (
+                  <Link
+                    key={chip.label}
+                    href={chip.href}
+                    className="hero-chip inline-flex h-8 items-center rounded-full px-3.5 text-[13px] font-medium"
+                  >
+                    {chip.label}
+                  </Link>
+                ))}
+              </div>
+              <p className="mt-8 text-[14px] text-white/75 sm:mt-10">
+                No sales team needed. No list buying. Cancel anytime.
+              </p>
+            </div>
           </div>
-          <HeroLaunchFilm />
         </div>
+      </div>
+    </section>
+  );
+}
+
+export function HeroFilmSection() {
+  return (
+    <section id="demo" className="bg-white px-5 pb-8 pt-16 sm:px-8 sm:pb-12 sm:pt-20">
+      <div className="mx-auto w-full max-w-[1100px]">
+        <div className="mb-8 text-center sm:mb-10">
+          <h2 className="font-heading text-3xl font-semibold tracking-[-0.04em] text-neutral-950 sm:text-4xl">
+            How it works
+          </h2>
+          <p className="mt-3 text-[16px] text-[#605F5F] sm:text-[18px]">
+            From your URL to the first campaign in about 10 minutes.
+          </p>
+        </div>
+        <HeroLaunchFilm />
       </div>
     </section>
   );

@@ -6,6 +6,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ConnectedInbox } from "@/lib/inbox/gmail";
 import { draftOpener, renderTemplate } from "./draft";
+import { ensureSendableEmail } from "./email-check";
 import { checkSendGuards, withinSendingWindow } from "./guards";
 import { sendViaInbox } from "./send";
 
@@ -59,6 +60,7 @@ export async function runOutreachSendPass(opts: {
         full_name,
         title,
         email,
+        email_status,
         qualify_reason,
         archived_at,
         prospect_companies!contacts_prospect_company_id_fkey!inner ( name, domain )
@@ -119,6 +121,7 @@ export async function runOutreachSendPass(opts: {
       full_name: string | null;
       title: string | null;
       email: string | null;
+      email_status: string | null;
       qualify_reason: string | null;
       prospect_companies: { name: string; domain: string };
     };
@@ -155,6 +158,21 @@ export async function runOutreachSendPass(opts: {
           .eq("id", row.id);
       }
       continue;
+    }
+
+    // Only on the first touch: a live re-check of the address before it
+    // ever gets a send attempt. Once step 0 has landed, later steps trust
+    // the thread exists and skip re-verifying on every step.
+    if (nextIndex === 0) {
+      const check = await ensureSendableEmail(db, contact.id, contact.email!, contact.email_status);
+      if (!check.ok) {
+        await db
+          .from("enrollments")
+          .update({ status: "bounced", ended_at: now, next_send_at: null })
+          .eq("id", row.id);
+        result.skipped += 1;
+        continue;
+      }
     }
 
     const company = contact.prospect_companies;

@@ -33,6 +33,7 @@ import {
   type FoundPerson,
 } from "../icypeas";
 import { matchIcypeasIndustries } from "../icypeas-industries";
+import { verifyEmail } from "../email-verifier";
 import { normalizeDomain, resolveEmail } from "./shared";
 import { persistLead, type SaveLeadResult } from "./persist";
 import { searchYcLeads, ycLeadsConfigured, type YcLeadCompany } from "../yc-leads";
@@ -298,17 +299,26 @@ async function saveYcLeadsFirst(input: {
       source: "yc_leads",
       sourceRef: { discovery: "yc_leads", companyIndustry: company.industry },
     };
+    // A live verify here, not a hardcoded "risky": only a real "verified" or
+    // "accept_all" result lets persistLead keep this contact at all. An
+    // unconfigured verifier is soft-trusted as "accept_all" rather than
+    // dropped — same rule resolveEmail uses — so a missing/misconfigured
+    // verifier degrades to "unverified" rather than silently zeroing every
+    // lead this run would otherwise save.
+    const verification = contact.email ? await verifyEmail(contact.email) : null;
+    const emailStatus: ContactStatus =
+      !verification ? "observed" : verification.checks?.reason === "verifier_not_configured" ? "accept_all" : verification.status;
     const candidateContact: CandidateContact = {
       fullName: contact.fullName,
       normalizedName: normalizedName(contact.fullName),
       title: contact.title,
       location: company.location,
       email: contact.email,
-      emailStatus: contact.email ? "risky" : "observed",
+      emailStatus,
       phone: null,
       linkedinUrl: contact.linkedinUrl,
       origin: "inferred",
-      confidence: contact.email ? 0.55 : 0.45,
+      confidence: emailStatus === "verified" ? 0.85 : emailStatus === "accept_all" ? 0.7 : 0.45,
       evidence: [
         {
           url: contact.linkedinUrl || company.website || `https://${domain}`,
@@ -318,7 +328,7 @@ async function saveYcLeadsFirst(input: {
         },
       ],
       source: "yc_leads",
-      sourceRef: { discovery: "yc_leads", emailConfidence: contact.email ? "pattern_firstname_at_domain" : null },
+      sourceRef: { discovery: "yc_leads", emailConfidence: contact.email ? "pattern_firstname_at_domain" : null, verification: verification?.checks },
     };
 
     emit({ type: "tool_start", name: "save_lead", args: { company: { name: company.name, domain }, contacts: [{ fullName: contact.fullName }] } });

@@ -33,8 +33,8 @@ function smtpProbe(host, domain, recipient) {
       for (const line of lines) {
         if (!/^\d{3}[ -]/.test(line) || line[3] === "-") continue;
         const code = Number(line.slice(0, 3));
-        if (stage === 0 && code === 220) { socket.write(`EHLO verifier.apsurn.com\r\n`); stage = 1; }
-        else if (stage === 1 && code >= 200 && code < 400) { socket.write(`MAIL FROM:<verify@apsurn.com>\r\n`); stage = 2; }
+        if (stage === 0 && code === 220) { socket.write(`EHLO verify.apsurn.com\r\n`); stage = 1; }
+        else if (stage === 1 && code >= 200 && code < 400) { socket.write(`MAIL FROM:<verify@verify.apsurn.com>\r\n`); stage = 2; }
         else if (stage === 2 && code >= 200 && code < 400) { socket.write(`RCPT TO:<${recipient}>\r\n`); stage = 3; }
         else if (stage === 3) { socket.write("QUIT\r\n"); done({ accepted: code >= 200 && code < 300, code, response: line.slice(0, 160) }); }
         else if (code >= 400) done({ accepted: false, code, response: line.slice(0, 160) });

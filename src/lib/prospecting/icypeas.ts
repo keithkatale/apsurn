@@ -611,3 +611,59 @@ export async function findEmail(fullName: string, domain: string): Promise<Found
   // abandoning here costs nothing; the caller falls back to pattern guessing.
   return null;
 }
+
+interface VerifyPollResponse {
+  items?: Array<{
+    status?: string;
+    results?: { emails?: Array<{ email?: string; certainty?: string; mxProvider?: string }> };
+  }>;
+}
+
+/**
+ * Verifies a specific email address via Icypeas' own `/email-verification` —
+ * the same provider already paid for and trusted for discovery, now used as
+ * the deliverability check too, rather than standing up separate
+ * infrastructure. Confirmed live against addresses this app already knows
+ * the status of: a known-good address returns `FOUND` with a certainty grade
+ * (mapped through the same mapCertainty scale as findEmail); a known
+ * catch-all domain returns `NOT_FOUND` — correct, since no single mailbox on
+ * a catch-all domain can be confirmed by a yes-to-everything server.
+ *
+ * Returns null on any failure (unconfigured, timeout, network error) so
+ * callers fall back exactly as they do for every other Icypeas miss.
+ */
+export async function verifyEmailViaIcypeas(email: string): Promise<{ status: ContactStatus; checks: Record<string, unknown> } | null> {
+  const apiKey = process.env.ICYPEAS_API_KEY?.trim();
+  if (!apiKey || !email) return null;
+
+  const started = await post<SearchResponse>("/email-verification", { email }, apiKey);
+  const searchId = started?.item?._id;
+  if (!searchId) return null;
+
+  const pollingDeadline = Date.now() + MAX_POLL_WALLCLOCK_MS;
+  for (let attempt = 0; Date.now() < pollingDeadline; attempt++) {
+    const delay = POLL_BACKOFF_MS[Math.min(attempt, POLL_BACKOFF_MS.length - 1)];
+    await new Promise((resolve) => setTimeout(resolve, Math.min(delay, pollingDeadline - Date.now())));
+    if (Date.now() >= pollingDeadline) break;
+
+    const polled = await post<VerifyPollResponse>("/bulk-single-searchs/read", { id: searchId }, apiKey);
+    const item = polled?.items?.[0];
+    const status = (item?.status ?? "").toUpperCase();
+    // "NONE" is the queued/not-yet-processed state (what the start call
+    // itself returns before any polling) — only FOUND/NOT_FOUND are terminal.
+    if (!item || status === "NONE" || status === "SCHEDULED" || status === "IN_PROGRESS") continue;
+
+    if (status !== "FOUND") {
+      return { status: "risky", checks: { provider: "icypeas", result: status || "not_found" } };
+    }
+    const match =
+      item.results?.emails?.find((entry) => entry.email?.toLowerCase() === email.toLowerCase()) ?? item.results?.emails?.[0];
+    return {
+      status: mapCertainty(match?.certainty ?? null),
+      checks: { provider: "icypeas", certainty: match?.certainty ?? null, mxProvider: match?.mxProvider ?? null },
+    };
+  }
+
+  // Still running past the poll budget — not a verdict, just slow.
+  return null;
+}

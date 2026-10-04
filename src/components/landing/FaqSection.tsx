@@ -12,32 +12,32 @@ export function FaqSection() {
 
   const faqs = [
     {
-      q: "How does apsurn build an Ideal Customer Profile (ICP)?",
-      a: "apsurn crawls your company website, analyzes product pages and positioning, then uses Google Vertex AI & Gemini to synthesize a structured ICP blueprint — industries, company size, geos, and buyer personas — for you to review and approve.",
+      q: "Do I need sales experience?",
+      a: "No. apsurn drafts your ICP and your emails. You review and adjust them, which is where most founders learn what works.",
     },
     {
-      q: "How are prospect emails discovered and verified?",
-      a: "Search-grounded prospecting crawls public sources and extracts named people with evidence. Known and inferred addresses are checked by a dedicated verifier (syntax, MX, SMTP). Only definitive mailbox results are exposed for outreach — we never invent contacts.",
+      q: "How does apsurn decide who to target?",
+      a: "It reads your public website, including product pages, positioning and pricing, and uses AI to draft an ICP with industries, company size, regions and buyer roles. You approve it before any prospecting starts.",
     },
     {
-      q: "Can I connect my existing Gmail inbox?",
-      a: "Yes. Connect Google Workspace / Gmail via OAuth. Tokens are encrypted at rest. Sequences send from your connected mailbox under capacity and pacing guards.",
+      q: "How are emails verified?",
+      a: "apsurn only keeps contacts it can verify. Unverifiable addresses are dropped so you don't burn your domain with bounces.",
+    },
+    {
+      q: "Will this hurt my email domain?",
+      a: "apsurn sends at a sensible pace from your own Gmail. We recommend a secondary domain for outbound, which is standard practice for anyone doing cold email.",
     },
     {
       q: "Is there a free plan?",
-      a: "No. Apsurn does not offer a free plan. Startup and Growth start with 50 free credits after you save a card. Your card is charged the plan price when those credits run out — Startup is $30 and Growth is $79 — and that refill adds the plan’s monthly credits. Enterprise starts at $833/month after a call.",
+      a: "There's no ongoing free plan, but every account starts with 50 free credits. You're charged only once those run out.",
     },
     {
-      q: "Can I change or cancel my plan at any time?",
-      a: "Yes. Open Settings and choose Manage subscription to update your card, change plans, or cancel. Your card is not charged until the free credits run out.",
+      q: "Can I cancel anytime?",
+      a: "Yes. There are no contracts on the Startup and Growth plans.",
     },
     {
-      q: "Who is apsurn for?",
-      a: "Founders and lean GTM teams running outbound for B2B SaaS — ICP blueprinting, prospecting, verification, and Gmail sequences in one account-scoped workspace. Shared multi-seat team invites are on the roadmap.",
-    },
-    {
-      q: "Do you offer onboarding assistance?",
-      a: "Yes — guided setup from website to approved blueprint, sample campaign templates, and support to get your outbound pipeline running.",
+      q: "Can you just do it for me?",
+      a: "Yes. That's the done-with-you sprint. Book a call and we'll scope it.",
     },
   ];
 
@@ -64,7 +64,7 @@ export function FaqSection() {
                 </span>
               </h2>
               <p className="text-base sm:text-lg text-neutral-600 font-normal leading-relaxed">
-                Answers to common questions about setup, deliverability, pricing, and autonomous outreach.
+                Straight answers for founders doing their own outbound.
               </p>
             </div>
 
@@ -85,8 +85,8 @@ export function FaqSection() {
             {/* Still have questions CTA */}
             <div className="flex flex-col items-start gap-2.5 sm:gap-3 pt-2">
               <span className="text-sm font-semibold text-neutral-800">Still got questions?</span>
-              <ThreeDButton href="#contact" variant="solid" size="md" className="rounded-xl">
-                <span>Contact us</span>
+              <ThreeDButton href="mailto:hello@apsurn.com" variant="solid" size="md" className="rounded-xl">
+                <span>Email Keith</span>
                 <ArrowRight className="size-3.5" />
               </ThreeDButton>
             </div>

@@ -6,6 +6,7 @@ import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { TOPUPS, type TopupKey } from "@/lib/billing/plans";
 import { trackGoal } from "@/lib/analytics/datafast";
 import { ensureDodoCheckout } from "@/lib/billing/dodo-checkout-client";
+import { goToAccount, redirectGuestToAccount } from "@/lib/auth/require-account-client";
 
 /** In-app credit top-ups (not shown on the public pricing page). */
 export function CreditTopupPanel({ className }: { className?: string }) {
@@ -16,13 +17,18 @@ export function CreditTopupPanel({ className }: { className?: string }) {
     setBusy(topup);
     setMessage(null);
     try {
+      if (await redirectGuestToAccount()) return;
       ensureDodoCheckout();
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ topup }),
       });
-      const data = (await res.json().catch(() => null)) as { checkoutUrl?: string; error?: string } | null;
+      const data = (await res.json().catch(() => null)) as { checkoutUrl?: string; error?: string; code?: string } | null;
+      if (res.status === 403 || data?.code === "account_required") {
+        goToAccount();
+        return;
+      }
       if (!res.ok || !data?.checkoutUrl) throw new Error(data?.error || "Checkout failed");
       trackGoal("initiate_checkout", { topup });
       await DodoPayments.Checkout.open({ checkoutUrl: data.checkoutUrl });

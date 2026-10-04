@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { AccountRequiredError, accountRequiredResponse, assertRegisteredUser } from "@/lib/auth/guest";
 import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
 
 const patchSchema = z.object({
@@ -60,6 +61,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const { sequenceId } = await params;
   const parsed = patchSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  if (parsed.data.status === "active") {
+    try {
+      await assertRegisteredUser(userId);
+    } catch (error) {
+      if (error instanceof AccountRequiredError) return NextResponse.json(accountRequiredResponse(), { status: 403 });
+      throw error;
+    }
+  }
 
   const db = createAdminClient();
   const { data: sequence } = await db.from("sequences").select("id, from_inbox_id").eq("id", sequenceId).eq("user_id", userId).maybeSingle();

@@ -23,6 +23,13 @@ interface LeadOption {
   company?: { name?: string | null; domain?: string | null } | null;
 }
 
+function redirectIfAccountRequired(data: { code?: string } | null) {
+  if (data?.code !== "account_required") return false;
+  const next = `${window.location.pathname}${window.location.search}`;
+  window.location.assign(`/signup?next=${encodeURIComponent(next)}`);
+  return true;
+}
+
 function stepsOf(artifact: CopilotArtifact): Step[] {
   const raw = artifact.payload.steps;
   if (!Array.isArray(raw)) return [];
@@ -109,6 +116,7 @@ export function SequenceArtifact({
         body: JSON.stringify({ status: "active" }),
       });
       const data = await res.json();
+      if (redirectIfAccountRequired(data)) return;
       if (!res.ok) throw new Error(data.error ?? "Could not activate");
       setStatus(data.status ?? "active");
       setMessage(data.warning ?? "Campaign is active.");
@@ -130,6 +138,7 @@ export function SequenceArtifact({
         body: JSON.stringify({ sync: true }),
       });
       const data = await res.json();
+      if (redirectIfAccountRequired(data)) return;
       if (res.status === 402) throw new Error(data.error ?? "Add a card to start with 50 free credits.");
       if (!res.ok) throw new Error(data.error ?? "Send pass failed");
       setMessage(typeof data.sent === "number" ? `Sent ${data.sent}.` : "Send pass finished.");
@@ -146,6 +155,7 @@ export function SequenceArtifact({
     try {
       const res = await fetch(`/api/sequences/${sequenceId}/schedule`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
       const data = await res.json();
+      if (redirectIfAccountRequired(data)) return;
       if (!res.ok) throw new Error(data.error ?? "Could not schedule");
       setStatus("active");
       setMessage(data.scheduled ? `Scheduled ${data.scheduled} for the next hour.` : "No one is enrolled yet.");

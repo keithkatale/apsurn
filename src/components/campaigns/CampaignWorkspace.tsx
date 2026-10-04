@@ -18,6 +18,7 @@ import { htmlToPlain } from "@/lib/outreach/email-html";
 import { tokenizeLeadMentions } from "@/lib/outreach/merge-fields";
 import type { PlanKey } from "@/lib/billing/plans";
 import { notifyCreditsChanged } from "@/components/billing/CreditsBalance";
+import { redirectGuestToAccount } from "@/lib/auth/require-account-client";
 
 export type CompanyProfile = {
   name: string;
@@ -246,6 +247,8 @@ export function CampaignWorkspace({
   const [trialOpen, setTrialOpen] = useState(false);
   const [trialPlan, setTrialPlan] = useState<PlanKey>("startup");
   const [billingActive, setBillingActive] = useState(false);
+  const [guestAccount, setGuestAccount] = useState(false);
+  const [sessionKnown, setSessionKnown] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, CampaignDraft>>(initialDrafts);
   const [generatingKeys, setGeneratingKeys] = useState<Set<string>>(new Set());
   const inFlight = useRef(new Set<string>());
@@ -293,6 +296,12 @@ export function CampaignWorkspace({
         if (!res.ok) return;
         const data = (await res.json()) as { active?: boolean };
         if (!cancelled) setBillingActive(Boolean(data.active));
+        const session = await fetch("/api/auth/session");
+        const who = (await session.json().catch(() => null)) as { guest?: boolean } | null;
+        if (!cancelled) {
+          setGuestAccount(Boolean(who?.guest));
+          setSessionKnown(true);
+        }
       } catch {
         /* ignore */
       }
@@ -306,9 +315,12 @@ export function CampaignWorkspace({
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const trial = params.get("trial");
-    if (trial === "startup" || trial === "growth") {
+    if (sessionKnown && (trial === "startup" || trial === "growth")) {
       setTrialPlan(trial);
-      if (!billingActive) setTrialOpen(true);
+      if (!billingActive) {
+        if (guestAccount) askForAccount();
+        else setTrialOpen(true);
+      }
     }
 
     const billing = params.get("billing");
@@ -354,7 +366,7 @@ export function CampaignWorkspace({
         }
       })();
     }
-  }, [billingActive]);
+  }, [billingActive, guestAccount, sessionKnown]);
 
   useEffect(() => {
     if (!campaign) {
@@ -550,9 +562,23 @@ export function CampaignWorkspace({
     return campaignLeads.filter((person) => person.email).length;
   }, [campaignLeads, openerTemplateReady]);
 
+  function askForAccount() {
+    const next = `${window.location.pathname}${window.location.search}`;
+    window.location.assign(`/signup?next=${encodeURIComponent(next)}`);
+  }
+
+  async function openCredits() {
+    if (guestAccount || (await redirectGuestToAccount())) return;
+    setTrialOpen(true);
+  }
+
   async function sendEmail() {
+    if (guestAccount) {
+      askForAccount();
+      return;
+    }
     if (!billingActive) {
-      setTrialOpen(true);
+      openCredits();
       return;
     }
     if (!lead) {
@@ -585,8 +611,13 @@ export function CampaignWorkspace({
         }),
       });
       const data = (await res.json().catch(() => null)) as { error?: string; code?: string } | null;
+      if (data?.code === "account_required") {
+        askForAccount();
+        setSendMessage(null);
+        return;
+      }
       if (res.status === 402 || data?.code === "billing_required") {
-        setTrialOpen(true);
+        openCredits();
         setSendMessage(null);
         return;
       }
@@ -600,8 +631,12 @@ export function CampaignWorkspace({
   }
 
   async function sendAllGenerated() {
+    if (guestAccount) {
+      askForAccount();
+      return;
+    }
     if (!billingActive) {
-      setTrialOpen(true);
+      openCredits();
       return;
     }
     if (!campaign) {
@@ -644,8 +679,13 @@ export function CampaignWorkspace({
           }),
         });
         const data = (await res.json().catch(() => null)) as { error?: string; code?: string } | null;
+        if (data?.code === "account_required") {
+          askForAccount();
+          setSendAllMessage(null);
+          return;
+        }
         if (res.status === 402 || data?.code === "billing_required") {
-          setTrialOpen(true);
+          openCredits();
           setSendAllMessage(sent > 0 ? `Sent ${sent}, then billing required` : null);
           return;
         }
@@ -1254,7 +1294,7 @@ export function CampaignWorkspace({
                     sendMessage={sendMessage}
                     onSend={() => void sendEmail()}
                     billingActive={billingActive}
-                    onStartTrial={() => setTrialOpen(true)}
+                    onStartTrial={() => void openCredits()}
                   />
                 ) : null}
               </section>

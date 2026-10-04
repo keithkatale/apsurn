@@ -7,6 +7,7 @@ import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { ACTIVATION_FEE_USD, PLANS, STARTER_CREDITS, STARTER_CREDIT_USD, type PlanKey } from "@/lib/billing/plans";
 import { trackGoal } from "@/lib/analytics/datafast";
 import { ensureDodoCheckout } from "@/lib/billing/dodo-checkout-client";
+import { goToAccount, redirectGuestToAccount } from "@/lib/auth/require-account-client";
 
 export function TrialStartModal({
   open,
@@ -23,7 +24,15 @@ export function TrialStartModal({
   const selected = PLANS[plan];
 
   useEffect(() => {
-    if (open) ensureDodoCheckout();
+    if (!open) return;
+    let cancelled = false;
+    void (async () => {
+      const left = await redirectGuestToAccount();
+      if (!cancelled && !left) ensureDodoCheckout();
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
   if (!open) return null;
@@ -32,12 +41,17 @@ export function TrialStartModal({
     setBusy(true);
     setError(null);
     try {
+      if (await redirectGuestToAccount()) return;
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan }),
       });
-      const data = (await res.json().catch(() => null)) as { checkoutUrl?: string; error?: string } | null;
+      const data = (await res.json().catch(() => null)) as { checkoutUrl?: string; error?: string; code?: string } | null;
+      if (res.status === 403 || data?.code === "account_required") {
+        goToAccount();
+        return;
+      }
       if (!res.ok || !data?.checkoutUrl) {
         throw new Error(data?.error || "Could not start checkout");
       }
@@ -100,13 +114,18 @@ export function TrialStartModal({
 }
 
 export async function openPlanCheckout(plan: PlanKey) {
+  if (await redirectGuestToAccount()) return;
   ensureDodoCheckout();
   const res = await fetch("/api/billing/checkout", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ plan }),
   });
-  const data = (await res.json().catch(() => null)) as { checkoutUrl?: string; error?: string } | null;
+  const data = (await res.json().catch(() => null)) as { checkoutUrl?: string; error?: string; code?: string } | null;
+  if (res.status === 403 || data?.code === "account_required") {
+    goToAccount();
+    return;
+  }
   if (!res.ok || !data?.checkoutUrl) throw new Error(data?.error || "Checkout failed");
   trackGoal("initiate_checkout", { plan, starterCreditUsd: STARTER_CREDIT_USD });
   await DodoPayments.Checkout.open({ checkoutUrl: data.checkoutUrl });

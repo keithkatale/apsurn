@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { AccountRequiredError, accountRequiredResponse, assertRegisteredUser } from "@/lib/auth/guest";
 import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
 import type { ConnectedInbox } from "@/lib/inbox/gmail";
+import { ensureSendableEmail } from "@/lib/outreach/email-check";
 import { checkSendGuards } from "@/lib/outreach/guards";
 import { sendViaInbox } from "@/lib/outreach/send";
 import { getOwnedContact } from "@/lib/outreach/owned-contact";
@@ -25,7 +27,9 @@ export async function POST(request: NextRequest) {
     let userId: string;
     try {
       userId = await getCurrentUserId();
+      await assertRegisteredUser(userId);
     } catch (error) {
+      if (error instanceof AccountRequiredError) return NextResponse.json(accountRequiredResponse(), { status: 403 });
       if (error instanceof AuthenticationError) return NextResponse.json({ error: error.message }, { status: 401 });
       throw error;
     }
@@ -75,6 +79,14 @@ export async function POST(request: NextRequest) {
             ? "This address is suppressed"
             : "Cannot send this email";
       return NextResponse.json({ error: message, code: guards.reason }, { status: 400 });
+    }
+
+    const emailCheck = await ensureSendableEmail(db, contact.id, contact.email, contact.email_status);
+    if (!emailCheck.ok) {
+      return NextResponse.json(
+        { error: "This email address doesn't accept mail — it failed verification.", code: "invalid_email" },
+        { status: 400 },
+      );
     }
 
     const leadSource = {

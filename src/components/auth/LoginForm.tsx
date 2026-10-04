@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { BrandLogo } from "@/components/brand/BrandLogo";
+import { OtpInput } from "@/components/interior/otp-input";
 import { SpinLoader } from "@/components/loaders/spin-loader";
 import { createClient } from "@/lib/supabase/client";
 import { setNavigationPending } from "@/lib/navigation-progress";
@@ -52,30 +53,86 @@ export function LoginForm({ mode = "signin" }: { mode?: "signin" | "signup" }) {
   const [email, setEmail] = useState(() => searchParams.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [message, setMessage] = useState<string | null>(
-    searchParams.get("error") === "auth" ? "Google sign-in failed. Try again." : null,
-  );
+  const [message, setMessage] = useState<string | null>(() => {
+    if (searchParams.get("error") === "auth") return "Google sign-in failed. Try again.";
+    if (searchParams.get("error") === "verify") return searchParams.get("message") || "That verification link did not work.";
+    return null;
+  });
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
+  const [phase, setPhase] = useState<"credentials" | "otp">("credentials");
+  const [otpStatus, setOtpStatus] = useState<"idle" | "checking" | "rejected">("idle");
   const isSignup = mode === "signup";
+
+  async function sendVerification() {
+    const guest = await fetch("/api/auth/guest", { method: "POST" });
+    const guestBody = (await guest.json().catch(() => null)) as { guest?: boolean; error?: string } | null;
+    if (!guest.ok) throw new Error(guestBody?.error || "Could not start signup.");
+    if (guestBody?.guest === false) {
+      setNavigationPending(true);
+      router.replace(next);
+      return false;
+    }
+    const response = await fetch("/api/auth/verify/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim(), password, next }),
+    });
+    const data = (await response.json().catch(() => null)) as { error?: string; code?: string } | null;
+    if (data?.code === "account_exists") {
+      setMessage("That email already has an account. Sign in to keep this workspace.");
+      return false;
+    }
+    if (!response.ok) throw new Error(data?.error || "Could not send the verification email.");
+    setPhase("otp");
+    setOtpStatus("idle");
+    setMessage(null);
+    return true;
+  }
+
+  async function confirmCode(code: string) {
+    setOtpStatus("checking");
+    setMessage(null);
+    try {
+      const response = await fetch("/api/auth/verify/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const data = (await response.json().catch(() => null)) as { error?: string; next?: string } | null;
+      if (!response.ok) {
+        setOtpStatus("rejected");
+        setMessage(data?.error || "That code is wrong.");
+        return;
+      }
+      trackGoal("signup", { method: "email" });
+      setNavigationPending(true);
+      router.replace(data?.next && data.next.startsWith("/") ? data.next : next);
+    } catch (error) {
+      setOtpStatus("rejected");
+      setMessage(error instanceof Error ? error.message : "Could not verify that code.");
+    }
+  }
 
   async function submit() {
     setBusy(true);
     setMessage(null);
     try {
+      if (isSignup) {
+        await sendVerification();
+        setBusy(false);
+        return;
+      }
       const supabase = createClient();
-      const result = isSignup
-        ? await supabase.auth.signUp({ email, password })
-        : await supabase.auth.signInWithPassword({ email, password });
+      const result = await supabase.auth.signInWithPassword({ email, password });
       if (result.error) {
         const unknownAccount =
-          !isSignup &&
-          (result.error.code === "invalid_credentials" ||
-            /invalid login credentials/i.test(result.error.message));
+          result.error.code === "invalid_credentials" ||
+          /invalid login credentials/i.test(result.error.message);
         if (unknownAccount && !(await emailHasAccount(email))) {
           setNavigationPending(true);
           router.replace(
-            `/signup?email=${encodeURIComponent(email.trim())}&next=${encodeURIComponent("/setup")}`,
+            `/signup?email=${encodeURIComponent(email.trim())}&next=${encodeURIComponent(next)}`,
           );
           return;
         }
@@ -84,13 +141,13 @@ export function LoginForm({ mode = "signin" }: { mode?: "signin" | "signup" }) {
         return;
       }
       if (result.data.session) {
-        trackGoal(isSignup ? "signup" : "login", { method: "email" });
+        await fetch("/api/auth/claim", { method: "POST" }).catch(() => null);
+        trackGoal("login", { method: "email" });
         setNavigationPending(true);
         router.replace(next);
         return;
       }
       setBusy(false);
-      if (isSignup) trackGoal("signup", { method: "email", status: "confirm_email" });
       setMessage("Check your email to confirm your account.");
     } catch (error) {
       setBusy(false);
@@ -110,13 +167,51 @@ export function LoginForm({ mode = "signin" }: { mode?: "signin" | "signup" }) {
     <div>
       <BrandLogo href="/" size={28} className="mb-8" />
       <div className="mb-8">
-        <h1 className="auth-title">{isSignup ? "Create your account" : "Welcome back"}</h1>
+        <h1 className="auth-title">
+          {phase === "otp" ? "Check your email" : isSignup ? "Create your account" : "Welcome back"}
+        </h1>
         <p className="auth-subtitle">
-          {isSignup ? "Already have an account? " : "Don't have an account? "}
-          <Link href={switchHref}>{isSignup ? "Sign in" : "Sign up"}</Link>
+          {phase === "otp" ? (
+            <>We sent a code and a magic link to {email.trim()}.</>
+          ) : (
+            <>
+              {isSignup ? "Already have an account? " : "Don't have an account? "}
+              <Link href={switchHref}>{isSignup ? "Sign in" : "Sign up"}</Link>
+            </>
+          )}
         </p>
       </div>
 
+      {phase === "otp" ? (
+        <div className="space-y-6">
+          <OtpInput
+            length={6}
+            autoFocus
+            disabled={otpStatus === "checking"}
+            status={otpStatus === "rejected" ? "error" : "idle"}
+            errorMessage={message || "That code is wrong."}
+            hint="Paste the whole code into any cell. The magic link in the same email works too."
+            onChange={() => setOtpStatus((current) => (current === "rejected" ? "idle" : current))}
+            onComplete={(code) => void confirmCode(code)}
+          />
+          {message && otpStatus !== "rejected" ? <p className="auth-message">{message}</p> : null}
+          <button
+            type="button"
+            disabled={busy}
+            className="auth-submit"
+            onClick={() => {
+              setBusy(true);
+              void sendVerification()
+                .catch((error) => setMessage(error instanceof Error ? error.message : "Could not resend the code."))
+                .finally(() => setBusy(false));
+            }}
+          >
+            {busy ? <SpinLoader size="sm" label="Loading" iconClassName="text-current" /> : "Resend code"}
+          </button>
+        </div>
+      ) : null}
+
+      {phase === "credentials" ? (
       <form
         className="space-y-6"
         onSubmit={(event) => {
@@ -184,6 +279,7 @@ export function LoginForm({ mode = "signin" }: { mode?: "signin" | "signup" }) {
           )}
         </button>
       </form>
+      ) : null}
     </div>
   );
 }

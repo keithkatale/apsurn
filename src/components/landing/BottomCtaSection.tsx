@@ -16,24 +16,11 @@ export function BottomCtaSection() {
 
           <div className="relative z-10 flex flex-col items-center text-center">
             <h2 className="text-3xl sm:text-4xl lg:text-[44px] font-semibold tracking-[-0.04em] text-black font-heading leading-[1.2] max-w-2xl">
-              Put outbound on{" "}
-              <span className="relative inline-block">
-                autopilot
-                <span className="absolute -bottom-1 sm:-bottom-2 left-0 right-0 h-2.5 sm:h-3 pointer-events-none">
-                  <Image
-                    src="/landing/clarity-underline.svg"
-                    alt=""
-                    width={120}
-                    height={30}
-                    className="w-full h-auto object-contain"
-                  />
-                </span>
-              </span>{" "}
-              today
+              Your product deserves customers. Start finding them today.
             </h2>
 
             <p className="mt-4 sm:mt-5 text-base sm:text-lg text-[#605F5F] max-w-xl font-medium leading-relaxed tracking-tight">
-              Start with 50 free credits, approve a blueprint, and run verified Gmail sequences — the AI SDR loop for B2B GTM.
+              Paste your URL, approve your ICP and send your first sequence in about 10 minutes.
             </p>
 
             <div className="mt-6 sm:mt-7 flex flex-wrap items-center justify-center gap-3 sm:gap-3.5 w-full sm:w-auto">
@@ -43,7 +30,7 @@ export function BottomCtaSection() {
                 size="md"
                 className="w-full sm:w-auto rounded-xl px-6 h-11"
               >
-                <span>Get 50 credits</span>
+                <span>Get 50 free credits</span>
                 <ArrowRight className="size-4" />
               </ThreeDButton>
               <Link

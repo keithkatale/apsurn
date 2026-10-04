@@ -3,24 +3,45 @@
 import Image from "next/image";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { trackGoal } from "@/lib/analytics/datafast";
-import { ENTERPRISE_PLAN, OFFERED_PLAN_KEYS, PLANS, STARTER_CREDITS, type PlanKey } from "@/lib/billing/plans";
+import { ENTERPRISE_PLAN, PLANS, STARTER_CREDITS, type PlanKey } from "@/lib/billing/plans";
 import { useState } from "react";
 
 export function PricingSection() {
   const [busyPlan, setBusyPlan] = useState<PlanKey | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const plans = OFFERED_PLAN_KEYS.map((key) => {
+  const landingFeatures: Record<PlanKey, string[]> = {
+    startup: [
+      `${STARTER_CREDITS} free credits to start`,
+      "2,000 AI credits a month",
+      "ICP blueprint from your website",
+      "Verified prospects",
+      "Personalized email sequences",
+    ],
+    growth: [
+      "Everything in Startup",
+      "8,000 AI credits a month",
+      "Higher prospecting volume",
+      "Priority AI throughput",
+    ],
+    pro: PLANS.pro.features,
+  };
+  const landingCopy: Record<"startup" | "growth", string> = {
+    startup: "For founders sending their first outbound.",
+    growth: "For founders running outbound every week.",
+  };
+
+  const plans = (["startup", "growth"] as const).map((key) => {
     const plan = PLANS[key];
     return {
       key,
       name: plan.name,
-      description: plan.description,
+      description: landingCopy[key],
       price: `$${plan.priceUsd}`,
-      period: "/mo",
+      period: "/month",
       highlight: Boolean(plan.highlight),
       buttonVariant: (plan.highlight ? "solid" : "soft") as "solid" | "soft",
-      features: plan.features,
+      features: landingFeatures[key],
       cta: `Start with ${STARTER_CREDITS} credits`,
     };
   });
@@ -47,26 +68,13 @@ export function PricingSection() {
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 w-full">
           <div className="max-w-[550px]">
             <h2 className="text-3xl sm:text-4xl lg:text-[44px] font-semibold tracking-[-0.04em] text-black font-heading leading-tight">
-              Simple{" "}
-              <span className="relative inline-block pb-1 sm:pb-2 pt-1 px-1">
-                pricing
-                <span className="absolute -bottom-1.5 left-0 right-0 h-3 pointer-events-none">
-                  <Image
-                    src="/landing/pricing-underline.svg"
-                    alt=""
-                    width={134}
-                    height={30}
-                    className="w-full h-auto object-contain"
-                  />
-                </span>
-              </span>{" "}
-              for every team
+              Simple pricing. Start free.
             </h2>
           </div>
 
-          <div className="max-w-[380px]">
+          <div className="max-w-[420px]">
             <p className="text-base sm:text-lg font-medium text-[#605f5f] tracking-[-0.04em] leading-[1.35] font-sans">
-              No free plan. Startup and Growth start with {STARTER_CREDITS} free credits. Your card is charged when those credits run out. Enterprise starts at ${ENTERPRISE_PLAN.priceUsd}/month after a call.
+              Every self-serve plan starts with {STARTER_CREDITS} free credits. Your card is charged only when those credits run out.
             </p>
           </div>
         </div>
@@ -155,7 +163,7 @@ export function PricingSection() {
                   </p>
                 </div>
                 <div className="flex flex-col gap-1 pt-1">
-                  <span className="text-[13px] font-medium tracking-[-0.03em] text-[#605f5f]">Starting at</span>
+                  <span className="text-[13px] font-medium tracking-[-0.03em] text-[#605f5f]">From</span>
                   <div className="flex items-baseline gap-1">
                     <span className="text-[34px] sm:text-[36px] font-semibold tracking-[-0.04em] text-black font-sans leading-none">
                       ${ENTERPRISE_PLAN.priceUsd}

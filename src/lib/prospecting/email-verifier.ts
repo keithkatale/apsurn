@@ -1,9 +1,25 @@
 import { createHmac, randomUUID } from "node:crypto";
 import type { ContactStatus } from "./types";
+import { verifyEmailViaIcypeas } from "./icypeas";
 
 export interface VerificationResult { status: ContactStatus; checks: Record<string, unknown>; }
 
+/**
+ * Icypeas first — already paid for, reachable over plain HTTPS from anywhere
+ * (no port-25 egress problem, unlike a self-hosted SMTP probe), and verified
+ * live against known-good/known-catch-all addresses. The self-hosted
+ * EMAIL_VERIFIER_URL service (services/email-verifier/) is kept as a
+ * fallback for when Icypeas is unconfigured, rate-limited, or times out —
+ * not removed, since it costs nothing to keep as a second opinion.
+ */
 export async function verifyEmail(email: string): Promise<VerificationResult> {
+  const viaIcypeas = await verifyEmailViaIcypeas(email);
+  if (viaIcypeas) return viaIcypeas;
+
+  return verifyEmailSelfHosted(email);
+}
+
+async function verifyEmailSelfHosted(email: string): Promise<VerificationResult> {
   const endpoint = process.env.EMAIL_VERIFIER_URL?.replace(/\/$/, "");
   const secret = process.env.EMAIL_VERIFIER_SECRET;
   if (!endpoint || !secret) return { status: "risky", checks: { reason: "verifier_not_configured" } };
