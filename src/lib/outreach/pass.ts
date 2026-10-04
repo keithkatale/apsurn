@@ -226,6 +226,8 @@ export async function runOutreachSendPass(opts: {
           qualifyReason: contact.qualify_reason,
           productSummary: blueprint?.product_summary ?? null,
           senderName: inbox!.email_address,
+          userId: sequence.user_id,
+          contactId: contact.id,
         });
         subject = subject || draft.subject;
         body = draft.body;

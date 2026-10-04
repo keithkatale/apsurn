@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 import type { CopilotArtifact } from "@/lib/agents/types";
 import { AgentInspector } from "./AgentInspector";
@@ -118,6 +118,18 @@ export interface CopilotChatProps {
   conversationId?: string | null;
   onConversationIdChange?: (id: string) => void;
   onTurnComplete?: () => void;
+  /** Overrides COPILOT_STARTERS in the empty state — e.g. prompts generated from the account's actual data instead of generic ones. */
+  starters?: ReadonlyArray<{ label: string; prompt: string }>;
+  /**
+   * Replaces the default centered "Welcome to Apsurn" heading in the empty
+   * state. Pass null to render no heading at all (e.g. when the host page
+   * already shows its own greeting above this component).
+   */
+  emptyHeading?: ReactNode | null;
+  /** Extra content rendered below the starter prompts, only in the empty state — e.g. a dashboard's replies/campaigns sections. */
+  emptyFooter?: ReactNode;
+  /** "center" (default) vertically centers the empty state, matching the standalone Copilot tab. "top" anchors it to the top and allows the footer content below it to scroll, for embedding inside a page that already has its own header. */
+  emptyLayout?: "center" | "top";
 }
 
 /**
@@ -148,6 +160,10 @@ export function CopilotChat(props: CopilotChatProps = {}) {
       buildContext={props.buildContext}
       onTurnComplete={props.onTurnComplete}
       initialConversationId={session.ownedId}
+      starters={props.starters}
+      emptyHeading={props.emptyHeading}
+      emptyFooter={props.emptyFooter}
+      emptyLayout={props.emptyLayout}
       onConversationIdChange={(id) => {
         setSession((s) => ({ ...s, ownedId: id }));
         props.onConversationIdChange?.(id);
@@ -161,6 +177,10 @@ function CopilotChatSession({
   initialConversationId,
   onConversationIdChange,
   onTurnComplete,
+  starters,
+  emptyHeading,
+  emptyFooter,
+  emptyLayout = "center",
 }: CopilotChatProps & { initialConversationId: string | null }) {
   const [activeId, setActiveIdState] = useState<string | null>(initialConversationId);
   function setActiveId(id: string) {
@@ -214,12 +234,12 @@ function CopilotChatSession({
     (async () => {
       try {
         const res = await fetch(`/api/copilot/chat?id=${initialConversationId}`);
-        if (!res.ok) throw new Error("Failed to load conversation");
+        if (!res.ok) throw new Error("Failed to load task");
         const data = await res.json();
         if (cancelled) return;
         setMessages(messagesFromHistory(data.messages ?? [], data.artifacts ?? []));
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load conversation");
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load task");
       }
     })();
     return () => {
@@ -230,6 +250,7 @@ function CopilotChatSession({
   }, []);
 
   async function sendMessage(message: string) {
+    if (sending) return;
     setError(null);
     setMessages((prev) => [...prev, { id: uid(), role: "user", content: message }]);
     setActiveTools([]);
@@ -391,9 +412,27 @@ function CopilotChatSession({
 
   return (
     <div className={`copilot-panel relative flex h-full w-full ${selectedTool ? "copilot-panel-split" : ""}`}>
-      <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${isEmpty ? "justify-center" : ""}`}>
-        {!isEmpty ? (
-        <div className="mx-auto min-h-0 w-full max-w-2xl flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3">
+      <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${isEmpty && emptyLayout === "center" ? "justify-center" : ""}`}>
+        {isEmpty && emptyLayout === "top" ? (
+          <div className="copilot-scroll min-h-0 flex-1 overflow-y-auto px-3 py-3">
+            <div className="mx-auto w-full max-w-2xl">
+              {emptyHeading}
+              <Composer disabled={sending} busy={sending} onSend={sendMessage} />
+              <ul className="copilot-starters" aria-label="Starting options">
+                {(starters ?? COPILOT_STARTERS).map((item) => (
+                  <li key={item.label}>
+                    <button type="button" className="copilot-starter" onClick={() => sendMessage(item.prompt)}>
+                      <ArrowRight className="size-3.5 shrink-0 opacity-40" strokeWidth={2} />
+                      <span>{item.label}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {emptyFooter}
+            </div>
+          </div>
+        ) : !isEmpty ? (
+        <div className="copilot-scroll mx-auto min-h-0 w-full max-w-2xl flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3">
               {messages.map((m) => {
                 if (m.role === "user") {
                   return (
@@ -421,6 +460,7 @@ function CopilotChatSession({
                       <ArtifactSurface
                         key={artifact.id}
                         artifact={artifact}
+                        onPrompt={(text) => void sendMessage(text)}
                         expanded={expandedArtifactId === artifact.id}
                         onExpand={() => setExpandedArtifactId(artifact.id)}
                         onCollapse={() => setExpandedArtifactId(null)}
@@ -458,7 +498,8 @@ function CopilotChatSession({
                 <ArtifactSurface
                   key={artifact.id}
                   artifact={artifact}
-                  expanded={expandedArtifactId === artifact.id}
+                  onPrompt={(text) => void sendMessage(text)}
+                        expanded={expandedArtifactId === artifact.id}
                   onExpand={() => setExpandedArtifactId(artifact.id)}
                   onCollapse={() => setExpandedArtifactId(null)}
                 />
@@ -475,31 +516,33 @@ function CopilotChatSession({
         </div>
         ) : null}
 
-        <div className={`px-3 ${isEmpty ? "" : "copilot-composer pb-6 pt-1"}`}>
-          <div className="mx-auto w-full max-w-2xl">
-            {isEmpty ? (
-              <div className="mb-5 text-center">
-                <p className="text-[15px] font-medium text-[var(--copilot-muted)]">Welcome to Apsurn.</p>
-                <h1 className="mt-1 text-[1.65rem] font-semibold tracking-tight text-[var(--copilot-foreground)]">
-                  {companyName ? `What should we do for ${companyName}?` : "What do you want us to work on?"}
-                </h1>
-              </div>
-            ) : null}
-            <Composer disabled={sending} busy={sending} onSend={sendMessage} />
-            {isEmpty ? (
-              <ul className="copilot-starters" aria-label="Starting options">
-                {COPILOT_STARTERS.map((item) => (
-                  <li key={item.label}>
-                    <button type="button" className="copilot-starter" onClick={() => sendMessage(item.prompt)}>
-                      <ArrowRight className="size-3.5 shrink-0 opacity-40" strokeWidth={2} />
-                      <span>{item.label}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
+        {!(isEmpty && emptyLayout === "top") && (
+          <div className={`px-3 ${isEmpty ? "" : "copilot-composer pb-6 pt-1"}`}>
+            <div className="mx-auto w-full max-w-2xl">
+              {isEmpty ? (
+                <div className="mb-5 text-center">
+                  <p className="text-[15px] font-medium text-[var(--copilot-muted)]">Welcome to Apsurn.</p>
+                  <h1 className="mt-1 text-[1.65rem] font-semibold tracking-tight text-[var(--copilot-foreground)]">
+                    {companyName ? `What should we do for ${companyName}?` : "What do you want us to work on?"}
+                  </h1>
+                </div>
+              ) : null}
+              <Composer disabled={sending} busy={sending} onSend={sendMessage} />
+              {isEmpty ? (
+                <ul className="copilot-starters" aria-label="Starting options">
+                  {(starters ?? COPILOT_STARTERS).map((item) => (
+                    <li key={item.label}>
+                      <button type="button" className="copilot-starter" onClick={() => sendMessage(item.prompt)}>
+                        <ArrowRight className="size-3.5 shrink-0 opacity-40" strokeWidth={2} />
+                        <span>{item.label}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {selectedTool ? (

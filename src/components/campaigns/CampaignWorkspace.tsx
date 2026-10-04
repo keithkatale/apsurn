@@ -1,17 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Check, ChevronDown, Loader2, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Pencil, Trash2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { CampaignIcon } from "@/components/campaigns/CampaignIcon";
+import { NewCampaignDialog } from "@/components/campaigns/NewCampaignDialog";
+import { useCampaignNav } from "@/components/campaigns/CampaignsNav";
 import { CompanyFavicon } from "@/components/prospects/CompanyFavicon";
 import { ContactAvatar } from "@/components/prospects/ContactAvatar";
 import { SequenceCanvas } from "@/components/campaigns/SequenceCanvas";
 import { TrialStartModal } from "@/components/billing/TrialStartModal";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { ScanOverlay, type ScanLogEntry, type ScanState } from "@/components/progress/ScanOverlay";
-import { PricingCardShell } from "@/components/ui/pricing-card-shell";
 import { canvasVisibleSteps } from "@/lib/campaigns/sequence-steps";
 import { cn } from "@/lib/cn";
 import { htmlToPlain } from "@/lib/outreach/email-html";
@@ -61,103 +61,6 @@ export type CampaignWorkspaceItem = {
   steps: CampaignEmailStep[];
 };
 
-function CampaignRowMenu({ onRename, onDelete }: { onRename: () => void; onDelete: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-
-  function openMenu() {
-    const rect = buttonRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const menuHeight = 84;
-    const below = rect.bottom + 4;
-    const top = below + menuHeight > window.innerHeight ? Math.max(8, rect.top - menuHeight - 4) : below;
-    setPos({ top, left: Math.max(8, rect.right - 148) });
-    setOpen(true);
-  }
-
-  useEffect(() => {
-    if (!open) return;
-    const close = () => setOpen(false);
-    window.addEventListener("scroll", close, true);
-    window.addEventListener("resize", close);
-    return () => {
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
-    };
-  }, [open]);
-
-  return (
-    <>
-      <button
-        ref={buttonRef}
-        type="button"
-        aria-label="Campaign actions"
-        data-open={open}
-        onClick={(event) => {
-          event.stopPropagation();
-          if (open) setOpen(false);
-          else openMenu();
-        }}
-        className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-neutral-400 hover:bg-white hover:text-neutral-700 data-[open=true]:bg-white data-[open=true]:text-neutral-700"
-      >
-        <MoreHorizontal className="size-3.5" />
-      </button>
-      {open &&
-        pos &&
-        createPortal(
-          <>
-            <div className="fixed inset-0 z-40" onClick={(event) => { event.stopPropagation(); setOpen(false); }} />
-            <div
-              onClick={(event) => event.stopPropagation()}
-              style={{ top: pos.top, left: pos.left }}
-              className="fixed z-50 flex w-36 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white py-1 shadow-lg"
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  onRename();
-                }}
-                className="flex items-center gap-2 px-3 py-2 text-left text-[13px] text-neutral-700 hover:bg-neutral-50"
-              >
-                <Pencil className="size-3.5" />
-                Edit name
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  onDelete();
-                }}
-                className="flex items-center gap-2 px-3 py-2 text-left text-[13px] text-red-600 hover:bg-neutral-50"
-              >
-                <Trash2 className="size-3.5" />
-                Delete
-              </button>
-            </div>
-          </>,
-          document.body,
-        )}
-    </>
-  );
-}
-
-function formatVolume(n: number | null) {
-  if (n == null) return null;
-  if (n >= 1000) return `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k`;
-  return String(n);
-}
-
-function hostOf(url: string) {
-  return url
-    .trim()
-    .replace(/^https?:\/\//i, "")
-    .replace(/^www\./i, "")
-    .split("/")[0]
-    .toLowerCase();
-}
-
 let logId = 0;
 function scanning(logs: string[], progress: number): ScanState {
   logId += 1;
@@ -191,7 +94,6 @@ function lookupDraft(
 }
 
 export function CampaignWorkspace({
-  profile,
   campaigns,
   leadsById,
   initialDrafts,
@@ -210,11 +112,7 @@ export function CampaignWorkspace({
   initialCampaignId?: string;
 }) {
   const router = useRouter();
-  const [railOpen, setRailOpen] = useState(true);
-  const [companyOpen, setCompanyOpen] = useState(false);
-  const [campaignId, setCampaignId] = useState(
-    campaigns.find((item) => item.id === initialCampaignId)?.id ?? campaigns[0]?.id ?? "",
-  );
+  const nav = useCampaignNav();
   const [leadId, setLeadId] = useState<string | null>(null);
   const [scan, setScan] = useState<ScanState | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
@@ -227,8 +125,6 @@ export function CampaignWorkspace({
   const [newCampaignOpen, setNewCampaignOpen] = useState(false);
   const [items, setItems] = useState(campaigns);
   const [leadMap, setLeadMap] = useState(leadsById);
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameDraft, setRenameDraft] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [contactQuery, setContactQuery] = useState("");
   const [pickedIds, setPickedIds] = useState<Set<string>>(new Set());
@@ -238,9 +134,29 @@ export function CampaignWorkspace({
   const [manualTitle, setManualTitle] = useState("");
   const [addBusy, setAddBusy] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     setItems(campaigns);
   }, [campaigns]);
+  useEffect(() => {
+    nav.sync(
+      items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        icon: item.iconSvg ?? "",
+        description: item.description || item.pain,
+      })),
+    );
+  }, [items, nav.sync]);
+  useEffect(() => {
+    const ids = new Set(items.map((item) => item.id));
+    if (nav.activeId && ids.has(nav.activeId)) return;
+    const fallback = items.find((item) => item.id === initialCampaignId)?.id ?? items[0]?.id ?? null;
+    if (fallback !== nav.activeId) nav.select(fallback);
+  }, [items, initialCampaignId, nav.activeId, nav.select]);
   useEffect(() => {
     setLeadMap(leadsById);
   }, [leadsById]);
@@ -273,7 +189,11 @@ export function CampaignWorkspace({
     });
   }, [campaigns]);
 
-  const campaign = items.find((item) => item.id === campaignId) ?? items[0] ?? null;
+  const campaignId =
+    nav.activeId && items.some((item) => item.id === nav.activeId)
+      ? nav.activeId
+      : (items.find((item) => item.id === initialCampaignId)?.id ?? items[0]?.id ?? "");
+  const campaign = items.find((item) => item.id === campaignId) ?? null;
   const availableLeadCount = Object.keys(leadMap).length;
   const campaignLeads = useMemo(() => {
     if (!campaign) return [];
@@ -282,7 +202,6 @@ export function CampaignWorkspace({
   const lead = campaignLeads.find((item) => item.id === leadId) ?? null;
   const generating = Boolean(scan && scan.phase === "scanning");
   const campaignSteps = campaign ? (stepsByCampaign[campaign.id] ?? canvasVisibleSteps(campaign.steps)) : [];
-  const domain = hostOf(profile.websiteUrl);
   const openerStepId = campaignSteps[0]?.id ?? null;
   const selectedKey = lead && campaign ? draftKey(lead.id, campaign.id, openerStepId) : null;
   const selectedDrafting = Boolean(selectedKey && generatingKeys.has(selectedKey));
@@ -742,9 +661,8 @@ export function CampaignWorkspace({
     setLeadId(people[0]?.id ?? null);
   }
 
-  async function saveCampaignName(id: string) {
-    const name = renameDraft.trim();
-    setRenamingId(null);
+  async function saveCampaignName(id: string, nextName: string) {
+    const name = nextName.trim();
     if (!name) return;
     const current = items.find((item) => item.id === id);
     if (!current || current.name === name) return;
@@ -766,9 +684,21 @@ export function CampaignWorkspace({
     if (!res.ok) return;
     const remaining = items.filter((item) => item.id !== id);
     setItems(remaining);
-    if (campaignId === id) setCampaignId(remaining[0]?.id ?? "");
+    if (campaignId === id) nav.select(remaining[0]?.id ?? null);
     router.refresh();
   }
+
+  useEffect(() => {
+    nav.bind({
+      create: () => setNewCampaignOpen(true),
+      rename: (id, name) => {
+        void saveCampaignName(id, name);
+      },
+      remove: (id) => {
+        void deleteCampaign(id);
+      },
+    });
+  });
 
   async function addPickedContacts() {
     if (!campaign || pickedIds.size === 0) return;
@@ -834,166 +764,101 @@ export function CampaignWorkspace({
     }
   }
 
+  async function importCsvFile(file: File) {
+    setImportBusy(true);
+    setImportError(null);
+    setImportStatus("Reading file…");
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/prospects/import", { method: "POST", body });
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Import failed");
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalMessage: string | null = null;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+        for (const part of parts) {
+          const line = part.split("\n").find((l) => l.startsWith("data:"));
+          if (!line) continue;
+          const event = JSON.parse(line.slice(5).trim());
+          if (event.type === "mapping") {
+            setImportStatus(`Reading columns for ${event.total} row${event.total === 1 ? "" : "s"}…`);
+          } else if (event.type === "progress") {
+            setImportStatus(`Saved ${event.companiesSaved} compan${event.companiesSaved === 1 ? "y" : "ies"}, ${event.contactsSaved} contact${event.contactsSaved === 1 ? "" : "s"} (${event.processed}/${event.total})…`);
+          } else if (event.type === "result") {
+            finalMessage = `Imported ${event.companiesSaved} compan${event.companiesSaved === 1 ? "y" : "ies"} and ${event.contactsSaved} contact${event.contactsSaved === 1 ? "" : "s"}${event.skipped ? ` — ${event.skipped} row${event.skipped === 1 ? "" : "s"} skipped` : ""}.`;
+          } else if (event.type === "error") {
+            throw new Error(event.error);
+          }
+        }
+      }
+      setImportStatus(finalMessage);
+      router.refresh();
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : "Import failed");
+      setImportStatus(null);
+    } finally {
+      setImportBusy(false);
+      if (csvInputRef.current) csvInputRef.current.value = "";
+    }
+  }
+
+  async function createManualCampaign(input: { name: string; about: string; file: File }) {
+    const body = new FormData();
+    body.set("name", input.name);
+    body.set("about", input.about);
+    body.set("file", input.file);
+    const res = await fetch("/api/campaigns/manual", { method: "POST", body });
+    const data = (await res.json().catch(() => null)) as {
+      error?: string;
+      sequenceId?: string;
+      name?: string;
+      description?: string;
+      iconSvg?: string;
+      contactIds?: string[];
+      leads?: CampaignLead[];
+      steps?: CampaignEmailStep[];
+    } | null;
+    if (!res.ok || !data?.sequenceId) throw new Error(data?.error || "Could not create that campaign");
+    const sequenceId = data.sequenceId;
+    const leads = data.leads ?? [];
+    setLeadMap((prev) => {
+      const next = { ...prev };
+      for (const person of leads) next[person.id] = person;
+      return next;
+    });
+    setItems((prev) => [
+      {
+        id: sequenceId,
+        name: data.name || input.name,
+        description: data.description || input.about,
+        pain: input.about,
+        targeting: [],
+        estimatedVolume: data.contactIds?.length ?? leads.length,
+        iconSvg: data.iconSvg ?? null,
+        status: "draft",
+        contactIds: data.contactIds ?? leads.map((person) => person.id),
+        steps: data.steps ?? [],
+      },
+      ...prev.filter((item) => item.id !== sequenceId),
+    ]);
+    setStepsByCampaign((prev) => ({ ...prev, [sequenceId]: data.steps ?? [] }));
+    nav.select(sequenceId);
+    setNewCampaignOpen(false);
+    router.refresh();
+  }
+
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden bg-white">
-      <aside
-        className={cn(
-          "flex shrink-0 flex-col border-r border-[#EEEEEE] bg-neutral-50 transition-[width] duration-200",
-          railOpen ? "w-[340px]" : "w-12",
-        )}
-      >
-        {!railOpen && (
-          <button
-            type="button"
-            onClick={() => setRailOpen(true)}
-            aria-label="Expand sidebar"
-            className="m-2 inline-flex size-8 items-center justify-center rounded-lg text-neutral-500 hover:bg-white hover:text-neutral-800"
-          >
-            <PanelLeftOpen className="size-4" />
-          </button>
-        )}
-
-        {railOpen && (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <section className="shrink-0 p-3">
-              <PricingCardShell className="h-auto p-2" innerClassName="gap-2 p-3 sm:p-3">
-                <div className="flex items-start gap-2.5">
-                  <CompanyFavicon domain={domain} name={profile.name} className="mt-0.5 size-8 rounded-lg" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[#4379EE]">Company blueprint</p>
-                    <h3 className="mt-0.5 font-heading text-[16px] font-semibold leading-snug tracking-[-0.04em] text-black">
-                      {profile.name}
-                    </h3>
-                    {domain ? <p className="text-[12px] text-neutral-400">{domain}</p> : null}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setRailOpen(false)}
-                    aria-label="Collapse sidebar"
-                    className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-50 hover:text-neutral-700"
-                  >
-                    <PanelLeftClose className="size-4" />
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setCompanyOpen((open) => !open)}
-                  className="flex w-full items-center justify-between text-left text-[11px] font-medium text-neutral-500"
-                >
-                  {companyOpen ? "Hide details" : "Show details"}
-                  <ChevronDown className={cn("size-3.5 transition-transform", !companyOpen && "-rotate-90")} />
-                </button>
-                {companyOpen && (
-                  <>
-                    <p className="text-[13px] leading-snug tracking-[-0.03em] text-[#605f5f]">{profile.summary}</p>
-                    {profile.valueProp && profile.valueProp !== profile.summary && (
-                      <p className="text-[13px] leading-snug text-[#605f5f]">{profile.valueProp}</p>
-                    )}
-                    {profile.personas.length > 0 && (
-                      <p className="text-[12px] text-neutral-600">
-                        <span className="font-medium text-neutral-700">Personas: </span>
-                        {profile.personas.join(" · ")}
-                      </p>
-                    )}
-                  </>
-                )}
-              </PricingCardShell>
-            </section>
-
-            <div className="flex min-h-0 flex-1 flex-col">
-              <div className="flex shrink-0 items-center justify-between px-3 py-2.5">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
-                  Campaigns {items.length ? `· ${items.length}` : ""}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setNewCampaignOpen(true)}
-                  className="text-[11px] font-semibold text-[#4379EE] hover:text-[#3567D6]"
-                >
-                  New
-                </button>
-              </div>
-              <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-                {items.length === 0 ? (
-                  <p className="px-2 py-4 text-[12px] text-neutral-500">No campaigns yet. Create one to start outreach.</p>
-                ) : (
-                  <ul className="flex flex-col gap-1.5">
-                    {items.map((item) => {
-                      const selected = item.id === campaign?.id;
-                      const volume = formatVolume(item.estimatedVolume);
-                      const editing = renamingId === item.id;
-                      return (
-                        <li key={item.id}>
-                          <div
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => {
-                              if (!editing) setCampaignId(item.id);
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" && !editing) setCampaignId(item.id);
-                            }}
-                            className={cn(
-                              "flex w-full items-start gap-2.5 rounded-lg border px-2.5 py-2.5 text-left",
-                              selected ? "border-[#4379EE] bg-[#E8F1FC]" : "border-transparent hover:bg-white",
-                            )}
-                          >
-                            <CampaignIcon
-                              campaign={item}
-                              storedSvg={item.iconSvg}
-                              selected={selected}
-                              className="mt-0.5 size-8"
-                            />
-                            <span className="min-w-0 flex-1">
-                              <span className="flex items-start justify-between gap-2">
-                                {editing ? (
-                                  <input
-                                    autoFocus
-                                    value={renameDraft}
-                                    onChange={(event) => setRenameDraft(event.target.value)}
-                                    onClick={(event) => event.stopPropagation()}
-                                    onKeyDown={(event) => {
-                                      event.stopPropagation();
-                                      if (event.key === "Enter") void saveCampaignName(item.id);
-                                      if (event.key === "Escape") setRenamingId(null);
-                                    }}
-                                    onBlur={() => void saveCampaignName(item.id)}
-                                    className="min-w-0 flex-1 rounded-md border border-[#4379EE] bg-white px-1.5 py-0.5 text-[13px] font-semibold text-neutral-900 outline-none"
-                                  />
-                                ) : (
-                                  <span className={cn("text-[13px] leading-snug", selected ? "font-semibold text-[#4379EE]" : "font-semibold text-neutral-800")}>
-                                    {item.name}
-                                  </span>
-                                )}
-                                <span className="flex shrink-0 items-center gap-1">
-                                  <span className="text-[12px] text-neutral-400">{volume ?? item.contactIds.length}</span>
-                                  <CampaignRowMenu
-                                    onRename={() => {
-                                      setCampaignId(item.id);
-                                      setRenamingId(item.id);
-                                      setRenameDraft(item.name);
-                                    }}
-                                    onDelete={() => void deleteCampaign(item.id)}
-                                  />
-                                </span>
-                              </span>
-                              {(item.description || item.pain) && !editing && (
-                                <span className="mt-1 line-clamp-2 text-[12px] leading-snug text-neutral-500">
-                                  {item.description || item.pain}
-                                </span>
-                              )}
-                            </span>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </nav>
-            </div>
-          </div>
-        )}
-      </aside>
 
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {generateError && !scan && (
@@ -1012,7 +877,7 @@ export function CampaignWorkspace({
           </div>
         ) : (
           <>
-            <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[#EEEEEE] px-4 py-2.5">
+            <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#EEEEEE] px-3 py-2.5 sm:px-4">
               <div className="flex min-w-0 items-center gap-2.5">
                 {campaign && (
                   <CampaignIcon campaign={campaign} storedSvg={campaign.iconSvg} selected className="size-9" />
@@ -1024,8 +889,8 @@ export function CampaignWorkspace({
                   </p>
                 </div>
               </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <div className="flex items-center gap-2">
+              <div className="flex w-full shrink-0 flex-col items-stretch gap-1 sm:w-auto sm:items-end">
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   <ThreeDButton
                     type="button"
                     variant="solid"
@@ -1071,8 +936,8 @@ export function CampaignWorkspace({
               </div>
             </header>
 
-            <div className="campaign-canvas relative flex min-h-0 flex-1 gap-4 overflow-hidden p-6">
-              <section className="relative z-10 flex h-full min-h-0 w-[320px] shrink-0 flex-col overflow-hidden rounded-lg border border-[#EEEEEE] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+            <div className="campaign-canvas relative flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 md:flex-row md:gap-4 md:overflow-hidden md:p-6">
+              <section className="relative z-10 flex max-h-72 min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-lg border border-[#EEEEEE] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)] md:h-full md:max-h-none md:w-[320px]">
                 <div className="flex shrink-0 items-center justify-between gap-2 border-b border-neutral-100 px-3 py-2.5">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-[#4379EE]">People</p>
@@ -1151,7 +1016,7 @@ export function CampaignWorkspace({
                 </ul>
               </section>
 
-              <section className="relative z-10 min-h-0 min-w-0 flex-1 overflow-hidden">
+              <section className="relative z-10 min-h-[70vh] min-w-0 flex-1 overflow-hidden md:min-h-0">
                 {campaign && addOpen ? (
                   <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-[#EEEEEE] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
                     <div className="flex shrink-0 items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3">
@@ -1229,15 +1094,40 @@ export function CampaignWorkspace({
                           );
                         })
                       )}
-                      <li className="px-2 pb-2 pt-3">
+                      <li className="flex gap-2 px-2 pb-2 pt-3">
                         <button
                           type="button"
                           onClick={() => router.push("/dashboard/prospects?find=1")}
-                          className="w-full rounded-lg border border-dashed border-neutral-200 px-3 py-2.5 text-[12px] font-semibold text-neutral-600 hover:border-[#4379EE] hover:text-[#4379EE]"
+                          className="flex-1 rounded-lg border border-dashed border-neutral-200 px-3 py-2.5 text-[12px] font-semibold text-neutral-600 hover:border-[#4379EE] hover:text-[#4379EE]"
                         >
                           Prospect for new leads
                         </button>
+                        <button
+                          type="button"
+                          disabled={importBusy}
+                          onClick={() => csvInputRef.current?.click()}
+                          className="flex-1 rounded-lg border border-dashed border-neutral-200 px-3 py-2.5 text-[12px] font-semibold text-neutral-600 hover:border-[#4379EE] hover:text-[#4379EE] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {importBusy ? "Importing…" : "Import from CSV"}
+                        </button>
+                        <input
+                          ref={csvInputRef}
+                          type="file"
+                          accept=".csv"
+                          className="hidden"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (file) void importCsvFile(file);
+                          }}
+                        />
                       </li>
+                      {(importStatus || importError) && (
+                        <li className="px-2 pb-1">
+                          <p className={cn("text-[12px]", importError ? "text-red-600" : "text-neutral-500")}>
+                            {importError || importStatus}
+                          </p>
+                        </li>
+                      )}
                     </ul>
                     <div className="shrink-0 border-t border-neutral-100 px-4 py-3">
                       <div className="grid gap-2 sm:grid-cols-4">
@@ -1304,7 +1194,7 @@ export function CampaignWorkspace({
 
         {scan && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/40 px-4">
-            <div className="w-[22rem] shrink-0">
+            <div className="w-full max-w-[22rem] shrink-0">
               <ScanOverlay
                 compact
                 state={scan}
@@ -1323,53 +1213,20 @@ export function CampaignWorkspace({
       )}
 
       {newCampaignOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setNewCampaignOpen(false)}>
-          <div
-            className="w-full max-w-md rounded-2xl border border-[#EEEEEE] bg-white p-5 shadow-lg"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h2 className="text-lg font-semibold text-neutral-900">New campaign</h2>
-            <p className="mt-1 text-sm text-neutral-600">
-              Use the leads you already have, or find new accounts first. We will not scrape again unless you ask.
-            </p>
-            <div className="mt-4 flex flex-col gap-2">
-              <button
-                type="button"
-                disabled={availableLeadCount === 0 || generating}
-                onClick={() => {
-                  setNewCampaignOpen(false);
-                  void generateFromBlueprint();
-                }}
-                className="rounded-lg border border-[#EEEEEE] px-4 py-3 text-left hover:border-[#4379EE] hover:bg-[#E8F1FC] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <p className="text-sm font-semibold text-neutral-900">Use available leads</p>
-                <p className="mt-0.5 text-[12px] text-neutral-500">
-                  {availableLeadCount === 0
-                    ? "No leads yet. Find accounts first."
-                    : `Create a campaign for ${availableLeadCount} existing lead${availableLeadCount === 1 ? "" : "s"}.`}
-                </p>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setNewCampaignOpen(false);
-                  router.push("/dashboard/prospects?find=1");
-                }}
-                className="rounded-lg border border-[#EEEEEE] px-4 py-3 text-left hover:border-[#4379EE] hover:bg-[#E8F1FC]"
-              >
-                <p className="text-sm font-semibold text-neutral-900">Find new leads</p>
-                <p className="mt-0.5 text-[12px] text-neutral-500">Open prospecting to scrape new accounts, then come back here.</p>
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() => setNewCampaignOpen(false)}
-              className="mt-4 text-sm font-medium text-neutral-500 hover:text-neutral-800"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+        <NewCampaignDialog
+          availableLeadCount={availableLeadCount}
+          generating={generating}
+          onClose={() => setNewCampaignOpen(false)}
+          onUseLeads={() => {
+            setNewCampaignOpen(false);
+            void generateFromBlueprint();
+          }}
+          onFindLeads={() => {
+            setNewCampaignOpen(false);
+            router.push("/dashboard/prospects?find=1");
+          }}
+          onCreateManual={createManualCampaign}
+        />
       )}
     </div>
   );

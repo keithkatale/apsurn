@@ -77,7 +77,7 @@ export function AgentInspector({
         </button>
       </header>
 
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
+      <div className="copilot-scroll min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
         {task ? (
           <section>
             <h3 className="copilot-inspector-label">What they were asked</h3>

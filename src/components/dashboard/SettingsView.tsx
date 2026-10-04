@@ -98,7 +98,7 @@ export function SettingsView() {
     <>
     <div className="w-full">
       <header>
-        <h1 className="font-heading text-3xl font-semibold tracking-tight text-neutral-900">Settings</h1>
+        <h1 className="font-heading text-2xl font-semibold tracking-tight text-neutral-900 sm:text-3xl">Settings</h1>
         {email && <p className="mt-1 text-sm text-neutral-500">{email}</p>}
       </header>
       <div className="mt-6">
@@ -106,7 +106,7 @@ export function SettingsView() {
           {inboxError && <p className="mb-3 text-sm text-red-600">{inboxError}</p>}
 
           <div className="grid items-start gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-          <section className="rounded-lg border border-[#EEEEEE] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+          <section className="rounded-lg border border-[#EEEEEE] bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)] sm:p-5">
             <h3 className="text-sm font-semibold text-neutral-900">Appearance</h3>
             <p className="mt-1 text-sm text-neutral-600">Light, dark, or match the system.</p>
             <div className="mt-3">
@@ -114,7 +114,7 @@ export function SettingsView() {
             </div>
           </section>
 
-          <section className="rounded-lg border border-[#EEEEEE] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+          <section className="rounded-lg border border-[#EEEEEE] bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)] sm:p-5">
             <h3 className="text-sm font-semibold text-neutral-900">Account</h3>
             <p className="mt-1 truncate text-sm text-neutral-600">{email || "Signed in"}</p>
             <ThreeDButton
@@ -135,7 +135,7 @@ export function SettingsView() {
             </ThreeDButton>
           </section>
 
-          <section className="rounded-lg border border-[#EEEEEE] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+          <section className="rounded-lg border border-[#EEEEEE] bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)] sm:p-5">
             <h3 className="text-sm font-semibold text-neutral-900">Billing & credits</h3>
             <p className="mt-1 text-sm text-neutral-600">
               Plans start with 50 free credits. Your card is charged when those credits run out. Top-ups are sold only in-app.
@@ -165,7 +165,7 @@ export function SettingsView() {
             <CreditTopupPanel className="mt-4" />
           </section>
 
-          <section className="rounded-lg border border-[#EEEEEE] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+          <section className="rounded-lg border border-[#EEEEEE] bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)] sm:p-5">
             <h3 className="text-sm font-semibold text-neutral-900">Inbox</h3>
             <p className="mt-1 text-sm text-neutral-600">Campaigns send from your Google account.</p>
             {connectedInbox ? (
@@ -215,7 +215,7 @@ export function SettingsView() {
             )}
           </section>
 
-          <section className="rounded-lg border border-[#EEEEEE] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+          <section className="rounded-lg border border-[#EEEEEE] bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)] sm:p-5">
             <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold text-neutral-900">Company blueprint</h3>

@@ -1,10 +1,10 @@
 import { cn } from "@/lib/cn";
-import { campaignIconSvg, type CampaignIconInput } from "@/lib/campaigns/icon";
+import { campaignMaterialIcon, type CampaignIconInput } from "@/lib/campaigns/icon";
 
 export function CampaignIcon({
   campaign,
   storedSvg,
-  className = "size-8",
+  className = "size-4",
 }: {
   campaign: CampaignIconInput;
   storedSvg?: string | null;
@@ -12,11 +12,17 @@ export function CampaignIcon({
   selected?: boolean;
   className?: string;
 }) {
-  const svg = campaignIconSvg(campaign, storedSvg);
+  const name = campaignMaterialIcon(campaign, storedSvg);
   return (
     <span
-      className={cn("inline-flex shrink-0 text-black [&_svg]:size-full", className)}
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
+      className={cn(
+        "material-symbols-outlined inline-flex shrink-0 items-center justify-center leading-none",
+        className,
+      )}
+      style={{ fontSize: 18 }}
+      aria-hidden
+    >
+      {name}
+    </span>
   );
 }

@@ -5,6 +5,7 @@ import { CampaignIcon } from "@/components/campaigns/CampaignIcon";
 import { CompanyFavicon } from "@/components/prospects/CompanyFavicon";
 import { PricingCardShell } from "@/components/ui/pricing-card-shell";
 import { GreetingHeader } from "@/components/dashboard/home/GreetingHeader";
+import { DashboardHomeShell, type DashboardStarter } from "@/components/dashboard/home/DashboardHomeShell";
 import type { CompanyIcp, CompanyPersona } from "@/lib/blueprint/types";
 
 export const dynamic = "force-dynamic";
@@ -195,11 +196,31 @@ export default async function DashboardHomePage() {
   const domain = (company.website_url ?? "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0];
   const panel = "rounded-lg border border-[#EEEEEE] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)]";
 
-  return (
-    <div className="grid w-full gap-8 xl:grid-cols-[minmax(0,1fr)_24rem]">
-      <div className="min-w-0 space-y-8">
-        <GreetingHeader replies={totalReplies ?? 0} campaigns={seqList.filter((s) => s.status === "active").length} />
+  const activeCampaignCount = seqList.filter((s) => s.status === "active").length;
+  const starters: DashboardStarter[] = [];
+  if ((totalReplies ?? 0) > 0) {
+    starters.push({
+      label: `Help me respond to my ${totalReplies} new ${totalReplies === 1 ? "reply" : "replies"}`,
+      prompt: `Show me my recent replies and suggest how to respond to each`,
+    });
+  }
+  if (run) {
+    starters.push({ label: "Check my active prospecting run", prompt: "How is my current prospecting run going?" });
+  }
+  if (activeCampaignCount > 0) {
+    starters.push({ label: "How are my campaigns performing?", prompt: "Summarize how my active campaigns are performing" });
+  }
+  if (!blueprint) {
+    starters.push({ label: "Help me finish my company blueprint", prompt: "Help me build out my company blueprint" });
+  } else if (seqList.length === 0) {
+    starters.push({ label: "Create my first campaign", prompt: "Create a campaign for my ICP" });
+  }
+  starters.push({ label: "Find more leads for my ICP", prompt: "Find leads that match my approved ICP" });
 
+  const greeting = <GreetingHeader replies={totalReplies ?? 0} campaigns={activeCampaignCount} />;
+
+  const footer = (
+    <div className="space-y-8">
         <section className="space-y-3">
           <SectionLabel>Replies · {totalReplies ?? 0}</SectionLabel>
           {replyRows.length === 0 ? (
@@ -299,9 +320,11 @@ export default async function DashboardHomePage() {
             </ul>
           )}
         </section>
-      </div>
+    </div>
+  );
 
-      <aside className="min-w-0 space-y-4">
+  const aside = (
+    <>
         <PricingCardShell className="h-auto p-2" innerClassName="gap-2 p-3 sm:p-3">
           <div className="flex items-start gap-2.5">
             <CompanyFavicon domain={domain} name={company.name ?? undefined} className="mt-0.5 size-8 rounded-lg" />
@@ -403,7 +426,8 @@ export default async function DashboardHomePage() {
             ))}
           </dl>
         </section>
-      </aside>
-    </div>
+    </>
   );
+
+  return <DashboardHomeShell greeting={greeting} starters={starters} footer={footer} aside={aside} />;
 }

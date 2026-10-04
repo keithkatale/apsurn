@@ -87,7 +87,7 @@ function escapeHtml(value: string) {
 
 function who(conversation: SupportConversation) {
   if (conversation.email) return `${conversation.email}${conversation.user_id ? " (signed in)" : " (not signed in)"}`;
-  return conversation.user_id ? "Signed-in user (no email on file)" : "Anonymous visitor (no email yet)";
+  return conversation.user_id ? "Guest session (no personal email yet)" : "Anonymous visitor (no email yet)";
 }
 
 function appOrigin() {

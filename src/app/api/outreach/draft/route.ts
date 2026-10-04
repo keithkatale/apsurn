@@ -124,6 +124,9 @@ export async function POST(request: NextRequest) {
         delayDays: step?.delay_days ?? 3,
         previousSubject: previousDraft?.subject ?? previous?.subject_template ?? null,
         previousBody: previousDraft?.body ?? previous?.body_template ?? null,
+        userId,
+        contactId: contact.id,
+        variant: parsed.data.regenerate ? Date.now() % 1000 : 0,
       });
     } else {
       draft = await draftOpener({
@@ -137,6 +140,9 @@ export async function POST(request: NextRequest) {
         senderName,
         campaignName: sequence.name,
         campaignPain: sequence.pain,
+        userId,
+        contactId: contact.id,
+        variant: parsed.data.regenerate ? Date.now() % 1000 : 0,
       });
     }
 

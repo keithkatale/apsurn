@@ -6,11 +6,18 @@ import { PageLoader } from "@/components/loaders/page-loader";
 import { setDashboardContentPending, subscribeDashboardContent } from "@/lib/navigation-progress";
 import { cn } from "@/lib/cn";
 
+const FULL_BLEED = new Set([
+  "/dashboard/campaigns",
+  "/dashboard/prospects",
+  "/dashboard/copilot",
+  "/dashboard/market-insights",
+  "/dashboard/library",
+]);
+
 export function DashboardMain({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [pending, setPending] = useState(false);
-  const lockScroll = pathname === "/dashboard/campaigns" || pathname === "/dashboard/prospects";
-  const flush = pathname === "/dashboard/campaigns";
+  const fullBleed = FULL_BLEED.has(pathname);
 
   useEffect(() => {
     return subscribeDashboardContent(setPending);
@@ -25,10 +32,8 @@ export function DashboardMain({ children }: { children: React.ReactNode }) {
     <main className="relative isolate min-w-0 flex-1 overflow-hidden">
       <div
         className={cn(
-          "h-full",
-          lockScroll ? "flex flex-col overflow-hidden" : "overflow-y-auto px-8 py-8",
-          lockScroll && !flush && "px-4 py-3",
-          flush && "p-0",
+          "h-full min-h-0",
+          fullBleed ? "flex flex-col overflow-hidden" : "overflow-y-auto px-4 py-5 md:px-8 md:py-8",
         )}
       >
         {children}

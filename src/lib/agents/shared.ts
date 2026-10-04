@@ -51,7 +51,26 @@ export async function listProspectCompanies(
 export async function listContacts(
   db: SupabaseClient,
   userId: string,
-  args: { query?: string; leadStatus?: string; companyId?: string; limit?: number },
+  args: { query?: string; leadStatus?: string; companyId?: string; limit?: number; campaign?: string },
+) {
+  const filtering = args.campaign === "none" || args.campaign === "any";
+  const result = await listContactsRaw(db, userId, filtering ? { ...args, limit: 100 } : args);
+  if (!filtering) return result;
+  const ids = result.contacts.map((c) => c.id);
+  if (ids.length === 0) return result;
+  const { data: enrolled } = await db.from("enrollments").select("contact_id").in("contact_id", ids);
+  const enrolledIds = new Set((enrolled ?? []).map((row) => row.contact_id));
+  return {
+    contacts: result.contacts
+      .filter((c) => (args.campaign === "none" ? !enrolledIds.has(c.id) : enrolledIds.has(c.id)))
+      .slice(0, clampLimit(args.limit)),
+  };
+}
+
+async function listContactsRaw(
+  db: SupabaseClient,
+  userId: string,
+  args: { query?: string; leadStatus?: string; companyId?: string; limit?: number; campaign?: string },
 ) {
   let q = db
     .from("contacts")

@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCopilotThreads } from "@/components/copilot/CopilotThreadsProvider";
+import { TaskIcon } from "@/components/copilot/TaskIcon";
 
 export interface ConversationSummary {
   id: string;
   title: string | null;
+  icon: string | null;
   updated_at: string;
 }
 
@@ -112,7 +114,7 @@ export function CopilotThreadsMenu() {
   return (
     <div className="mt-4 flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center justify-between px-3 pb-1.5">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Conversations</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Tasks</p>
         <button
           type="button"
           onClick={() => select(null)}
@@ -123,11 +125,11 @@ export function CopilotThreadsMenu() {
           <Plus size={13} />
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="copilot-scroll min-h-0 flex-1 overflow-y-auto">
         {loading && conversations.length === 0 ? (
           <p className="px-3 py-2 text-[12px] text-neutral-400">Loading…</p>
         ) : conversations.length === 0 ? (
-          <p className="px-3 py-2 text-[12px] text-neutral-400">No conversations yet.</p>
+          <p className="px-3 py-2 text-[12px] text-neutral-400">No tasks yet.</p>
         ) : (
           <ul className="space-y-px">
             {conversations.map((c) =>
@@ -151,14 +153,15 @@ export function CopilotThreadsMenu() {
                   <button
                     type="button"
                     onClick={() => select(c.id)}
-                    title={c.title ?? "New conversation"}
-                    className={`min-w-0 flex-1 truncate rounded-md px-3 py-1.5 text-left text-[12px] transition-colors ${
+                    title={c.title ?? "New task"}
+                    className={`flex min-w-0 flex-1 items-center gap-1.5 truncate rounded-md px-3 py-1.5 text-left text-[12px] transition-colors ${
                       activeId === c.id
                         ? "bg-neutral-100 font-medium text-neutral-900"
                         : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
                     }`}
                   >
-                    {c.title ?? "New conversation"}
+                    <TaskIcon text={c.title ?? ""} storedIcon={c.icon} className="size-3.5 opacity-70" />
+                    <span className="truncate">{c.title ?? "New task"}</span>
                   </button>
                   <RowMenu
                     onRename={() => {
@@ -195,11 +198,12 @@ export function CopilotThreadsChips() {
           key={c.id}
           type="button"
           onClick={() => select(c.id)}
-          className={`max-w-40 shrink-0 truncate rounded-full px-2.5 py-1 text-[12px] ${
+          className={`flex max-w-40 shrink-0 items-center gap-1 truncate rounded-full px-2.5 py-1 text-[12px] ${
             activeId === c.id ? "bg-neutral-100 font-medium text-neutral-900" : "text-neutral-500"
           }`}
         >
-          {c.title ?? "New conversation"}
+          <TaskIcon text={c.title ?? ""} storedIcon={c.icon} className="size-3 opacity-70" />
+          <span className="truncate">{c.title ?? "New task"}</span>
         </button>
       ))}
     </div>

@@ -109,13 +109,13 @@ export function ProspectsWorkspace({
   }, [openFind]);
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full min-h-0 flex-1 overflow-hidden">
       <div
-        className={`shrink-0 overflow-hidden bg-white transition-[width] duration-300 ease-out ${
-          panelOpen ? "w-[420px] border-r border-neutral-200" : "w-0"
+        className={`shrink-0 overflow-hidden bg-white md:transition-[width] md:duration-300 md:ease-out ${
+          panelOpen ? "fixed inset-0 z-40 md:static md:w-[420px] md:border-r md:border-neutral-200" : "w-0"
         }`}
       >
-        <div className="relative flex h-full w-[420px] flex-col">
+        <div className="relative flex h-full w-full flex-col md:w-[420px]">
           <button
             type="button"
             onClick={() => setPanelOpen(false)}
@@ -142,13 +142,13 @@ export function ProspectsWorkspace({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="flex flex-col gap-3 px-1 py-1">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-3 px-3 py-3 md:px-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <div className="flex shrink-0 items-center gap-2">
               {searchOpen ? (
                 <input
                   autoFocus
-                  className="input w-44 py-1.5"
+                  className="input w-full py-1.5 sm:w-44"
                   placeholder="Search…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -204,7 +204,7 @@ export function ProspectsWorkspace({
                 })}
               </div>
             ) : null}
-            <div className="ml-auto flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2 sm:ml-auto">
               {selected.size > 0 ? (
                 <BulkActionBar
                   selectedContactIds={[...selected]}
@@ -251,11 +251,11 @@ export function ProspectsWorkspace({
       </div>
 
       <div
-        className={`shrink-0 overflow-hidden bg-white transition-[width] duration-300 ease-out ${
-          profileRow ? "w-[420px] border-l border-neutral-200" : "w-0"
+        className={`shrink-0 overflow-hidden bg-white md:transition-[width] md:duration-300 md:ease-out ${
+          profileRow ? "fixed inset-0 z-40 md:static md:w-[420px] md:border-l md:border-neutral-200" : "w-0"
         }`}
       >
-        <div className="h-full w-[420px]">
+        <div className="h-full w-full md:w-[420px]">
           {profileRow && (
             <ContactProfilePanel
               contact={profileRow.contact}

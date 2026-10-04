@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { EMAIL, VISITOR_ID } from "@/lib/support/identity";
+import { EMAIL, isGuestEmail, VISITOR_ID } from "@/lib/support/identity";
 import { addMessage, getOwnedConversation, listMessages, notifyAdmin, updateConversation } from "@/lib/support/store";
 
 export const runtime = "nodejs";
@@ -16,6 +16,9 @@ export async function POST(request: NextRequest) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Please enter a valid email address." }, { status: 400 });
   const { conversationId, visitorId, email } = parsed.data;
+  if (isGuestEmail(email)) {
+    return NextResponse.json({ error: "Please use your own email address so we can reach you." }, { status: 400 });
+  }
 
   const conversation = await getOwnedConversation(conversationId, visitorId);
   if (!conversation) return NextResponse.json({ error: "Not found" }, { status: 404 });

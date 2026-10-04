@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
           companyName: company.name,
           productSummary: blueprint?.product_summary ?? null,
           valueProp: blueprint?.value_prop ?? null,
+          userId,
         });
         const result = await createSequence(db, userId, {
           name: written.name,

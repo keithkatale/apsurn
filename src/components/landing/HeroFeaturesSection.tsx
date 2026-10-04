@@ -120,7 +120,7 @@ function HeroLaunchFilm() {
           <span style={{ width: `${Math.min(100, progress * 100)}%` }} />
         </div>
       ) : null}
-    </div>
+      </div>
   );
 }
 
@@ -130,14 +130,34 @@ const CHIPS = [
   { label: "Write the sequence", href: "#how-it-works" },
 ];
 
+function domainFromInput(raw: string) {
+  const trimmed = raw.replace(/^\s+/, "");
+  if (!/https?:\/\//i.test(trimmed) && !/[/?#]/.test(trimmed)) return trimmed;
+  return trimmed.replace(/^(https?:\/\/)+/i, "").split(/[/?#]/)[0] ?? "";
+}
+
+function websiteUrl(raw: string) {
+  const host = domainFromInput(raw).split(":")[0].trim().toLowerCase();
+  if (!host || /\s/.test(host)) return null;
+  const ok = host === "localhost" || /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/.test(host);
+  return ok ? `https://${host}` : null;
+}
+
 export function HeroFeaturesSection() {
   const router = useRouter();
   const [website, setWebsite] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const canSubmit = website.trim().length > 0;
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    const url = website.trim();
-    router.push(url ? `/setup?url=${encodeURIComponent(url)}` : "/setup");
+    const url = websiteUrl(website);
+    if (!url) {
+      setError("Enter a valid domain, like yourcompany.com");
+      return;
+    }
+    setError(null);
+    router.push(`/setup?url=${encodeURIComponent(url)}`);
   }
 
   return (
@@ -165,23 +185,42 @@ export function HeroFeaturesSection() {
               <p className="mt-4 max-w-[560px] text-[17px] font-medium text-white/90 sm:text-[20px]">
                 Paste your website. apsurn finds who should buy.
               </p>
-              <form onSubmit={submit} className="mt-8 w-full max-w-[640px]">
-                <div className="hero-prompt flex items-center gap-3 rounded-2xl px-4 py-3 shadow-[0_12px_40px_rgba(8,20,60,0.18)] sm:px-5 sm:py-4">
-                  <input
-                    value={website}
-                    onChange={(event) => setWebsite(event.target.value)}
-                    placeholder="Paste your website"
-                    aria-label="Your website"
-                    className="hero-prompt min-w-0 flex-1 bg-transparent text-[16px] text-neutral-900 outline-none placeholder:text-neutral-400"
-                  />
-                  <button
-                    type="submit"
-                    aria-label="Start with this website"
-                    className="hero-send inline-flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors"
-                  >
-                    <ArrowUp className="size-4" />
-                  </button>
+              <form onSubmit={submit} className="mt-8 w-full max-w-[560px] text-left">
+                <div className="prompt-glow">
+                  <span className="prompt-glow-spin" aria-hidden />
+                  <div className="prompt-glow-inner">
+                    <div className="flex items-center gap-0.5 p-1.5 pl-4">
+                      <span className="shrink-0 select-none text-[16px] leading-6 text-[var(--copilot-muted)]">https://</span>
+                      <input
+                        value={website}
+                        onChange={(event) => {
+                          setWebsite(domainFromInput(event.target.value));
+                          if (error) setError(null);
+                        }}
+                        placeholder="yourcompany.com"
+                        aria-label="Your website"
+                        inputMode="url"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        className="copilot-prompt-input min-w-0 flex-1 bg-transparent py-2 pr-2 text-[16px] leading-6 text-[var(--copilot-foreground)] outline-none placeholder:text-[var(--copilot-muted)]"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!canSubmit}
+                        aria-label="Start with this website"
+                        className={`inline-flex size-8 shrink-0 items-center justify-center rounded-full transition ${
+                          canSubmit
+                            ? "bg-neutral-900 text-white hover:opacity-90"
+                            : "cursor-not-allowed bg-[var(--copilot-dropdown-hover)] text-[var(--copilot-muted)] opacity-60"
+                        }`}
+                      >
+                        <ArrowUp className="size-3.5" strokeWidth={2.5} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
+                {error ? <p className="mt-2 px-1 text-center text-[13px] text-white">{error}</p> : null}
               </form>
               <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                 {CHIPS.map((chip) => (

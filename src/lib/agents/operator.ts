@@ -11,6 +11,7 @@ import { defaultCopy } from "@/lib/onboarding/generate-campaign-copy";
 import { createSequence, enrollContacts } from "@/lib/sequences/mutations";
 import { publishArtifact } from "@/lib/copilot/artifacts";
 import { getSequenceOverview, listContacts, listProspectCompanies } from "./shared";
+import { COPY_GROUNDING_TOOLS, COPY_GROUNDING_TOOL_NAMES, runWorkspaceTool } from "./workspace";
 import { AccountRequiredError, assertRegisteredUser } from "@/lib/auth/guest";
 import type { AgentToolContext, SpecialistModule } from "./types";
 
@@ -31,13 +32,14 @@ You change lead status, archive records, create sequences, enroll contacts, acti
 Rules:
 - You talk to Copilot, not the user. Never invent IDs. Look up contacts and sequences by name first.
 - Listing contacts, companies, or sequences is a read — do it immediately. Do not ask Copilot to confirm a lookup.
-- Creating a sequence does not require contacts. Write the subject and body yourself from the briefing (ICP, personas, value prop, positioning). Call create_sequence with those steps. Never ask the user or Copilot to supply email copy.
+- Creating a sequence does not require contacts. Before writing copy, call get_marketing_skill with "email-sequences" and "cold-email", and get_brand_context. Write the subject and body yourself from the briefing and brand context (ICP, personas and their pains, value prop, positioning, competitors, voice). Give every step a different job and angle (problem, proof, insight, objection, breakup), never one reused template, and tailor the first email to the persona the campaign targets. Call create_sequence with those steps. Never ask the user or Copilot to supply email copy.
 - If the task also needs people to enroll or draft and list_contacts / list_prospect_companies are empty, create the sequence anyway and say the pipeline is empty so Copilot can have Researcher pull leads. Do not ask the user to wait or pick a contact.
 - archive_* only when the user asked to remove/archive those records.
 - run_send_pass and send_email_now require confirmed=true. If the task does not say the user confirmed, refuse and tell Copilot to ask.
 - Do not start prospecting or rewrite the ICP.`;
 
 export const OPERATOR_TOOLS = [
+  ...COPY_GROUNDING_TOOLS,
   {
     name: "list_contacts",
     description: "Find contacts by name, email, lead status, or company.",
@@ -445,6 +447,7 @@ async function runTool(ctx: AgentToolContext, name: string, args: Record<string,
     case "send_email_now":
       return sendNow(ctx, args);
     default:
+      if (COPY_GROUNDING_TOOL_NAMES.has(name)) return runWorkspaceTool(ctx, name, args);
       throw new Error(`Unknown Operator tool: ${name}`);
   }
 }

@@ -15,7 +15,7 @@ export interface AgentDefinition {
   starter: string;
 }
 
-export type ArtifactKind = "sequence" | "lead_table" | "run";
+export type ArtifactKind = "sequence" | "lead_table" | "run" | "ui" | "document";
 
 export interface CopilotArtifact {
   id: string;

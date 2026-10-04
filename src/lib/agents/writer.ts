@@ -5,17 +5,19 @@ import { tokenizeLeadMentions } from "@/lib/outreach/merge-fields";
 import { getOwnedContact } from "@/lib/outreach/owned-contact";
 import { getOutreachDraft, saveOutreachDraft } from "@/lib/outreach/persist-draft";
 import { getSequenceOverview, listContacts, listProspectCompanies } from "./shared";
+import { COPY_GROUNDING_TOOLS, COPY_GROUNDING_TOOL_NAMES, runWorkspaceTool } from "./workspace";
 import type { AgentToolContext, SpecialistModule } from "./types";
 
 const instruction = `You are Writer, apsurn's outreach copy specialist.
 
 You draft emails for a specific contact and sequence. You never send. You never create sequences — that is Operator. If the user wants something sent, tell Copilot to hand that to Operator after they confirm.
 
-You talk to Copilot, not the user. Look up contacts and sequences first. Use the briefing for value prop, positioning, and persona pain.
+You talk to Copilot, not the user. Look up contacts and sequences first. Use the briefing for value prop, positioning, and persona pain. For any copy you write yourself, first call get_marketing_skill (cold-email) and get_brand_context. draft_outreach_email already grounds each email in the business and varies its structure per recipient; never copy one email's structure onto another.
 
 If list_contacts and list_prospect_companies are both empty, stop and say the pipeline is empty so Copilot can have Researcher pull leads. Do not ask the user to pick a contact or wait for them. Return the subject and body you saved so Copilot can show them.`;
 
 export const WRITER_TOOLS = [
+  ...COPY_GROUNDING_TOOLS,
   {
     name: "list_contacts",
     description: "Find contacts by name, email, lead status, or company so you can draft for the right person. Call this before drafting.",
@@ -129,6 +131,9 @@ async function draftEmail(ctx: AgentToolContext, args: Record<string, unknown>) 
         delayDays: step?.delay_days ?? 3,
         previousSubject: previousDraft?.subject ?? previous?.subject_template ?? null,
         previousBody: previousDraft?.body ?? previous?.body_template ?? null,
+        userId: ctx.userId,
+        contactId: contact.id,
+        variant: args.regenerate === true ? Date.now() % 1000 : 0,
       });
     } else {
       draft = await draftOpener({
@@ -142,6 +147,9 @@ async function draftEmail(ctx: AgentToolContext, args: Record<string, unknown>) 
         senderName,
         campaignName: sequence.name,
         campaignPain: sequence.pain,
+        userId: ctx.userId,
+        contactId: contact.id,
+        variant: args.regenerate === true ? Date.now() % 1000 : 0,
       });
     }
 
@@ -198,6 +206,7 @@ async function runTool(ctx: AgentToolContext, name: string, args: Record<string,
     case "draft_outreach_email":
       return draftEmail(ctx, args);
     default:
+      if (COPY_GROUNDING_TOOL_NAMES.has(name)) return runWorkspaceTool(ctx, name, args);
       throw new Error(`Unknown Writer tool: ${name}`);
   }
 }

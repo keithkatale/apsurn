@@ -19,7 +19,7 @@ export function GreetingHeader({ replies, campaigns }: { replies: number; campai
       <p className="text-sm text-neutral-500" suppressHydrationWarning>
         {now.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
       </p>
-      <h1 className="mt-1 font-heading text-3xl font-semibold leading-tight tracking-tight text-neutral-900">
+      <h1 className="mt-1 font-heading text-2xl font-semibold leading-tight tracking-tight text-neutral-900 sm:text-3xl">
         <span suppressHydrationWarning>{partOfDay(now.getHours())}.</span> {summary(replies, campaigns)}
       </h1>
     </header>

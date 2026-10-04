@@ -6,42 +6,63 @@ export type CampaignIconInput = {
   segmentKey?: string | null;
 };
 
-const STROKE = `stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" fill="none"`;
+/** Google Material Symbols used for campaign and task marks. Names are ligatures, not drawn SVGs. */
+export const MATERIAL_ICON_NAMES = [
+  "ads_click",
+  "apartment",
+  "bolt",
+  "bug_report",
+  "business_center",
+  "campaign",
+  "database",
+  "forum",
+  "forward_to_inbox",
+  "group",
+  "handshake",
+  "help",
+  "hub",
+  "lightbulb",
+  "mail",
+  "monitoring",
+  "payments",
+  "person_search",
+  "redeem",
+  "rocket_launch",
+  "schedule",
+  "send",
+  "settings",
+  "storefront",
+  "trending_up",
+  "verified",
+  "waving_hand",
+  "work",
+] as const;
 
-function wrap(inner: string): string {
-  return `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${inner}</svg>`;
-}
+export type MaterialIconName = (typeof MATERIAL_ICON_NAMES)[number];
 
-const MOTIFS = {
-  mail: wrap(`<rect x="5" y="8" width="14" height="9" rx="1.5" ${STROKE}/><path d="M5.5 8.6 12 13.2 18.5 8.6" ${STROKE}/>`),
-  handshake: wrap(`<path d="M8 14.5 6.2 12.7a1.6 1.6 0 0 1 0-2.3L8.5 8.1l2.3 2.3" ${STROKE}/><path d="M16 14.5 17.8 12.7a1.6 1.6 0 0 0 0-2.3L15.5 8.1l-2.3 2.3" ${STROKE}/><path d="M9.2 13.2h5.6" ${STROKE}/>`),
-  clock: wrap(`<circle cx="12" cy="12" r="6.2" ${STROKE}/><path d="M12 9.2v3.2l2.3 1.4" ${STROKE}/>`),
-  gift: wrap(`<rect x="5.5" y="11" width="13" height="7.5" rx="1.2" ${STROKE}/><path d="M5.5 11h13M12 11v7.5M9.2 8.2c0-1.3 1.1-2 2.8-2s2.8.7 2.8 2c0 1.4-2.8 2.8-2.8 2.8S9.2 9.6 9.2 8.2Z" ${STROKE}/>`),
-  target: wrap(`<circle cx="12" cy="12" r="6.2" ${STROKE}/><circle cx="12" cy="12" r="3.1" ${STROKE}/><circle cx="12" cy="12" r="1.05" fill="currentColor" stroke="none"/>`),
-  follow: wrap(`<path d="M6.5 8.5h7.2v7.2H6.5z" ${STROKE}/><path d="M10.8 8.5V6.8h6.7v6.7H16" ${STROKE}/>`),
-  rocket: wrap(`<path d="M14.8 6.6c2.4 2.4 2.6 5.3 1.1 6.8L12 17.3 6.7 12l3.9-3.9c1.5-1.5 4.4-1.3 6.8 1.1Z" ${STROKE}/><path d="M9.4 14.6 7 17.2M11.2 16.2 9.4 18" ${STROKE}/><circle cx="13.35" cy="10.65" r="1.05" fill="currentColor" stroke="none"/>`),
-  users: wrap(`<circle cx="9.2" cy="9.4" r="2.1" ${STROKE}/><path d="M5.6 16.4c.4-2.1 1.8-3.2 3.6-3.2s3.2 1.1 3.6 3.2" ${STROKE}/><circle cx="15.4" cy="9.8" r="1.7" ${STROKE}/><path d="M14.2 13.4c1.5.1 2.6 1 3 2.8" ${STROKE}/>`),
-  spark: wrap(`<path d="M12 6.2 13.1 10 17 11.2 13.1 12.4 12 16.2 10.9 12.4 7 11.2 10.9 10Z" ${STROKE}/><path d="M17.4 15.2 18 16.8 19.6 17.4 18 18 17.4 19.6 16.8 18 15.2 17.4 16.8 16.8Z" fill="currentColor" stroke="none"/>`),
-  search: wrap(`<circle cx="11" cy="11" r="4.4" ${STROKE}/><path d="M14.3 14.3 17.6 17.6" ${STROKE}/>`),
-  building: wrap(`<path d="M7 18V8.2h10V18" ${STROKE}/><path d="M10 18v-3.2h4V18" ${STROKE}/><path d="M9.4 10.4h1.2M13.4 10.4h1.2M9.4 13h1.2M13.4 13h1.2" ${STROKE}/>`),
-  chart: wrap(`<path d="M6.4 16.8h11.2M8.2 16.8V12M12 16.8V8.6M15.8 16.8v-3.4" ${STROKE}/>`),
-} as const;
+const ICON_SET = new Set<string>(MATERIAL_ICON_NAMES);
 
-type Motif = keyof typeof MOTIFS;
-
-const KEYWORDS: Array<{ motif: Motif; terms: string[] }> = [
-  { motif: "handshake", terms: ["competitor", "incumbent", "switch", "displace", "replace", "vs", "versus"] },
-  { motif: "clock", terms: ["trigger", "timing", "funded", "funding", "launch", "clock", "hire", "milestone"] },
-  { motif: "gift", terms: ["give-first", "give first", "teardown", "value-first", "sample", "proof", "audit"] },
-  { motif: "target", terms: ["vertical", "niche", "segment", "icp", "criteria", "industry"] },
-  { motif: "follow", terms: ["follow-up", "follow up", "breakup", "second-touch", "second touch", "nurture"] },
-  { motif: "rocket", terms: ["growth", "scale", "outbound", "pipeline", "accelerator"] },
-  { motif: "users", terms: ["persona", "buyer", "founder", "operator", "team", "champion"] },
-  { motif: "spark", terms: ["intent", "signal", "mention", "news", "warm"] },
-  { motif: "search", terms: ["discover", "find", "source", "prospect"] },
-  { motif: "building", terms: ["account", "company", "enterprise", "logo"] },
-  { motif: "chart", terms: ["volume", "pipeline", "metric", "revenue"] },
-  { motif: "mail", terms: ["email", "cold", "inbox", "outreach", "send", "sequence"] },
+const KEYWORDS: Array<{ icon: MaterialIconName; terms: string[] }> = [
+  { icon: "handshake", terms: ["competitor", "incumbent", "switch", "displace", "replace", "versus"] },
+  { icon: "payments", terms: ["fund", "funding", "revenue", "pricing", "budget", "paid"] },
+  { icon: "work", terms: ["hire", "hiring", "sdr", "recruit", "job", "headcount"] },
+  { icon: "schedule", terms: ["trigger", "timing", "clock", "follow-up", "follow up", "nurture", "milestone"] },
+  { icon: "redeem", terms: ["give-first", "give first", "sample", "gift", "teardown", "audit", "proof"] },
+  { icon: "rocket_launch", terms: ["launch", "growth", "scale", "scaling", "accelerator", "startup"] },
+  { icon: "ads_click", terms: ["intent", "signal", "click", "warm"] },
+  { icon: "person_search", terms: ["prospect", "discover", "buyer", "persona", "champion", "founder"] },
+  { icon: "group", terms: ["team", "operator", "users", "community"] },
+  { icon: "apartment", terms: ["enterprise", "account", "company", "logo"] },
+  { icon: "storefront", terms: ["vertical", "niche", "segment", "industry", "icp"] },
+  { icon: "monitoring", terms: ["pipeline", "metric", "volume", "analytics"] },
+  { icon: "trending_up", terms: ["outbound", "conversion", "booked"] },
+  { icon: "lightbulb", terms: ["insight", "idea", "angle", "playbook"] },
+  { icon: "forum", terms: ["conversation", "reply", "message", "thread"] },
+  { icon: "forward_to_inbox", terms: ["sequence", "follow", "drip"] },
+  { icon: "verified", terms: ["verified", "deliverability", "domain"] },
+  { icon: "hub", terms: ["integration", "stack", "workflow"] },
+  { icon: "business_center", terms: ["sales", "deal", "quota"] },
+  { icon: "mail", terms: ["email", "cold", "inbox", "outreach", "send"] },
 ];
 
 function blob(input: CampaignIconInput): string {
@@ -51,22 +72,40 @@ function blob(input: CampaignIconInput): string {
     .toLowerCase();
 }
 
-function pickMotif(input: CampaignIconInput): Motif {
+export function materialSymbolsStylesheet() {
+  const names = [...MATERIAL_ICON_NAMES].sort().join(",");
+  return `https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=${names}`;
+}
+
+function pickMaterialIcon(input: CampaignIconInput): MaterialIconName {
   const text = blob(input);
-  let best: Motif = "mail";
+  let best: MaterialIconName = "campaign";
   let score = 0;
   for (const row of KEYWORDS) {
     const hits = row.terms.reduce((sum, term) => (text.includes(term) ? sum + (term.length > 8 ? 2 : 1) : sum), 0);
     if (hits > score) {
       score = hits;
-      best = row.motif;
+      best = row.icon;
     }
   }
   return best;
 }
 
+export function readMaterialIcon(stored?: string | null): MaterialIconName | null {
+  if (!stored) return null;
+  const trimmed = stored.trim();
+  const name = trimmed.startsWith("mi:") ? trimmed.slice(3) : trimmed;
+  if (name.includes("<") || name.includes(" ")) return null;
+  return ICON_SET.has(name) ? (name as MaterialIconName) : null;
+}
+
+/** Stable Google icon for a campaign. Stored values win; older SVG marks are re-picked from the copy. */
+export function campaignMaterialIcon(input: CampaignIconInput, stored?: string | null): MaterialIconName {
+  return readMaterialIcon(stored) ?? pickMaterialIcon(input);
+}
+
 export function generateCampaignIconSvg(input: CampaignIconInput): string {
-  return MOTIFS[pickMotif(input)];
+  return `mi:${pickMaterialIcon(input)}`;
 }
 
 const ALLOWED_TAGS = new Set(["svg", "rect", "path", "circle", "g"]);

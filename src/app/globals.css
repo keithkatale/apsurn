@@ -236,6 +236,15 @@ html.dark .input:focus {
     0 4px 14px rgba(0, 0, 0, 0.06);
 }
 
+.copilot-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.copilot-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 .copilot-user-bubble {
   background: #171717;
   color: #fff;
@@ -566,6 +575,20 @@ html.dark .copilot-user-bubble {
   inset: 0 0 0 auto;
   z-index: 20;
   box-shadow: var(--copilot-card-shadow);
+}
+
+@media (max-width: 767px) {
+  .copilot-inspector {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    width: 100%;
+    border-left: 0;
+  }
+
+  body:has([data-dashboard]) .support-chat-root {
+    bottom: calc(4.75rem + env(safe-area-inset-bottom));
+  }
 }
 
 .copilot-inspector-label {
@@ -1969,4 +1992,29 @@ html.dark [data-dashboard] main .bg-neutral-100 {
 
 html.dark [data-dashboard] main .copilot-page-shell.bg-white {
   background-color: #151515;
+}
+
+/* Generated-UI tones in dark mode (Copilot cards, Library, public pages). */
+html.dark .bg-amber-50 {
+  background-color: #3a2e12;
+}
+html.dark .text-amber-800,
+html.dark .text-amber-900 {
+  color: #fcd34d;
+}
+html.dark .bg-violet-50 {
+  background-color: #2a2145;
+}
+html.dark .text-violet-700 {
+  color: #c4b5fd;
+}
+html.dark .text-red-700 {
+  color: #fca5a5;
+}
+html.dark .text-emerald-700,
+html.dark .text-emerald-900 {
+  color: #6ee7b7;
+}
+html.dark .border-amber-200 {
+  border-color: #5c4a1c;
 }

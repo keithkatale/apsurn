@@ -55,8 +55,56 @@ export function ContactsTable({
   }
 
   return (
-    <div className="flex flex-col gap-2 overflow-hidden rounded-xl border border-neutral-200">
-      <div className="overflow-x-auto">
+    <div className="flex flex-col gap-2 overflow-hidden rounded-xl border border-neutral-200 bg-white">
+      <ul className="divide-y divide-neutral-100 md:hidden">
+        {rows.length === 0 ? (
+          <li className="px-3 py-8 text-center text-sm text-neutral-500">No leads in this table.</li>
+        ) : null}
+        {rows.map(({ contact, company }) => {
+          const isSelected = selected.has(contact.id);
+          return (
+            <li key={contact.id} className={isSelected ? "bg-neutral-100" : undefined}>
+              <div className="flex items-start gap-3 px-3 py-3">
+                {!readOnly ? (
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggle(contact.id)}
+                    className="mt-2 size-4 shrink-0 rounded border-neutral-300"
+                    aria-label={`Select ${contact.full_name ?? "contact"}`}
+                  />
+                ) : null}
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-start gap-2.5 text-left disabled:cursor-default"
+                  onClick={() => onOpenProfile?.({ contact, company })}
+                  disabled={!onOpenProfile}
+                >
+                  <ContactAvatar name={contact.full_name} linkedinUrl={contact.linkedin_url} email={contact.email} className="size-9" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-neutral-900">{contact.full_name || "—"}</span>
+                    <span className="mt-0.5 block truncate text-[13px] text-neutral-500">{contact.title || "Role unknown"}</span>
+                    <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[13px] text-neutral-600">
+                      <CompanyFavicon domain={company.domain} name={company.name} />
+                      <span className="truncate">{company.name}</span>
+                    </span>
+                    <span className="mt-1 block truncate text-[12px] text-neutral-500">
+                      {maskEmails ? "Email hidden" : contact.email || "No email"}
+                    </span>
+                  </span>
+                </button>
+              </div>
+              {!readOnly ? (
+                <div className="flex flex-wrap gap-2 px-3 pb-3">
+                  <LeadStatusPicker contactId={contact.id} value={contact.lead_status} />
+                  <OutreachPicker contactId={contact.id} value={(contact.outreach ?? "not_contacted") as OutreachState} />
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full border-collapse text-sm leading-tight">
           <thead>
             <tr className="border-b border-neutral-200 text-left text-[11px] font-medium uppercase tracking-wide text-neutral-400">

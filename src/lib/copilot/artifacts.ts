@@ -48,6 +48,9 @@ export async function createArtifact(
     .single();
   if (error || !data) {
     console.error("[copilot] artifact insert failed", error?.message);
+    if (error && /check constraint|copilot_artifacts_kind_check/i.test(error.message)) {
+      throw new Error("Copilot cards need a database update. Run supabase/migrations/0026_workspace_library.sql in the Supabase SQL editor, then try again.");
+    }
     return null;
   }
   return rowToArtifact(data);

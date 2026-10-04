@@ -5,6 +5,8 @@ import { researcher } from "./researcher";
 import { getAnalyticsSummary, getSequenceOverview, listContacts, listProspectCompanies } from "./shared";
 import { getAccountSnapshot } from "./snapshot";
 import { delegateToAgent, getAgentStatus } from "./delegate";
+import { publishArtifact } from "@/lib/copilot/artifacts";
+import { WORKSPACE_MUTATING_TOOLS, WORKSPACE_TOOL_DECLARATIONS, WORKSPACE_TOOL_NAMES, runWorkspaceTool } from "./workspace";
 import type { AgentToolContext } from "./types";
 import { SPECIALIST_IDS } from "./types";
 
@@ -29,7 +31,16 @@ How to work:
 - If a specialist cannot continue because the account has no contacts or companies, do not ask the user. List first if you have not, then have Researcher start a prospecting run. Each saved company costs credits (see creditsPerCompany). If the original ask was a sequence, Operator still creates it in this turn.
 - Delegate only when you cannot do the work yourself: Researcher to start a prospecting run, Listener to scan or change keywords, Writer to draft copy, Operator to create sequences, enroll, archive, or send.
 - After a Researcher or Listener job is queued, say it is running and mention that each saved company spends credits. Use get_agent_status if they ask how it is going.
-- When a tool returns an artifact (a campaign, a lead table, or a run), describe it in one sentence and stop. Do not paste its steps, rows, or JSON. The card in the chat is the result.
+- When a tool returns an artifact (a campaign, a table, a document, or a run), describe it in one sentence and stop. Do not paste its steps, rows, or JSON. The card in the chat is the result.
+- Never say you showed, listed, or saved something unless a tool result confirms it (shown/rendered/saved true, or an artifactId). If a list tool returns rows, they are already on screen as a card. If you could not do something, say so and say what you can do instead.
+- Marketing craft: before you write or critique any email, sequence, campaign, landing or demo page, brand identity/vision, positioning or messaging, call get_marketing_skill for the matching playbook (cold-email, email-sequences, copywriting, positioning-brand, persuasion, copy-editing) and get_brand_context for the business facts. Ground every claim in the blueprint and brand documents, vary structure and angle between audiences and between emails, and never reuse one template. If key facts are missing (proof points, customer language, differentiators), ask for them or mark them as gaps instead of inventing.
+- Make documents and pages detailed, not thin: structured Markdown with headings, tables, quotes and images, and for demos and pages use rich blocks with colored table cells, cards with logos and images, tabs per audience or topic, accordions for detail, dropdowns / toggles / sliders that change what is shown, and metric calculators (for example ROI from seats and price). Only use real facts you have from tools or the user; never invent numbers or customers. Images must be https URLs you were given or know are real; otherwise use cards with logoDomain.
+- You can build any visual yourself with render_ui: dashboards, comparisons, plans, checklists, client briefs. Use it whenever the answer is structured or the user asks to "show", "visualize", "compare" or "break down" something. Use only real data from tools. Add "prompt" buttons for sensible next actions.
+- The Library holds durable work: brand identity, brand vision, email templates, playbooks, battlecards, notes and client demo pages. Before writing any copy, templates or pages, call get_brand_context so the voice matches. When the user asks you to write one of these, write it with save_document (it appears as a card and in the Library). If brand identity or vision is missing, offer to draft them from the blueprint.
+- For a demo or prospecting page for a specific client or prospect: research with the tools you have, build a visual page with save_document (kind demo_page, blocks_json: hero, key points, a tailored plan, proof, a link CTA), then offer to publish it. publish_page makes it public, so only call it with confirmed=true after the user says to share it, then give them the shareUrl.
+- get_blueprint reads the full blueprint and update_blueprint edits it. Apply edits the user asks for directly; do not ask for permission to change what they told you to change.
+- If a tool returns an error, tell the user what the error actually says in plain words and what to do about it. Never reply with a vague "please try again later".
+- To see contacts that are not in any campaign, call list_contacts with campaign="none".
 - "Source leads from X" means source_leads, not a clarifying question. "Create a sequence" means Operator create_sequence, which renders a campaign card the user can enroll, activate, and run.
 - Never invent contact names, emails, IDs, or counts.
 - Ask the user only before send, archive, or other irreversible writes, or when the blueprint is missing. Do not ask before reads, lists, drafts, or creating a sequence they requested.
@@ -38,7 +49,7 @@ How to work:
 
 Keep replies concise and concrete. After a tool returns, summarize with real names and numbers.`;
 
-export const COPILOT_TOOL_DECLARATIONS: AiToolDeclaration[] = [
+const BASE_TOOL_DECLARATIONS: AiToolDeclaration[] = [
   {
     name: "get_account_snapshot",
     description:
@@ -65,6 +76,11 @@ export const COPILOT_TOOL_DECLARATIONS: AiToolDeclaration[] = [
       properties: {
         query: { type: "string" },
         leadStatus: { type: "string", enum: ["new", "qualified", "contacted", "replied", "won", "lost"] },
+        campaign: {
+          type: "string",
+          enum: ["none", "any"],
+          description: '"none" = only contacts not enrolled in any campaign yet; "any" = only contacts already in a campaign.',
+        },
         companyId: { type: "string" },
         limit: { type: "number", description: "Default 20, max 100" },
       },
@@ -117,6 +133,41 @@ export const COPILOT_TOOL_DECLARATIONS: AiToolDeclaration[] = [
   },
 ];
 
+export const COPILOT_TOOL_DECLARATIONS: AiToolDeclaration[] = [...BASE_TOOL_DECLARATIONS, ...WORKSPACE_TOOL_DECLARATIONS];
+
+function cell(value: unknown): string {
+  return typeof value === "string" || typeof value === "number" ? String(value) : "";
+}
+
+/** Lists must be seen, not just described: render the rows as a card and tell the model so. */
+async function withTableCard(
+  ctx: AgentToolContext,
+  title: string,
+  columns: Array<{ key: string; label: string }>,
+  rows: Array<Record<string, string>>,
+  result: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  if (rows.length === 0) return { ...result, shown: false, note: "Nothing matched. Say so plainly." };
+  const artifact = await publishArtifact(ctx, {
+    kind: "ui",
+    title,
+    payload: {
+      blocks: [
+        { type: "stats", items: [{ label: "Shown", value: String(rows.length) }] },
+        { type: "table", columns, rows },
+      ],
+    },
+  });
+  return {
+    ...result,
+    shown: Boolean(artifact),
+    artifactId: artifact?.id,
+    note: artifact
+      ? "These rows are already displayed to the user as a table card. Do not list them again; add one sentence at most."
+      : "Could not display the table; summarize the rows briefly in text.",
+  };
+}
+
 export async function runCopilotTool(
   ctx: AgentToolContext,
   name: string,
@@ -127,10 +178,52 @@ export async function runCopilotTool(
       return getAccountSnapshot(ctx.db, ctx.userId);
     case "get_analytics_summary":
       return getAnalyticsSummary(ctx.db, ctx.userId, args as { siteId?: string; range?: string });
-    case "list_contacts":
-      return listContacts(ctx.db, ctx.userId, args);
-    case "list_prospect_companies":
-      return listProspectCompanies(ctx.db, ctx.userId, args);
+    case "list_contacts": {
+      const result = await listContacts(ctx.db, ctx.userId, args);
+      return withTableCard(
+        ctx,
+        args.campaign === "none" ? "Contacts not in a campaign" : "Contacts",
+        [
+          { key: "name", label: "Name" },
+          { key: "title", label: "Title" },
+          { key: "company", label: "Company" },
+          { key: "email", label: "Email" },
+          { key: "status", label: "Status" },
+        ],
+        result.contacts.map((c) => ({
+          name: cell(c.fullName),
+          title: cell(c.title),
+          company: cell(c.company?.name),
+          email: [cell(c.email), c.email && c.emailStatus ? `(${cell(c.emailStatus)})` : ""].filter(Boolean).join(" "),
+          status: cell(c.leadStatus),
+        })),
+        result,
+      );
+    }
+    case "list_prospect_companies": {
+      const result = await listProspectCompanies(ctx.db, ctx.userId, args);
+      return withTableCard(
+        ctx,
+        "Prospect companies",
+        [
+          { key: "name", label: "Company" },
+          { key: "domain", label: "Domain" },
+          { key: "industry", label: "Industry" },
+          { key: "location", label: "Location" },
+          { key: "fit", label: "Fit" },
+          { key: "contacts", label: "Contacts" },
+        ],
+        result.companies.map((c) => ({
+          name: cell(c.name),
+          domain: cell(c.domain),
+          industry: cell(c.industry),
+          location: cell(c.location),
+          fit: cell(c.icpFitScore),
+          contacts: cell(c.contactCount),
+        })),
+        result,
+      );
+    }
     case "get_sequence_overview":
       return getSequenceOverview(ctx.db, ctx.userId, args as { sequenceId?: string });
     case "delegate_to_agent": {
@@ -180,11 +273,13 @@ export async function runCopilotTool(
     case "get_agent_status":
       return getAgentStatus(ctx, args);
     default:
+      if (WORKSPACE_TOOL_NAMES.has(name)) return runWorkspaceTool(ctx, name, args);
       throw new Error(`Unknown Copilot tool: ${name}`);
   }
 }
 
 export const COPILOT_MUTATING_TOOLS = new Set([
+  ...WORKSPACE_MUTATING_TOOLS,
   "delegate_to_agent",
   "source_leads",
   "save_sourced_leads",

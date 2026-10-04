@@ -4,7 +4,7 @@ import { getAiClient, isAiConfigured } from "@/lib/ai/openai";
 import { safeAiErrorMessage } from "@/lib/ai/errors";
 import { SUPPORT_KNOWLEDGE } from "@/lib/support/knowledge";
 import { allowSupportRequest } from "@/lib/support/rate-limit";
-import { asksForHuman, getOptionalUser, VISITOR_ID } from "@/lib/support/identity";
+import { asksForHuman, getOptionalUser, isGuestEmail, VISITOR_ID } from "@/lib/support/identity";
 import {
   addMessage,
   createConversation,
@@ -39,7 +39,7 @@ ${SUPPORT_KNOWLEDGE}`;
 function handoffReply(email: string | null) {
   return email
     ? `I've passed this to our team and they'll get back to you right away by email at ${email}. You can keep chatting here in the meantime.`
-    : "I've flagged this for our team and they'll get back to you right away. What's the best email address to reach you on?";
+    : "I've flagged this for our team and they'll get back to you right away. What's the best personal email address to reach you on?";
 }
 
 async function flagForHuman(conversation: SupportConversation, reason: string) {
@@ -77,10 +77,15 @@ export async function POST(request: NextRequest) {
     : null;
   if (!conversation || conversation.status === "closed") {
     conversation = await createConversation({ visitorId, userId: user?.id ?? null, email: user?.email ?? null });
-  } else if (user && (!conversation.user_id || !conversation.email)) {
-    const patch = { user_id: user.id, email: conversation.email ?? user.email };
-    await updateConversation(conversation.id, patch);
-    conversation = { ...conversation, ...patch };
+  } else {
+    // Drop any guest placeholder address saved earlier, and pick up the real email once the visitor signs in.
+    const email = isGuestEmail(conversation.email) ? null : conversation.email;
+    const nextEmail = email ?? user?.email ?? null;
+    const nextUser = conversation.user_id ?? user?.id ?? null;
+    if (nextEmail !== conversation.email || nextUser !== conversation.user_id) {
+      await updateConversation(conversation.id, { user_id: nextUser, email: nextEmail });
+      conversation = { ...conversation, user_id: nextUser, email: nextEmail };
+    }
   }
 
   const userMessage = await addMessage(conversation.id, "user", message);
@@ -144,7 +149,7 @@ export async function POST(request: NextRequest) {
 
     const handoff = reply.includes(HANDOFF_TOKEN);
     reply = reply.replace(HANDOFF_TOKEN, "").trim();
-    if (handoff && !conversation.email) reply += "\n\nWhat's the best email address to reach you on?";
+    if (handoff && !conversation.email) reply += "\n\nWhat's the best personal email address to reach you on?";
     saved.push(await addMessage(conversation.id, "assistant", reply));
 
     if (handoff) {

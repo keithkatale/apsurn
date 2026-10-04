@@ -451,17 +451,17 @@ export function MarketInsightsWorkspace({
 
   if (keywords.length === 0 && !scanState) {
     return (
-      <div className="-m-8 h-[calc(100%+4rem)] overflow-y-auto bg-white px-6">
+      <div className="h-full min-h-0 flex-1 overflow-y-auto bg-white px-4 md:px-6">
         <KeywordOnboarding onAdded={handleOnboarded} />
       </div>
     );
   }
 
   return (
-    <div className="relative -m-8 flex h-[calc(100%+4rem)] overflow-hidden bg-white">
+    <div className="relative flex h-full min-h-0 flex-1 overflow-hidden bg-white">
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-6">
-          <div className="flex items-center justify-between gap-4">
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-4 pb-20 md:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h1 className="text-lg font-semibold text-neutral-900">Market Insights</h1>
               <p className="text-sm text-neutral-500">
@@ -693,8 +693,12 @@ export function MarketInsightsWorkspace({
         </div>
       </div>
 
-      <div className={`shrink-0 transition-[width] duration-300 ease-out ${rightPanelOpen ? "w-[420px]" : "w-0"}`}>
-        <div className="flex h-full w-[420px] items-stretch py-3 pr-3">
+      <div
+        className={`shrink-0 overflow-hidden ${
+          rightPanelOpen ? "fixed inset-0 z-40 bg-white md:static md:w-[420px] md:bg-transparent" : "w-0"
+        }`}
+      >
+        <div className="flex h-full w-full items-stretch md:w-[420px] md:py-3 md:pr-3">
           {selectedMention ? (
             <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-neutral-100 bg-white shadow-[0px_2px_10px_rgba(0,0,0,0.08)]">
               <MentionPanel
@@ -756,8 +760,8 @@ export function MarketInsightsWorkspace({
         type="button"
         onClick={toggleAiPanel}
         aria-label={aiOpen ? "Close AI assistant" : "Open AI assistant"}
-        className={`absolute top-6 z-20 flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold shadow-md transition-[right,background-color,color] ${
-          rightPanelOpen ? "right-[27.75rem]" : "right-4"
+        className={`absolute z-20 flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold shadow-md ${
+          rightPanelOpen ? "right-3 top-3 md:right-[27.75rem] md:top-6" : "bottom-4 right-3 md:bottom-auto md:right-4 md:top-6"
         } ${aiOpen ? "bg-neutral-900 text-white" : "bg-white text-neutral-700 hover:bg-neutral-50"}`}
       >
         <Sparkles className="size-4" />

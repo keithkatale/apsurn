@@ -81,6 +81,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ca
       delayDays: step.delay_days,
       previousSubject: previousDraft?.subject ?? null,
       previousBody: previousDraft?.body ?? null,
+      userId,
+      contactId: contact.id,
+      variant: Date.now() % 1000,
     });
     const subject = tokenizeLeadMentions(draft.subject, leadSource);
     const body = tokenizeLeadMentions(draft.body, leadSource);

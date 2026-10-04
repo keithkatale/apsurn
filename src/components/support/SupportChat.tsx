@@ -1,7 +1,8 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowUp, LifeBuoy, X } from "lucide-react";
+import { ArrowUp, MessageCircle, X } from "lucide-react";
 import { CopilotMarkdown } from "@/components/copilot/CopilotMarkdown";
 import { cn } from "@/lib/cn";
 
@@ -62,6 +63,7 @@ function playPing(context: AudioContext | null) {
 
 /** Floating help chat: AI answers from the knowledge base, with human handoff. Mounted once in the root layout. */
 export function SupportChat() {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -282,8 +284,11 @@ export function SupportChat() {
     }
   }
 
+  // Public shared pages belong to the customer, not to Apsurn support.
+  if (pathname.startsWith("/p/")) return null;
+
   return (
-    <div className="fixed bottom-4 right-4 z-[60] flex flex-col items-end gap-3 sm:bottom-5 sm:right-5">
+    <div className="support-chat-root fixed bottom-4 right-4 z-[60] flex flex-col items-end gap-3 sm:bottom-5 sm:right-5">
       {open ? (
         <section
           ref={panelRef}
@@ -362,7 +367,7 @@ export function SupportChat() {
             ) : null}
             {needsEmail ? (
               <form onSubmit={submitEmail} className="rounded-xl bg-neutral-100 p-2.5">
-                <p className="mb-1.5 text-[12px] text-neutral-600">Your email, so the team can reach you:</p>
+                <p className="mb-1.5 text-[12px] text-neutral-600">Your personal email, so the team can reach you:</p>
                 <div className="flex gap-1.5">
                   <input
                     type="email"
@@ -422,7 +427,7 @@ export function SupportChat() {
         aria-expanded={open}
         className="relative inline-flex size-12 items-center justify-center rounded-full bg-[#4379EE] text-white shadow-[0_6px_20px_rgba(67,121,238,0.45)] transition-transform hover:scale-105 hover:bg-[#3567D6]"
       >
-        {open ? <X className="size-5" /> : <LifeBuoy className="size-5" />}
+        {open ? <X className="size-5" /> : <MessageCircle className="size-5" />}
         {!open && unread > 0 ? (
           <span className="absolute -right-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-semibold leading-5 text-white ring-2 ring-white">
             {unread > 9 ? "9+" : unread}

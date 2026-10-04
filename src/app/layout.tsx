@@ -6,6 +6,7 @@ import { SupportChat } from "@/components/support/SupportChat";
 import { NavigationLoaderHost } from "@/components/loaders/navigation-loader-host";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { PUBLIC_CONFIG_GLOBAL, readPublicSupabaseConfig } from "@/lib/supabase/public-config";
+import { materialSymbolsStylesheet } from "@/lib/campaigns/icon";
 import { THEME_BOOTSTRAP_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
@@ -100,12 +101,9 @@ export default function RootLayout({
 `,
           }}
         />
-        {/* Material Symbols — used for the campaigns Send control */}
+        {/* Material Symbols — campaign marks and the send control */}
         {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=send"
-        />
+        <link rel="stylesheet" href={materialSymbolsStylesheet()} />
       </head>
       <body className="antialiased font-sans">
         <ThemeProvider>

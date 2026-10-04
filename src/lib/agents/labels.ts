@@ -9,6 +9,15 @@ export const AGENT_DISPLAY_NAME: Record<SpecialistId, string> = {
 
 export const AGENT_TOOL_LABELS: Record<string, string> = {
   get_account_snapshot: "Checking your account",
+  render_ui: "Building a view",
+  list_documents: "Looking through the Library",
+  get_document: "Reading a document",
+  save_document: "Saving to the Library",
+  delete_document: "Deleting a document",
+  publish_page: "Updating page sharing",
+  get_blueprint: "Reading the blueprint",
+  update_blueprint: "Updating the blueprint",
+  get_brand_context: "Reading your brand",
   get_analytics_summary: "Checking analytics",
   delegate_to_agent: "Delegating",
   get_agent_status: "Checking agent status",

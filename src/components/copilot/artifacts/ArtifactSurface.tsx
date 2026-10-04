@@ -3,8 +3,10 @@
 import { Maximize2, Minimize2 } from "lucide-react";
 import type { CopilotArtifact } from "@/lib/agents/types";
 import { LeadTableArtifact } from "./LeadTableArtifact";
+import { DocumentArtifact } from "./DocumentArtifact";
 import { RunArtifact } from "./RunArtifact";
 import { SequenceArtifact } from "./SequenceArtifact";
+import { UiArtifact } from "./UiArtifact";
 
 export function ArtifactSurface({
   artifact,
@@ -12,12 +14,14 @@ export function ArtifactSurface({
   onExpand,
   onCollapse,
   onChange,
+  onPrompt,
 }: {
   artifact: CopilotArtifact;
   expanded?: boolean;
   onExpand?: () => void;
   onCollapse?: () => void;
   onChange?: (next: CopilotArtifact) => void;
+  onPrompt?: (text: string) => void;
 }) {
   return (
     <article
@@ -29,6 +33,7 @@ export function ArtifactSurface({
         onExpand?.();
       }}
     >
+      {artifact.kind === "document" ? null : (
       <header className="mb-2 flex items-center justify-end">
         {expanded ? (
           <button type="button" className="copilot-artifact-icon-btn" onClick={onCollapse} aria-label="Collapse">
@@ -40,12 +45,17 @@ export function ArtifactSurface({
           </button>
         )}
       </header>
+      )}
       {artifact.kind === "sequence" ? (
         <SequenceArtifact artifact={artifact} expanded={expanded} onChange={onChange} />
       ) : artifact.kind === "lead_table" ? (
         <LeadTableArtifact artifact={artifact} onChange={onChange} />
       ) : artifact.kind === "run" ? (
         <RunArtifact artifact={artifact} expanded={expanded} onChange={onChange} />
+      ) : artifact.kind === "ui" ? (
+        <UiArtifact artifact={artifact} onPrompt={onPrompt} />
+      ) : artifact.kind === "document" ? (
+        <DocumentArtifact artifact={artifact} />
       ) : null}
     </article>
   );

@@ -1,6 +1,9 @@
 import { getAiClient } from "@/lib/ai/openai";
 import { safeAiErrorMessage } from "@/lib/ai/errors";
 import { EMAIL_SKILL_BRIEF } from "@/lib/outreach/email-skills";
+import { planEmail } from "@/lib/skills/angles";
+import { formatBusinessContext, loadBusinessContext } from "@/lib/skills/business-context";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { CampaignDefinition } from "./campaign-templates";
 
 export interface CampaignEmailSteps {
@@ -45,11 +48,23 @@ export async function writeCampaignEmails(
     companyName: string | null;
     productSummary: string | null;
     valueProp: string | null;
+    userId?: string;
   }
 ): Promise<CampaignEmailSteps> {
   const fallback = defaultCopy(campaign, context);
+  let grounding = "";
+  if (context.userId) {
+    try {
+      const business = await loadBusinessContext(createAdminClient(), context.userId);
+      const plan = planEmail({ seed: `campaign:${campaign.segmentKey}`, stepNumber: 1, business, hasSignal: false });
+      grounding = `BUSINESS CONTEXT\n${formatBusinessContext(business, plan.persona)}\n\nEMAIL PLAN\n- Structure: ${plan.framework}. ${plan.frameworkHow}\n- Angle: ${plan.angle}\n- Opening move: ${plan.opening}\n- The ask: ${plan.ask}\n- Length: ${plan.length}\n`;
+    } catch {
+      /* fall back to the lighter context below */
+    }
+  }
   const prompt = `${EMAIL_SKILL_BRIEF}
 
+${grounding}
 Write the opener email for a ${campaign.outreachMethod} campaign for ${context.companyName ?? "this company"} (follow-ups are added later on the canvas).
 
 Sender first name: ${context.senderName}
@@ -60,7 +75,7 @@ What it does: ${campaign.description}
 Pain: ${campaign.pain}
 Targeting: ${campaign.targeting.join("; ")}
 
-Tone: concise, specific, not salesy. Use {{first_name}} and {{company}} placeholders.
+Tone: concise, specific, not salesy. Aim the email at the campaign's pain and targeting, and make it sound different from other campaigns in this account. Use {{first_name}} and {{company}} placeholders.
 Return ONLY JSON:
 {"openerSubject":"...","openerBody":"plain text"}`;
 
