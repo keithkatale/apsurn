@@ -29,7 +29,7 @@ export function FounderNoteSection() {
           </div>
           <a
             href="mailto:hello@apsurn.com"
-            className="inline-flex h-10 items-center justify-center rounded-full bg-[#4379EE] px-5 text-[14px] font-medium text-white hover:bg-[#3567D6]"
+            className="inline-flex h-10 w-full shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-[#4379EE] px-5 text-[14px] font-medium text-white hover:bg-[#3567D6] sm:w-auto"
           >
             Email hello@apsurn.com
           </a>

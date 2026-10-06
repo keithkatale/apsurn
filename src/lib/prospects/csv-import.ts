@@ -12,16 +12,15 @@
  * be worse than keeping one with an unconfirmed address (outreach's own send
  * gate, ensureSendableEmail, is what stops a bad address from being mailed).
  *
- * Every saved row also writes through to the canonical index
- * (saveCanonicalCompany/saveCanonicalContact) so it is reusable by a future
- * prospecting run instead of being re-discovered or re-paid-for.
+ * The model only sees the header and a few rows at the top, enough to learn
+ * the columns. The rest of the file is mapped in memory and written as one
+ * table. Per-row email checks and canonical indexing are left out of this
+ * path: they stalled the upload and left the campaign empty.
  */
 import Papa from "papaparse";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAiClient } from "@/lib/ai/openai";
-import { verifyEmail } from "@/lib/prospecting/email-verifier";
-import { isSuppressed, saveCanonicalCompany, saveCanonicalContact } from "@/lib/prospecting/pipeline";
-import type { CandidateContact, ContactStatus } from "@/lib/prospecting/types";
+import { suppressedEmails } from "@/lib/prospecting/pipeline";
 
 const KNOWN_FIELDS = [
   "companyName",
@@ -149,17 +148,11 @@ function normalizedDomainFrom(row: ImportRow): string | null {
   }
 }
 
-function normalizeName(fullName: string): string {
-  return fullName
-    .normalize("NFKD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
 export interface ImportProgress {
-  type: "mapping" | "progress" | "done";
+  type: "status" | "mapping" | "progress" | "done";
+  stage?: "read" | "columns" | "structure" | "save";
+  label?: string;
+  progress?: number;
   processed?: number;
   total?: number;
   companiesSaved?: number;
@@ -167,136 +160,115 @@ export interface ImportProgress {
   skipped?: number;
 }
 
+const FIELD_LABELS: Record<KnownField, string> = {
+  companyName: "company",
+  domain: "domain",
+  websiteUrl: "website",
+  industry: "industry",
+  employeeRange: "company size",
+  location: "location",
+  fullName: "name",
+  title: "title",
+  email: "email",
+  phone: "phone",
+  linkedinUrl: "LinkedIn",
+};
+
+function describeColumns(mapping: Record<string, KnownField | null>): string {
+  const fields = [...new Set(Object.values(mapping).filter((field): field is KnownField => Boolean(field)))];
+  if (fields.length === 0) return "Reading each row from the headers in the file.";
+  const labels = fields.map((field) => FIELD_LABELS[field]);
+  return `Matched ${labels.join(", ")}.`;
+}
+
 export const MAX_IMPORT_ROWS = 1000;
-const CONCURRENCY = 6;
+const WRITE_CHUNK = 200;
+
+function chunks<T>(values: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let index = 0; index < values.length; index += size) out.push(values.slice(index, index + size));
+  return out;
+}
+
+export type ImportedLead = {
+  id: string;
+  fullName: string | null;
+  title: string | null;
+  email: string | null;
+  emailStatus: string;
+  linkedinUrl: string | null;
+  companyName: string;
+  companyDomain: string;
+};
 
 export function parseCsv(text: string): { headers: string[]; rows: Record<string, string>[] } {
   const result = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: true, transformHeader: (h) => h.trim() });
   return { headers: result.meta.fields ?? [], rows: result.data };
 }
 
-async function saveImportedCompany(
+type PreparedLead = ImportRow & { domain: string };
+
+async function companyIdsByDomain(
   db: SupabaseClient,
   userId: string,
   companyId: string,
-  domain: string,
-  rows: ImportRow[]
-): Promise<{ isNewCompany: boolean; contactsSaved: number; contactIds: string[] }> {
-  const representative = rows.find((r) => r.companyName) ?? rows[0];
-
-  const { data: existing } = await db
-    .from("prospect_companies")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("domain", domain)
-    .is("archived_at", null)
-    .maybeSingle();
-
-  const canonical = await saveCanonicalCompany({
-    name: representative.companyName || domain,
-    domain,
-    websiteUrl: representative.websiteUrl || `https://${domain}`,
-    industry: representative.industry,
-    employeeRange: representative.employeeRange,
-    location: representative.location,
-    icpFitScore: 0.5,
-    dataConfidence: 0.6,
-    source: "csv_import",
-    sourceRef: { discovery: "csv_import" },
-  });
-
-  let prospectId: string;
-  if (existing) {
-    prospectId = existing.id;
-  } else {
-    const { data: created, error } = await db
+  grouped: Map<string, PreparedLead[]>,
+): Promise<{ ids: Map<string, string>; companiesSaved: number }> {
+  const domains = [...grouped.keys()];
+  const ids = new Map<string, string>();
+  for (const part of chunks(domains, 80)) {
+    const { data, error } = await db
       .from("prospect_companies")
-      .insert({
+      .select("id, domain")
+      .eq("user_id", userId)
+      .in("domain", part)
+      .is("archived_at", null);
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) ids.set(row.domain, row.id);
+  }
+
+  const missing = domains.filter((domain) => !ids.has(domain));
+  let companiesSaved = 0;
+  for (const part of chunks(missing, WRITE_CHUNK)) {
+    const rows = part.map((domain) => {
+      const people = grouped.get(domain) ?? [];
+      const representative = people.find((row) => row.companyName) ?? people[0];
+      return {
         user_id: userId,
         company_id: companyId,
-        canonical_company_id: canonical.id,
-        name: representative.companyName || domain,
+        name: representative?.companyName || domain,
         domain,
-        website_url: representative.websiteUrl || `https://${domain}`,
-        industry: representative.industry,
-        employee_range: representative.employeeRange,
-        location: representative.location,
+        website_url: representative?.websiteUrl || `https://${domain}`,
+        industry: representative?.industry ?? null,
+        employee_range: representative?.employeeRange ?? null,
+        location: representative?.location ?? null,
         source: "csv_import",
         status: "new",
-      })
-      .select("id")
-      .single();
-    if (error || !created) throw new Error(error?.message ?? "Could not save company");
-    prospectId = created.id;
+      };
+    });
+    const { data, error } = await db.from("prospect_companies").insert(rows).select("id, domain");
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) ids.set(row.domain, row.id);
+    companiesSaved += data?.length ?? 0;
   }
+  return { ids, companiesSaved };
+}
 
-  let contactsSaved = 0;
-  const contactIds: string[] = [];
-  for (const row of rows) {
-    if (!row.fullName && !row.email) continue;
-    const email = row.email?.toLowerCase() || null;
-    if (email && (await isSuppressed("email", email))) continue;
-
-    if (email) {
-      const { data: dupe } = await db
-        .from("contacts")
-        .select("id")
-        .eq("prospect_company_id", prospectId)
-        .eq("email", email)
-        .is("archived_at", null)
-        .maybeSingle();
-      if (dupe) {
-        contactIds.push(dupe.id);
-        continue;
-      }
-    }
-
-    const emailStatus: ContactStatus = email ? (await verifyEmail(email)).status : "observed";
-    const fullName = row.fullName || email?.split("@")[0] || "Unknown";
-    const normalizedName = normalizeName(fullName);
-
-    const candidate: CandidateContact = {
-      fullName,
-      normalizedName,
-      title: row.title,
-      location: row.location,
-      email,
-      emailStatus,
-      phone: row.phone,
-      linkedinUrl: row.linkedinUrl,
-      origin: "public",
-      confidence: emailStatus === "verified" ? 0.85 : emailStatus === "accept_all" ? 0.7 : 0.5,
-      evidence: [{ url: representative.websiteUrl || `https://${domain}`, excerpt: "Imported from CSV", observedAt: new Date().toISOString(), sourceType: "csv_import" }],
-      source: "csv_import",
-      sourceRef: { discovery: "csv_import" },
-    };
-
-    const canonicalPersonId = await saveCanonicalContact(canonical.id, domain, candidate);
-
-    const { data: createdContact, error } = await db.from("contacts").insert({
-      prospect_company_id: prospectId,
-      canonical_person_id: canonicalPersonId,
-      full_name: candidate.fullName,
-      title: candidate.title,
-      email,
-      email_status: emailStatus,
-      phone: candidate.phone,
-      linkedin_url: candidate.linkedinUrl,
-      source: "csv_import",
-      contact_origin: "manual",
-      confidence: candidate.confidence,
-      evidence: candidate.evidence,
-      observed_at: candidate.evidence[0].observedAt,
-    })
-      .select("id")
-      .single();
-    if (!error && createdContact) {
-      contactsSaved += 1;
-      contactIds.push(createdContact.id);
+async function existingContactIds(db: SupabaseClient, userId: string, emails: string[]): Promise<Map<string, string>> {
+  const found = new Map<string, string>();
+  for (const part of chunks(emails, 80)) {
+    const { data, error } = await db
+      .from("contacts")
+      .select("id, email, prospect_company_id, prospect_companies!contacts_prospect_company_id_fkey!inner(user_id)")
+      .eq("prospect_companies.user_id", userId)
+      .in("email", part)
+      .is("archived_at", null);
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) {
+      if (row.email) found.set(`${row.prospect_company_id}:${String(row.email).toLowerCase()}`, row.id);
     }
   }
-
-  return { isNewCompany: !existing, contactsSaved, contactIds };
+  return found;
 }
 
 export async function importCsv(
@@ -305,60 +277,182 @@ export async function importCsv(
   companyId: string,
   csvText: string,
   emit: (event: ImportProgress) => void
-): Promise<{ companiesSaved: number; contactsSaved: number; skipped: number; contactIds: string[] }> {
+): Promise<{ companiesSaved: number; contactsSaved: number; skipped: number; contactIds: string[]; leads: ImportedLead[] }> {
   const { headers, rows } = parseCsv(csvText);
   if (rows.length === 0) throw new Error("That file has no data rows");
   if (rows.length > MAX_IMPORT_ROWS) {
     throw new Error(`That file has ${rows.length} rows — split it into batches of ${MAX_IMPORT_ROWS} or fewer`);
   }
 
-  emit({ type: "mapping", total: rows.length });
+  emit({
+    type: "status",
+    stage: "read",
+    label: `Reading ${rows.length} row${rows.length === 1 ? "" : "s"} from the file…`,
+    progress: 8,
+    total: rows.length,
+  });
+  emit({
+    type: "status",
+    stage: "columns",
+    label: "Reading the header and the first rows to learn the columns…",
+    progress: 14,
+    total: rows.length,
+  });
   const mapping = await mapColumnsWithAi(headers, rows);
+  const columnLabel = describeColumns(mapping);
+  emit({
+    type: "mapping",
+    stage: "columns",
+    label: columnLabel,
+    progress: 24,
+    total: rows.length,
+  });
   const mapped = rows.map((row) => applyMapping(row, mapping)).filter((row) => row.fullName || row.email || row.companyName);
 
-  const byDomain = new Map<string, ImportRow[]>();
-  let noDomainCount = 0;
+  const prepared: PreparedLead[] = [];
+  let skipped = rows.length - mapped.length;
   for (const row of mapped) {
     const domain = normalizedDomainFrom(row);
-    if (!domain) {
-      noDomainCount += 1;
+    if (!domain || (!row.fullName && !row.email)) {
+      skipped += 1;
       continue;
     }
-    const bucket = byDomain.get(domain) ?? [];
-    bucket.push(row);
-    byDomain.set(domain, bucket);
+    prepared.push({ ...row, domain, email: row.email?.toLowerCase() ?? null });
   }
 
-  const domains = [...byDomain.keys()];
-  let companiesSaved = 0;
-  let contactsSaved = 0;
-  let skipped = noDomainCount;
-  const contactIds: string[] = [];
-  let processed = noDomainCount;
-  emit({ type: "progress", processed, total: mapped.length, companiesSaved, contactsSaved, skipped });
+  const grouped = new Map<string, PreparedLead[]>();
+  for (const row of prepared) {
+    const bucket = grouped.get(row.domain) ?? [];
+    bucket.push(row);
+    grouped.set(row.domain, bucket);
+  }
 
-  let cursor = 0;
-  async function worker() {
-    for (;;) {
-      const index = cursor++;
-      if (index >= domains.length) return;
-      const domain = domains[index];
-      const rowsForDomain = byDomain.get(domain)!;
-      try {
-        const result = await saveImportedCompany(db, userId, companyId, domain, rowsForDomain);
-        if (result.isNewCompany) companiesSaved += 1;
-        contactsSaved += result.contactsSaved;
-        contactIds.push(...result.contactIds);
-        skipped += rowsForDomain.length - result.contactsSaved;
-      } catch {
-        skipped += rowsForDomain.length;
-      }
-      processed += rowsForDomain.length;
-      emit({ type: "progress", processed, total: mapped.length, companiesSaved, contactsSaved, skipped });
+  emit({
+    type: "status",
+    stage: "structure",
+    label:
+      prepared.length === 0
+        ? "No name, email, and company on those rows."
+        : `Turned the file into a table of ${prepared.length} lead${prepared.length === 1 ? "" : "s"}.`,
+    progress: 40,
+    total: prepared.length,
+    skipped,
+  });
+  if (prepared.length === 0) {
+    return { companiesSaved: 0, contactsSaved: 0, skipped, contactIds: [], leads: [] };
+  }
+
+  emit({
+    type: "status",
+    stage: "save",
+    label: "Saving the table…",
+    progress: 55,
+    total: prepared.length,
+    skipped,
+  });
+
+  const { ids: companyIds, companiesSaved } = await companyIdsByDomain(db, userId, companyId, grouped);
+  const blocked = await suppressedEmails(prepared.flatMap((row) => (row.email ? [row.email] : [])));
+  const seen = new Set<string>();
+  const drafts: Array<{ row: PreparedLead; prospectId: string; key: string }> = [];
+  prepared.forEach((row, index) => {
+    if (row.email && blocked.has(row.email)) {
+      skipped += 1;
+      return;
+    }
+    const identity = `${row.domain}:${row.email ?? row.fullName ?? index}`;
+    if (seen.has(identity)) {
+      skipped += 1;
+      return;
+    }
+    seen.add(identity);
+    const prospectId = companyIds.get(row.domain);
+    if (!prospectId) {
+      skipped += 1;
+      return;
+    }
+    drafts.push({ row, prospectId, key: `${prospectId}:${index}` });
+  });
+
+  const known = await existingContactIds(
+    db,
+    userId,
+    drafts.flatMap((draft) => (draft.row.email ? [draft.row.email] : [])),
+  );
+  const leads: ImportedLead[] = [];
+  const fresh: typeof drafts = [];
+  for (const draft of drafts) {
+    const existingId = draft.row.email ? known.get(`${draft.prospectId}:${draft.row.email}`) : undefined;
+    if (existingId) {
+      leads.push(leadFrom(draft.row, existingId));
+      continue;
+    }
+    fresh.push(draft);
+  }
+
+  const observedAt = new Date().toISOString();
+  let contactsSaved = 0;
+  for (const part of chunks(fresh, WRITE_CHUNK)) {
+    const payload = part.map((draft) => ({
+      prospect_company_id: draft.prospectId,
+      full_name: draft.row.fullName || draft.row.email?.split("@")[0] || "Unknown",
+      title: draft.row.title,
+      email: draft.row.email,
+      email_status: "observed",
+      phone: draft.row.phone,
+      linkedin_url: draft.row.linkedinUrl,
+      source: "csv_import",
+      source_ref: { importKey: draft.key },
+      contact_origin: "manual",
+      confidence: 0.5,
+      evidence: [
+        {
+          url: draft.row.websiteUrl || `https://${draft.row.domain}`,
+          excerpt: "Imported from CSV",
+          observedAt,
+          sourceType: "csv_import",
+        },
+      ],
+      observed_at: observedAt,
+    }));
+    const { data, error } = await db
+      .from("contacts")
+      .insert(payload)
+      .select("id, source_ref");
+    if (error) throw new Error(error.message);
+    const byKey = new Map(part.map((draft) => [draft.key, draft.row]));
+    for (const created of data ?? []) {
+      const key = (created.source_ref as { importKey?: string } | null)?.importKey;
+      const row = key ? byKey.get(key) : undefined;
+      if (!key || !row) continue;
+      leads.push(leadFrom(row, created.id));
+      contactsSaved += 1;
     }
   }
-  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, Math.max(domains.length, 1)) }, worker));
 
-  emit({ type: "done", companiesSaved, contactsSaved, skipped });
-  return { companiesSaved, contactsSaved, skipped, contactIds };
+  emit({
+    type: "done",
+    stage: "save",
+    label: `Saved ${contactsSaved} contact${contactsSaved === 1 ? "" : "s"}.`,
+    progress: 90,
+    total: prepared.length,
+    companiesSaved,
+    contactsSaved,
+    skipped,
+  });
+  const withEmail = leads.filter((lead) => lead.email);
+  return { companiesSaved, contactsSaved, skipped, contactIds: withEmail.map((lead) => lead.id), leads: withEmail };
+}
+
+function leadFrom(row: PreparedLead, id: string): ImportedLead {
+  return {
+    id,
+    fullName: row.fullName,
+    title: row.title,
+    email: row.email,
+    emailStatus: "observed",
+    linkedinUrl: row.linkedinUrl,
+    companyName: row.companyName || row.domain,
+    companyDomain: row.domain,
+  };
 }

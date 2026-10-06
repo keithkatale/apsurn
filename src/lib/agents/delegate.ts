@@ -1,5 +1,8 @@
-import type { ResponseFunctionToolCall, ResponseInputItem, ResponseOutputItem } from "openai/resources/responses/responses";
+import type { ResponseInputItem } from "openai/resources/responses/responses";
 import { getAiClient, toFunctionTool } from "@/lib/ai/openai";
+// Used only inside functions, so the copilot ↔ delegate import cycle is safe.
+import { COPILOT_MUTATING_TOOLS } from "./copilot";
+import { ORCHESTRATION_THINKING_BUDGET, runAgentLoop } from "./loop";
 import { loadAccountBriefing, looksLikeQuestion, resultNeedsLeads, wantsNewLeads, wantsSequenceCreated } from "./briefing";
 import { userCompanyId } from "./shared";
 import { listener } from "./listener";
@@ -17,6 +20,10 @@ const SPECIALISTS: Record<SpecialistId, SpecialistModule> = {
 };
 
 const MAX_SPECIALIST_ROUNDS = 6;
+
+export function getSpecialist(id: SpecialistId): SpecialistModule {
+  return SPECIALISTS[id];
+}
 
 export function isSpecialistId(value: unknown): value is SpecialistId {
   return typeof value === "string" && (SPECIALIST_IDS as readonly string[]).includes(value);
@@ -93,7 +100,7 @@ export async function delegateToAgent(
   const briefing = await loadAccountBriefing(ctx);
   const assignedTask =
     specialist.id === "researcher" && wantsNewLeads(task)
-      ? `${task}\n\nStart a prospecting run from the approved blueprint now. Call start_prospecting_run. Do not ask for industries, geographies, or personas.`
+      ? `${task}\n\nFind leads that have a reason to buy what this account sells. Read the value prop in the briefing, pick the buying signals that fit it (hiring for a role it replaces or supports, recent funding or launches, people posting about the problem it solves), and call start_signal_scout with those triggers, keywords drawn from the value prop, and a recency window. Use start_prospecting_run only if the task explicitly asks for a plain ICP or directory pull. Do not ask for industries, geographies, or personas.`
       : specialist.id === "operator" && wantsSequenceCreated(task)
         ? `${task}\n\nWrite the email subject and body yourself from the briefing. Call create_sequence now with a 3-step sequence. Do not ask anyone for copy.`
         : task;
@@ -112,177 +119,79 @@ export async function delegateToAgent(
     },
   ];
 
-  let finalText = "";
   let reasoning = "";
   let resumedFromQuestion = false;
-  const toolResults: Array<{ id: string; name: string; args: Record<string, unknown>; result: unknown }> = [];
+  const emitReasoning = (text: string) => {
+    reasoning += text;
+    ctx.emit?.({ type: "reasoning", name: specialist.id, agent: specialist.id, text, parentId: ctx.parentId });
+  };
 
-  for (let round = 0; round < MAX_SPECIALIST_ROUNDS; round++) {
-    let roundText = "";
-    let outputItems: ResponseOutputItem[] = [];
-    const responseStream = await ai.responses.create({
-      model,
-      input,
-      instructions: specialist.instruction,
-      tools,
-      stream: true,
-    });
-
-    for await (const event of responseStream) {
-      const type = event.type as string;
-      if (type === "response.output_text.delta") {
-        roundText += event.delta;
-        reasoning += event.delta;
-        ctx.emit?.({
-          type: "reasoning",
-          name: specialist.id,
-          agent: specialist.id,
-          text: event.delta,
-          parentId: ctx.parentId,
-        });
-      } else if (type === "response.reasoning_summary_text.delta" || type === "response.reasoning.delta") {
-        const delta = "delta" in event && typeof event.delta === "string" ? event.delta : "";
-        if (delta) {
-          reasoning += delta;
-          ctx.emit?.({
-            type: "reasoning",
-            name: specialist.id,
-            agent: specialist.id,
-            text: delta,
-            parentId: ctx.parentId,
-          });
-        }
-      } else if (type === "response.completed") {
-        outputItems = event.response.output;
-      } else if (type === "error") {
-        throw new Error(event.message);
-      }
-    }
-
-    for (const item of outputItems) input.push(item as ResponseInputItem);
-    const calls = outputItems.filter((item): item is ResponseFunctionToolCall => item.type === "function_call");
-    if (calls.length === 0) {
-      const askedInsteadOfActing = looksLikeQuestion(roundText) || (toolResults.length === 0 && wantsNewLeads(task));
-      if (askedInsteadOfActing && !resumedFromQuestion) {
-        resumedFromQuestion = true;
-        input.push({
-          role: "user",
-          content:
-            "Answer yourself from the briefing above and continue the original task now. Call your tools. Do not ask Copilot or the user another question.",
-        });
-        continue;
-      }
-
-      const alreadyCreated = toolResults.some((row) => row.name === "create_sequence");
-      if (specialist.id === "operator" && wantsSequenceCreated(task) && !alreadyCreated) {
-        const callId = `auto-sequence-${Date.now()}`;
-        ctx.emit?.({
-          type: "tool_start",
-          id: callId,
-          name: "create_sequence",
-          agent: specialist.id,
-          args: {},
-          parentId: ctx.parentId,
-        });
-        let result: unknown;
-        try {
-          result = await createSequenceFromBlueprint(ctx);
-        } catch (err) {
-          result = { error: err instanceof Error ? err.message : "Could not create the sequence" };
-        }
-        ctx.emit?.({
-          type: "tool_end",
-          id: callId,
-          name: "create_sequence",
-          agent: specialist.id,
-          args: {},
-          result,
-          parentId: ctx.parentId,
-        });
-        toolResults.push({ id: callId, name: "create_sequence", args: {}, result });
-        const created = result && typeof result === "object" ? (result as Record<string, unknown>) : {};
-        finalText =
-          typeof created.name === "string"
-            ? `Created “${created.name}” from the approved blueprint. The campaign card is in the chat.`
-            : typeof created.error === "string"
-              ? created.error
-              : "Could not create the sequence.";
-        break;
-      }
-
-      const alreadyStarted = toolResults.some((row) => row.name === "start_prospecting_run");
-      if (specialist.id === "researcher" && wantsNewLeads(task) && !alreadyStarted) {
-        const callId = `auto-start-${Date.now()}`;
-        const toolArgs = {};
-        ctx.emit?.({
-          type: "tool_start",
-          id: callId,
-          name: "start_prospecting_run",
-          agent: specialist.id,
-          args: toolArgs,
-          parentId: ctx.parentId,
-        });
-        let result: unknown;
-        try {
-          result = await specialist.runTool(ctx, "start_prospecting_run", toolArgs);
-        } catch (err) {
-          result = { error: err instanceof Error ? err.message : "Tool failed" };
-        }
-        ctx.emit?.({
-          type: "tool_end",
-          id: callId,
-          name: "start_prospecting_run",
-          agent: specialist.id,
-          args: toolArgs,
-          result,
-          parentId: ctx.parentId,
-        });
-        toolResults.push({ id: callId, name: "start_prospecting_run", args: toolArgs, result });
-        const started = result && typeof result === "object" ? (result as Record<string, unknown>) : {};
-        if (started.queued) {
-          const criteria = started.criteria && typeof started.criteria === "object" ? (started.criteria as Record<string, unknown>) : {};
-          const industries = Array.isArray(criteria.industries) ? criteria.industries.join(", ") : "";
-          finalText = `Started a prospecting run for ${started.limit ?? "your"} companies using the approved blueprint${industries ? ` (${industries})` : ""}.`;
-        } else {
-          finalText = typeof started.error === "string" ? started.error : roundText || "Could not start a prospecting run.";
-        }
-        break;
-      }
-
-      finalText = roundText;
-      break;
-    }
-
-    for (const call of calls) {
-      const toolArgs = JSON.parse(call.arguments || "{}") as Record<string, unknown>;
-      if (confirmed && (call.name === "run_send_pass" || call.name === "send_email_now") && toolArgs.confirmed !== true) {
-        toolArgs.confirmed = true;
-      }
-      ctx.emit?.({
-        type: "tool_start",
-        id: call.call_id,
-        name: call.name,
-        agent: specialist.id,
-        args: toolArgs,
-        parentId: ctx.parentId,
-      });
-      let result: unknown;
-      try {
-        result = await specialist.runTool(ctx, call.name, toolArgs);
-      } catch (err) {
-        result = { error: err instanceof Error ? err.message : "Tool failed" };
-      }
+  const loop = await runAgentLoop({
+    ai,
+    model,
+    instructions: specialist.instruction,
+    tools,
+    input,
+    maxRounds: MAX_SPECIALIST_ROUNDS,
+    thinkingBudget: ORCHESTRATION_THINKING_BUDGET,
+    isCancelled: ctx.isCancelled,
+    isParallelSafe: (name) => !COPILOT_MUTATING_TOOLS.has(name),
+    prepareArgs: (call) =>
+      confirmed && (call.name === "run_send_pass" || call.name === "send_email_now") && call.args.confirmed !== true
+        ? { ...call.args, confirmed: true }
+        : call.args,
+    onText: emitReasoning,
+    onThought: emitReasoning,
+    onToolStart: (call) =>
+      ctx.emit?.({ type: "tool_start", id: call.id, name: call.name, agent: specialist.id, args: call.args, parentId: ctx.parentId }),
+    onToolEnd: (done) =>
       ctx.emit?.({
         type: "tool_end",
-        id: call.call_id,
-        name: call.name,
+        id: done.id,
+        name: done.name,
         agent: specialist.id,
-        args: toolArgs,
-        result,
+        args: done.args,
+        result: done.result,
         parentId: ctx.parentId,
+      }),
+    runTool: (call) => specialist.runTool(ctx, call.name, call.args),
+    onTextOnlyRound: (text, results) => {
+      const askedInsteadOfActing = looksLikeQuestion(text) || (results.length === 0 && wantsNewLeads(task));
+      if (!askedInsteadOfActing || resumedFromQuestion) return false;
+      resumedFromQuestion = true;
+      input.push({
+        role: "user",
+        content:
+          "Answer yourself from the briefing above and continue the original task now. Call your tools. Do not ask Copilot or the user another question.",
       });
-      toolResults.push({ id: call.call_id, name: call.name, args: toolArgs, result });
-      input.push({ type: "function_call_output", call_id: call.call_id, output: JSON.stringify(result) });
+      return true;
+    },
+  });
+
+  const toolResults: Array<{ id: string; name: string; args: Record<string, unknown>; result: unknown }> = [...loop.toolResults];
+  let finalText = loop.finalText;
+
+  // Fallbacks for a specialist that answered in text instead of doing the job.
+  if (!loop.exhausted && !loop.cancelled) {
+    const alreadyCreated = toolResults.some((row) => row.name === "create_sequence");
+    if (specialist.id === "operator" && wantsSequenceCreated(task) && !alreadyCreated) {
+      const callId = `auto-sequence-${Date.now()}`;
+      ctx.emit?.({ type: "tool_start", id: callId, name: "create_sequence", agent: specialist.id, args: {}, parentId: ctx.parentId });
+      let result: unknown;
+      try {
+        result = await createSequenceFromBlueprint(ctx);
+      } catch (err) {
+        result = { error: err instanceof Error ? err.message : "Could not create the sequence" };
+      }
+      ctx.emit?.({ type: "tool_end", id: callId, name: "create_sequence", agent: specialist.id, args: {}, result, parentId: ctx.parentId });
+      toolResults.push({ id: callId, name: "create_sequence", args: {}, result });
+      const created = result && typeof result === "object" ? (result as Record<string, unknown>) : {};
+      finalText =
+        typeof created.name === "string"
+          ? `Created “${created.name}” from the approved blueprint. The campaign card is in the chat.`
+          : typeof created.error === "string"
+            ? created.error
+            : "Could not create the sequence.";
     }
   }
 

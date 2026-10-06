@@ -35,7 +35,7 @@ export function BottomCtaSection() {
               </ThreeDButton>
               <Link
                 href="#pricing"
-                className="landing-outline-btn inline-flex h-11 w-full items-center justify-center rounded-xl border border-[#E6E6E6] bg-white px-6 text-sm font-medium text-black shadow-[0px_6px_10px_0px_rgba(0,0,0,0.05)] transition-all hover:bg-neutral-50 active:bg-neutral-100 sm:w-auto"
+                className="landing-outline-btn inline-flex h-11 w-full shrink-0 items-center justify-center whitespace-nowrap rounded-xl border border-[#E6E6E6] bg-white px-6 text-sm font-medium text-black shadow-[0px_6px_10px_0px_rgba(0,0,0,0.05)] transition-all hover:bg-neutral-50 active:bg-neutral-100 sm:w-auto"
               >
                 See our plans
               </Link>

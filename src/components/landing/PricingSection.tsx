@@ -81,7 +81,7 @@ export function PricingSection() {
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-[12px] items-stretch w-full rounded-[20px]">
+        <div className="grid w-full grid-cols-1 items-stretch gap-6 rounded-[20px] md:grid-cols-2 xl:grid-cols-3 xl:gap-3">
           {plans.map((plan) => (
             <div
               key={plan.name}
@@ -120,7 +120,7 @@ export function PricingSection() {
                       type="button"
                       variant={plan.buttonVariant}
                       size="md"
-                      className="w-full h-11 rounded-[12px] text-[16px] font-medium tracking-[-0.03em]"
+                      className="h-11 w-full max-w-full shrink rounded-[12px] px-4 text-[15px] font-medium tracking-[-0.03em] sm:text-base"
                       disabled={busyPlan === plan.key}
                       onClick={() => void startTrial(plan.key)}
                     >
@@ -179,7 +179,7 @@ export function PricingSection() {
                   rel="noreferrer"
                   variant="soft"
                   size="md"
-                  className="w-full h-11 rounded-[12px] text-[16px] font-medium tracking-[-0.03em]"
+                  className="h-11 w-full max-w-full shrink rounded-[12px] px-4 text-[15px] font-medium tracking-[-0.03em] sm:text-base"
                 >
                   Book a call
                 </ThreeDButton>

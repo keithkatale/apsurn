@@ -36,6 +36,14 @@ export function CopilotThreadsProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh]);
 
+  // Background tasks change state without a chat turn; keep their status dots fresh while any are live.
+  const hasLiveTask = conversations.some((c) => ["queued", "running", "waiting", "cancelling"].includes(c.taskStatus ?? ""));
+  useEffect(() => {
+    if (!hasLiveTask) return;
+    const timer = window.setInterval(() => void refresh(), 10_000);
+    return () => window.clearInterval(timer);
+  }, [hasLiveTask, refresh]);
+
   const rename = useCallback(async (id: string, title: string) => {
     setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, title } : c)));
     await fetch(`/api/copilot/chat?id=${id}`, {

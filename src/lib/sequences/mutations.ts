@@ -187,6 +187,12 @@ export async function deleteSequenceStep(
   return { ok: true, data: { id: stepId } };
 }
 
+function chunks<T>(values: T[], size: number) {
+  const out: T[][] = [];
+  for (let index = 0; index < values.length; index += size) out.push(values.slice(index, index + size));
+  return out;
+}
+
 export async function enrollContacts(
   db: SupabaseClient,
   userId: string,
@@ -206,35 +212,34 @@ export async function enrollContacts(
     return { ok: true, data: { enrolled: 0, skipped: contactIds.length, missingEmail } };
   }
 
-  const { data: already } = await db
-    .from("enrollments")
-    .select("contact_id")
-    .eq("sequence_id", sequenceId)
-    .in("contact_id", eligibleIds);
-  const alreadyIds = new Set((already ?? []).map((row) => row.contact_id));
+  const alreadyIds = new Set<string>();
+  for (const ids of chunks(eligibleIds, 80)) {
+    const { data: already, error: alreadyError } = await db
+      .from("enrollments")
+      .select("contact_id")
+      .eq("sequence_id", sequenceId)
+      .in("contact_id", ids);
+    if (alreadyError) return { ok: false, error: alreadyError.message, status: 500 };
+    for (const row of already ?? []) alreadyIds.add(row.contact_id);
+  }
   const toInsert = eligibleIds.filter((contactId) => !alreadyIds.has(contactId));
 
-  if (toInsert.length > 0) {
+  let enrolled = alreadyIds.size;
+  const now = new Date().toISOString();
+  for (const ids of chunks(toInsert, 500)) {
     const { error } = await db.from("enrollments").insert(
-      toInsert.map((contactId) => ({
+      ids.map((contactId) => ({
         sequence_id: sequenceId,
         contact_id: contactId,
         status: "active",
         current_step: 0,
-        next_send_at: new Date().toISOString(),
+        next_send_at: now,
       })),
     );
     if (error && error.code !== "23505") return { ok: false, error: error.message, status: 500 };
+    if (!error) enrolled += ids.length;
   }
 
-  const { count, error: countError } = await db
-    .from("enrollments")
-    .select("id", { count: "exact", head: true })
-    .eq("sequence_id", sequenceId)
-    .in("contact_id", eligibleIds);
-  if (countError) return { ok: false, error: countError.message, status: 500 };
-
-  const enrolled = count ?? alreadyIds.size;
   return { ok: true, data: { enrolled, skipped: contactIds.length - enrolled, missingEmail } };
 }
 

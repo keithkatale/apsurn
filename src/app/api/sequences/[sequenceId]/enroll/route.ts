@@ -5,7 +5,7 @@ import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
 import { enrollContacts } from "@/lib/sequences/mutations";
 
 const requestSchema = z.object({
-  contactIds: z.array(z.string().uuid()).min(1).max(500),
+  contactIds: z.array(z.string().uuid()).min(1).max(1000),
 });
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ sequenceId: string }> }) {

@@ -47,7 +47,7 @@ export function ComparisonSection() {
           The other ways to get outbound started, next to doing it yourself.
         </p>
 
-        <div className="mt-10 flex flex-col gap-3 md:hidden">
+        <div className="mt-10 flex flex-col gap-3 lg:hidden">
           {ROWS.map((row) => (
             <article key={row.label} className="rounded-2xl border border-[#E6E6E6] bg-white p-4">
               <h3 className="font-heading text-[15px] font-semibold text-neutral-950">{row.label}</h3>
@@ -58,11 +58,11 @@ export function ComparisonSection() {
                   {row.apsurn}
                 </span>
               </div>
-              <dl className="mt-3 grid grid-cols-3 gap-2">
+              <dl className="mt-3 flex flex-col gap-2">
                 {OTHERS.map((name, index) => (
-                  <div key={name}>
+                  <div key={name} className="flex items-baseline justify-between gap-3">
                     <dt className="text-[11px] font-medium uppercase tracking-[0.06em] text-[#8a8a8a]">{name}</dt>
-                    <dd className="mt-1 text-[13px] leading-snug text-[#605F5F]">{row.others[index]}</dd>
+                    <dd className="text-right text-[13px] leading-snug text-[#605F5F]">{row.others[index]}</dd>
                   </div>
                 ))}
               </dl>
@@ -70,8 +70,8 @@ export function ComparisonSection() {
           ))}
         </div>
 
-        <div className="mt-10 hidden overflow-hidden rounded-[24px] border border-[#E6E6E6] md:block">
-          <table className="w-full border-separate border-spacing-0 text-left text-[15px]">
+        <div className="mt-10 hidden overflow-x-auto rounded-[24px] border border-[#E6E6E6] lg:block">
+          <table className="w-full min-w-[720px] border-separate border-spacing-0 text-left text-[14px] xl:text-[15px]">
             <thead>
               <tr>
                 <th className="bg-[#FAFAFA] px-5 py-4" />

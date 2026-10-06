@@ -32,6 +32,7 @@ import {
   type FoundCompany,
   type FoundPerson,
 } from "../icypeas";
+import { parseHeadcountRange } from "../headcount";
 import { matchIcypeasIndustries } from "../icypeas-industries";
 import { verifyEmail } from "../email-verifier";
 import { normalizeDomain, resolveEmail } from "./shared";
@@ -81,21 +82,6 @@ export function interactiveWallclockMs(): number {
 function num(name: string, fallback: number): number {
   const v = Number(process.env[name] ?? "");
   return Number.isFinite(v) && v > 0 ? Math.floor(v) : fallback;
-}
-
-/** "11-50 employees" / "50+ people" / "up to 200" -> a headcount range. Returns {} when the text doesn't parse — an unfiltered search, not a failure. */
-function parseHeadcountRange(range: string | undefined): { min?: number; max?: number } {
-  if (!range) return {};
-  const bounded = range.match(/(\d+)\s*[-–to]+\s*(\d+)/i);
-  if (bounded) {
-    const [a, b] = [Number(bounded[1]), Number(bounded[2])];
-    return { min: Math.min(a, b), max: Math.max(a, b) };
-  }
-  const plus = range.match(/(\d+)\s*\+/);
-  if (plus) return { min: Number(plus[1]) };
-  const upTo = range.match(/(?:up to|under|below|max(?:imum)?)\s*(\d+)/i);
-  if (upTo) return { max: Number(upTo[1]) };
-  return {};
 }
 
 export interface AgentRunResult {
@@ -375,6 +361,7 @@ export async function runDirectoryAgent(opts: {
   wallclockMs?: number;
   /** False for the unpaid setup cap, so the first leads save before a card exists. */
   chargeCredits?: boolean;
+  agentTaskId?: string;
 }): Promise<AgentRunResult> {
   const { db, runId, listId, userId, listCompanyId, criteria, targetCount, onEvent, abortSignal } = opts;
 
@@ -386,6 +373,7 @@ export async function runDirectoryAgent(opts: {
     listCompanyId,
     criteria,
     productSummary: opts.productSummary,
+    agentTaskId: opts.agentTaskId,
     budget: {
       // maxSteps is populated only because AgentRunContext's shape still
       // requires it — nothing reads it for gating any more (see the comment
@@ -423,6 +411,17 @@ export async function runDirectoryAgent(opts: {
     if (await isCancelled(db, runId)) return "cancelled";
     return null;
   };
+
+  // A run with triggers is a signal scout: companies with a recent, evidenced
+  // reason to buy, not just an ICP match. Dynamic import keeps the signals
+  // module (which imports this file's persist/shared deps) out of the cycle.
+  if (criteria.triggers?.length) {
+    if (!isEmailFinderConfigured()) {
+      throw new Error("The contact database is not configured (ICYPEAS_API_KEY is unset), so signal-based prospecting can't find decision makers.");
+    }
+    const { runSignalScout } = await import("../signals/run");
+    return runSignalScout({ ctx, targetCount, emit, checkStopped });
+  }
 
   if (criteria.preferYcLeads && ycLeadsConfigured()) {
     const ycResult = await saveYcLeadsFirst({
@@ -702,7 +701,36 @@ export async function runDirectoryAgent(opts: {
  * the deterministic pipeline, and maintains prospecting_runs / prospect_lists
  * status + counts.
  */
+/** The agent task waiting on a run. Its own query, so runs keep working before migration 0029 adds the column. */
+async function agentTaskIdForRun(db: SupabaseClient, runId: string): Promise<string | null> {
+  const { data, error } = await db.from("prospecting_runs").select("agent_task_id").eq("id", runId).maybeSingle();
+  if (error) return null;
+  return (data as { agent_task_id?: string | null } | null)?.agent_task_id ?? null;
+}
+
 export async function executeAgentProspectingRun(runId: string, listId: string) {
+  const db = createAdminClient();
+  const agentTaskId = await agentTaskIdForRun(db, runId);
+  try {
+    return await executeRun(runId, listId, agentTaskId);
+  } catch (error) {
+    // Mark the run terminal before waking its task, so the task sees the failure instead of waiting on it.
+    const message = error instanceof Error ? error.message : "Prospecting failed";
+    const completedAt = new Date().toISOString();
+    await Promise.all([
+      db.from("prospecting_runs").update({ status: "failed", stage: "failed", error_summary: message, completed_at: completedAt }).eq("id", runId),
+      db.from("prospect_lists").update({ status: "failed", error: message }).eq("id", listId),
+    ]);
+    throw error;
+  } finally {
+    if (agentTaskId) {
+      const { enqueueAgentTask } = await import("@/lib/agents/task-executor");
+      enqueueAgentTask(agentTaskId);
+    }
+  }
+}
+
+async function executeRun(runId: string, listId: string, agentTaskId: string | null) {
   const db = createAdminClient();
 
   const progress = async (status: RunStatus, values: Record<string, unknown> = {}) => {
@@ -744,6 +772,7 @@ export async function executeAgentProspectingRun(runId: string, listId: string) 
     targetCount,
     // Not bounded by an HTTP response, so it can afford the full budget.
     wallclockMs: BACKGROUND_WALLCLOCK_MS,
+    agentTaskId: agentTaskId ?? undefined,
   });
 
   if (result.cancelled) {

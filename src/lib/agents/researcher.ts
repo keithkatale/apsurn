@@ -1,6 +1,7 @@
 import { CREDIT_COSTS, SETUP_FREE_LEAD_CAP } from "@/lib/billing/plans";
 import { getBillingStatus } from "@/lib/billing/entitlements";
 import { setProspectCompanyStatus } from "@/lib/prospecting/mutations";
+import { parseTriggers } from "@/lib/prospecting/signals/triggers";
 import { startProspectingRun } from "@/lib/prospecting/start-run";
 import type { ProspectCriteria } from "@/lib/prospecting/types";
 import { publishArtifact } from "@/lib/copilot/artifacts";
@@ -20,7 +21,8 @@ You may:
 
 Rules:
 - When asked for recent, qualified, or all existing leads, call list_contacts immediately and return names.
-- When asked to find, get, or source leads/companies from the approved ICP, call start_prospecting_run immediately. Omit industries, geographies, and personas — the tool reads the approved blueprint. That run searches the YC leads database first and uses Icypeas only if those industries or tags are not in it.
+- When asked to find, get, or source leads/companies, default to start_signal_scout: read the value prop in the briefing, choose the buying signals that mean a company needs what the account sells, set keywords from the value prop and a recency window, and call it. Contacts and verified emails are still found through the data providers once a company shows a signal. Call start_prospecting_run (plain ICP/directory pull, no buying signal) only when the task explicitly asks for that. Omit industries, geographies, and personas — the tools read the approved blueprint.
+- When asked for leads with a reason to reach out now (just raised, hiring for a role, complaining about a problem, changed their site/tech), call start_signal_scout with the matching trigger(s) and a recency window. Live triggers: hiring (open roles), funding_news (recent funding, launches, expansions, key executive hires — set eventKinds) and social_pain (LinkedIn posts where a named person describes a current problem; set keywords to the problem in their words; yield is low, so say so). tech_website is not live yet; say so plainly and offer a live one instead. A signal run finds only companies with dated evidence, so it may save fewer than asked — that is correct, not a failure.
 - When asked to source leads from a named place, registry, URL, or social network, call source_leads. Do not ask the user to confirm the place they already named.
 - Never ask Copilot or the user which industries, geographies, personas, or company size to use. Those live on the blueprint and in the briefing.
 - If the tool says there is no approved blueprint or the ICP is empty, report that error and stop. Do not interview anyone.
@@ -98,6 +100,35 @@ export const RESEARCHER_TOOLS = [
     },
   },
   {
+    name: "start_signal_scout",
+    description:
+      "Enqueue a background signal-based run: finds companies showing a recent, evidenced buying signal, then the decision maker and a verified email, and saves each with the reason to reach out. Requires an approved blueprint (industries, geography, personas). Live triggers: hiring (open roles on public job boards) and funding_news (news about funding, launches, expansions, executive hires; set eventKinds). social_pain (public LinkedIn posts describing a current problem; keywords = the problem in the poster's words; few results expected). tech_website is accepted but skipped until released.",
+    parameters: {
+      type: "object",
+      properties: {
+        triggers: {
+          type: "array",
+          minItems: 1,
+          items: {
+            type: "object",
+            properties: {
+              type: { type: "string", enum: ["hiring", "funding_news", "social_pain", "tech_website"] },
+              roles: { type: "array", items: { type: "string" }, description: "Hiring: job-title fragments, e.g. ['SDR', 'account executive']. Omit to derive from the ICP personas." },
+              keywords: { type: "array", items: { type: "string" }, description: "funding_news: topics/markets to look in, e.g. ['fintech', 'devtools']. social_pain: the problem as people phrase it, e.g. ['struggling to find leads']." },
+              eventKinds: { type: "array", items: { type: "string", enum: ["funding", "launch", "expansion", "exec_hire"] }, description: "funding_news: which events count. Default funding." },
+              competitors: { type: "array", items: { type: "string" } },
+              recencyDays: { type: "number", description: "Only signals this recent count. Default 30, max 180." },
+            },
+            required: ["type"],
+          },
+        },
+        limit: { type: "number", description: "How many leads to save, 1–30, default 10" },
+        listName: { type: "string" },
+      },
+      required: ["triggers"],
+    },
+  },
+  {
     name: "get_prospecting_run",
     description: "Status of a prospecting run. If runId is omitted, returns the user's most recent run.",
     parameters: {
@@ -148,6 +179,7 @@ function criteriaFromBlueprint(icp: unknown, personas: unknown): ProspectCriteri
 
 async function startRun(ctx: AgentToolContext, args: Record<string, unknown>) {
   const { db, userId } = ctx;
+  const triggers = parseTriggers(args.triggers);
   const { data: company } = await db
     .from("companies")
     .select("id, company_blueprints!inner(approved_at, icp, personas)")
@@ -171,7 +203,9 @@ async function startRun(ctx: AgentToolContext, args: Record<string, unknown>) {
     companySizeRange: typeof args.companySizeRange === "string" ? args.companySizeRange : fromBlueprint.companySizeRange,
     minimumConfidence: 0.5,
     requiredContactChannels: ["email"],
-    preferYcLeads: true,
+    // A signal run needs dated evidence, which the YC directory can't give.
+    preferYcLeads: triggers.length === 0,
+    ...(triggers.length ? { triggers } : {}),
   };
   if (industries.length === 0 && personas.length === 0) {
     return { error: "The approved blueprint has no industries or personas, so a run cannot start. The user needs to refine the blueprint in setup." };
@@ -194,6 +228,7 @@ async function startRun(ctx: AgentToolContext, args: Record<string, unknown>) {
     listName,
     limit,
     criteria,
+    agentTaskId: ctx.taskId,
   });
   if (!started.ok) return { error: started.error };
   const published = {
@@ -259,6 +294,11 @@ async function runTool(ctx: AgentToolContext, name: string, args: Record<string,
     case "save_sourced_leads":
       return saveSourcedLeads(ctx, String(args.artifactId ?? ""), Array.isArray(args.rowIds) ? (args.rowIds as string[]) : []);
     case "start_prospecting_run":
+      return startRun(ctx, args);
+    case "start_signal_scout":
+      if (parseTriggers(args.triggers).length === 0) {
+        return { error: "start_signal_scout needs at least one valid trigger (hiring, funding_news, social_pain, tech_website)." };
+      }
       return startRun(ctx, args);
     case "get_prospecting_run":
       return getRun(ctx, args);

@@ -19,6 +19,26 @@ export async function isSuppressed(kind: "email" | "phone" | "profile", value: s
   return Boolean(data);
 }
 
+/** One lookup for a whole imported list, instead of a query per address. */
+export async function suppressedEmails(emails: string[]): Promise<Set<string>> {
+  const pepper = process.env.SUPPRESSION_HASH_SECRET;
+  const unique = [...new Set(emails.map((email) => email.toLowerCase()).filter(Boolean))];
+  if (!pepper || unique.length === 0) return new Set();
+  const db = createAdminClient();
+  const byHash = new Map(unique.map((email) => [createHash("sha256").update(`${pepper}:email:${email}`).digest("hex"), email]));
+  const blocked = new Set<string>();
+  const hashes = [...byHash.keys()];
+  for (let index = 0; index < hashes.length; index += 100) {
+    const part = hashes.slice(index, index + 100);
+    const { data } = await db.from("suppressed_contact_values").select("value_hash").in("value_hash", part);
+    for (const row of data ?? []) {
+      const email = byHash.get(row.value_hash);
+      if (email) blocked.add(email);
+    }
+  }
+  return blocked;
+}
+
 export async function saveCanonicalCompany(candidate: CandidateCompany) {
   const db = createAdminClient();
   const now = new Date();

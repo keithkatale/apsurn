@@ -171,6 +171,7 @@ export async function persistLead(
         runId: ctx.runId,
         contactCount,
       },
+      taskId: ctx.agentTaskId,
     });
 
     const directoryHost = typeof company.sourceRef.directoryHost === "string" ? company.sourceRef.directoryHost : null;
@@ -180,7 +181,8 @@ export async function persistLead(
     return { saved: true, contactCount, creditsSpent: CREDIT_COSTS.prospect_company, creditBalance };
   } catch (error) {
     const code = (error as { code?: string }).code;
-    if (code === "credits_exhausted") {
+    // A task's approved budget running out stops the run the same way an empty balance does.
+    if (code === "credits_exhausted" || code === "budget_exhausted") {
       await ctx.db.from("contacts").delete().eq("prospect_company_id", snapshot.id);
       await ctx.db.from("prospect_companies").delete().eq("id", snapshot.id);
       ctx.savedDomains.delete(company.domain);

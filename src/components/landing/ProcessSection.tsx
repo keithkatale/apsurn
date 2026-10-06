@@ -39,7 +39,7 @@ export function ProcessSection() {
           </h2>
         </div>
 
-        <div className="mt-10 sm:mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
+        <div className="mt-10 grid grid-cols-1 gap-6 sm:mt-16 lg:grid-cols-3 lg:gap-8">
           {steps.map((step) => (
             <div
               key={step.number}
@@ -70,7 +70,7 @@ export function ProcessSection() {
         <div className="mt-10 flex justify-center">
           <Link
             href="/signup?next=/setup"
-            className="landing-hero-cta inline-flex items-center justify-center rounded-[10px] bg-[#4379EE] px-7 py-2.5 text-[13px] font-medium text-white hover:bg-[#3567D6]"
+            className="landing-hero-cta inline-flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-[10px] bg-[#4379EE] px-6 text-[14px] font-medium text-white hover:bg-[#3567D6]"
           >
             Get 50 free credits
           </Link>

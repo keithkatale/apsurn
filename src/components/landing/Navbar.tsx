@@ -62,8 +62,8 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
       onClick={() => setIsOpen(false)}
       className={
         embedded
-          ? "hero-outline-btn inline-flex h-8 items-center justify-center rounded-full px-3.5 text-[13px] font-medium"
-          : "inline-flex h-8 items-center justify-center rounded-xl px-3 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-100 hover:text-neutral-950"
+          ? "hero-outline-btn inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-full px-3.5 text-[13px] font-medium"
+          : "inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-xl px-3 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-100 hover:text-neutral-950"
       }
     >
       Book a Call
@@ -85,7 +85,7 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
 
   return (
     <header className={embedded ? "relative z-20 w-full" : "fixed top-4 sm:top-5 left-0 right-0 z-50 flex justify-center px-4 sm:px-6 pointer-events-none"}>
-      <div className={embedded ? "flex w-full flex-col" : "landing-nav pointer-events-auto flex w-full max-w-[360px] flex-col rounded-2xl border border-[#EEEEEE] bg-white/95 shadow-[0px_6px_20px_0px_rgba(0,0,0,0.06)] backdrop-blur-md transition-all md:max-w-[760px]"}>
+      <div className={embedded ? "flex w-full flex-col" : "landing-nav pointer-events-auto flex w-full max-w-[360px] flex-col rounded-2xl border border-[#EEEEEE] bg-white/95 shadow-[0px_6px_20px_0px_rgba(0,0,0,0.06)] backdrop-blur-md transition-all lg:max-w-[920px]"}>
         {/* Main Bar */}
         <div className={embedded ? "flex items-center justify-between gap-3 py-2" : "flex items-center justify-between gap-4 px-3.5 py-2.5 sm:px-4 sm:py-2.5"}>
           {/* Logo and Nav links */}
@@ -99,12 +99,12 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
             />
 
             {/* Desktop Navigation Links */}
-            <nav className="hidden md:flex items-center gap-1.5 text-[15px] font-medium text-neutral-600">
+            <nav className="hidden items-center gap-1.5 text-[15px] font-medium text-neutral-600 lg:flex">
               {navLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="rounded-md px-2.5 py-1 transition-colors hover:text-neutral-950 hover:bg-neutral-100/60"
+                  className="whitespace-nowrap rounded-md px-2.5 py-1 transition-colors hover:bg-neutral-100/60 hover:text-neutral-950"
                 >
                   {link.label}
                 </Link>
@@ -113,25 +113,25 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
           </div>
 
           {/* Desktop Action Buttons */}
-          <div className="hidden md:flex items-center gap-2">
+          <div className="hidden items-center gap-2 lg:flex">
             {showTheme ? <LandingThemeButton compact={embedded} /> : null}
             {embedded ? (
               <>
                 {showDashboard ? null : (
-                  <Link href="/login" className="px-3 text-[14px] font-medium text-neutral-800 hover:text-neutral-950">
+                  <Link href="/login" className="shrink-0 whitespace-nowrap px-3 text-[14px] font-medium text-neutral-800 hover:text-neutral-950">
                     Login
                   </Link>
                 )}
                 <Link
                   href="#demo"
-                  className="hero-outline-btn inline-flex h-8 items-center rounded-full px-3.5 text-[13px] font-medium"
+                  className="hero-outline-btn hidden h-8 shrink-0 items-center whitespace-nowrap rounded-full px-3.5 text-[13px] font-medium xl:inline-flex"
                 >
                   See how it works
                 </Link>
                 {bookCall}
                 <Link
                   href={showDashboard ? "/dashboard" : "/signup?next=/setup"}
-                  className="hero-solid-btn inline-flex h-8 items-center rounded-full px-3.5 text-[13px] font-medium"
+                  className="hero-solid-btn inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-full px-3.5 text-[13px] font-medium"
                 >
                   {showDashboard ? "Dashboard" : "Get started"}
                 </Link>
@@ -148,7 +148,7 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
           </div>
 
           {/* Mobile Menu Toggle Button (Figma 1:7152) */}
-          <div className="flex md:hidden items-center gap-2">
+          <div className="flex items-center gap-2 lg:hidden">
             {showTheme ? <LandingThemeButton compact={embedded} /> : null}
             <button
               type="button"
@@ -164,7 +164,7 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
 
         {/* Mobile Dropdown Menu (Figma 1:7163) */}
         {isOpen && (
-          <div className="flex md:hidden flex-col gap-1 border-t border-[#EEEEEE] p-3 pt-2 text-center">
+          <div className="flex flex-col gap-1 border-t border-[#EEEEEE] p-3 pt-2 text-center lg:hidden">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
@@ -199,7 +199,7 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
                 <Link
                   href={showDashboard ? "/dashboard" : "/signup?next=/setup"}
                   onClick={() => setIsOpen(false)}
-                  className="hero-solid-btn inline-flex h-10 items-center justify-center rounded-full text-[15px] font-medium"
+                  className="hero-solid-btn inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-full px-4 text-[15px] font-medium"
                 >
                   {showDashboard ? "Dashboard" : "Get started"}
                 </Link>

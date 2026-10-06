@@ -9,6 +9,8 @@ export interface StartProspectingRunInput {
   listName: string;
   limit: number;
   criteria: ProspectCriteria;
+  /** The durable agent task waiting on this run; the run wakes it when it finishes. */
+  agentTaskId?: string;
 }
 
 export type ReserveProspectingRunResult =
@@ -60,7 +62,13 @@ export async function reserveProspectingRun(
 
   const { data: run, error: runError } = await db
     .from("prospecting_runs")
-    .insert({ list_id: list.id, user_id: input.userId, status: "queued", target_count: input.limit })
+    .insert({
+      list_id: list.id,
+      user_id: input.userId,
+      status: "queued",
+      target_count: input.limit,
+      ...(input.agentTaskId ? { agent_task_id: input.agentTaskId } : {}),
+    })
     .select()
     .single();
   if (runError || !run) return { ok: false, error: runError?.message ?? "Failed to create run", status: 500 };

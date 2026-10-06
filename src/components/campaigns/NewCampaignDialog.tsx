@@ -1,8 +1,11 @@
 "use client";
 
 import { useRef, useState, type DragEvent, type ReactNode } from "react";
-import { ArrowLeft, FileSpreadsheet, Loader2, Search, Upload, Users, X } from "lucide-react";
+import { ArrowLeft, FileSpreadsheet, Search, Upload, Users, X } from "lucide-react";
+import { CsvImportProgress, rememberProgressLog } from "@/components/campaigns/CsvImportProgress";
 import { cn } from "@/lib/cn";
+
+export type CsvProgressUpdate = { label: string; progress: number };
 
 export function NewCampaignDialog({
   availableLeadCount,
@@ -17,13 +20,16 @@ export function NewCampaignDialog({
   onClose: () => void;
   onUseLeads: () => void;
   onFindLeads: () => void;
-  onCreateManual: (input: { name: string; about: string; file: File }) => Promise<void>;
+  onCreateManual: (input: { name: string; about: string; file: File }, report: (update: CsvProgressUpdate) => void) => Promise<void>;
 }) {
   const [step, setStep] = useState<"choose" | "manual">("choose");
   const [name, setName] = useState("");
   const [about, setAbout] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState("Uploading the file…");
+  const [progress, setProgress] = useState(2);
+  const [logs, setLogs] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -48,8 +54,15 @@ export function NewCampaignDialog({
     if (!file || !name.trim() || busy) return;
     setBusy(true);
     setError(null);
+    setStatus("Uploading the file…");
+    setProgress(2);
+    setLogs(["Uploading the file…"]);
     try {
-      await onCreateManual({ name: name.trim(), about: about.trim(), file });
+      await onCreateManual({ name: name.trim(), about: about.trim(), file }, (update) => {
+        setStatus(update.label);
+        setProgress((current) => Math.max(current, update.progress));
+        setLogs((prev) => rememberProgressLog(prev, update.label));
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create that campaign");
       setBusy(false);
@@ -78,12 +91,14 @@ export function NewCampaignDialog({
               </button>
             ) : null}
             <h2 id="new-campaign-title" className="font-heading text-[20px] font-semibold tracking-[-0.03em] text-neutral-950">
-              {step === "choose" ? "New campaign" : "Create it yourself"}
+              {step === "choose" ? "New campaign" : busy ? "Creating your campaign" : "Create it yourself"}
             </h2>
             <p className="mt-1 text-[13px] leading-snug text-neutral-500">
               {step === "choose"
                 ? "Start from the leads you have, find new ones, or bring your own list."
-                : "Name the campaign, upload the people, and we’ll pick an icon from the list."}
+                : busy
+                  ? "The file is being read and added to the campaign."
+                  : "Name the campaign, upload the people, and we’ll pick an icon from the list."}
             </p>
           </div>
           <button
@@ -131,7 +146,10 @@ export function NewCampaignDialog({
               void create();
             }}
           >
-            <label className="block">
+            {busy ? (
+              <CsvImportProgress progress={progress} label={status} logs={logs} />
+            ) : null}
+            <label className={cn("block", busy && "hidden")}>
               <span className="text-[12px] font-medium text-neutral-700">Campaign name</span>
               <input
                 autoFocus
@@ -143,7 +161,7 @@ export function NewCampaignDialog({
                 className="mt-1 w-full rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-[14px] text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-[#4379EE]"
               />
             </label>
-            <label className="block">
+            <label className={cn("block", busy && "hidden")}>
               <span className="text-[12px] font-medium text-neutral-700">What this campaign is about</span>
               <textarea
                 value={about}
@@ -155,7 +173,7 @@ export function NewCampaignDialog({
                 className="mt-1 w-full resize-none rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-[14px] leading-snug text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-[#4379EE]"
               />
             </label>
-            <div>
+            <div className={cn(busy && "hidden")}>
               <span className="text-[12px] font-medium text-neutral-700">Leads</span>
               <button
                 type="button"
@@ -194,10 +212,12 @@ export function NewCampaignDialog({
             <button
               type="submit"
               disabled={busy || !name.trim() || !file}
-              className="mt-1 inline-flex h-10 items-center justify-center gap-2 rounded-full bg-neutral-900 text-[14px] font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-500"
+              className={cn(
+                "mt-1 inline-flex h-10 items-center justify-center gap-2 rounded-full bg-neutral-900 text-[14px] font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-500",
+                busy && "hidden",
+              )}
             >
-              {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-              {busy ? "Reading the list and choosing an icon…" : "Create campaign"}
+              Create campaign
             </button>
           </form>
         )}

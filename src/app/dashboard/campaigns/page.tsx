@@ -11,6 +11,62 @@ function asString(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
+function chunks<T>(values: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let index = 0; index < values.length; index += size) out.push(values.slice(index, index + size));
+  return out;
+}
+
+async function loadEnrollmentRows(
+  supabase: ReturnType<typeof createAdminClient>,
+  sequenceIds: string[],
+): Promise<Array<{ sequence_id: string; contact_id: string }>> {
+  if (sequenceIds.length === 0) return [];
+  const rows: Array<{ sequence_id: string; contact_id: string }> = [];
+  for (const ids of chunks(sequenceIds, 40)) {
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await supabase
+        .from("enrollments")
+        .select("sequence_id, contact_id")
+        .in("sequence_id", ids)
+        .range(from, from + 999);
+      if (error) throw new Error(error.message);
+      rows.push(...(data ?? []));
+      if (!data || data.length < 1000) break;
+    }
+  }
+  return rows;
+}
+
+async function addEnrolledLeads(
+  supabase: ReturnType<typeof createAdminClient>,
+  leadsById: Map<string, CampaignLead>,
+  contactIds: string[],
+) {
+  const missing = contactIds.filter((id) => !leadsById.has(id));
+  for (const ids of chunks(missing, 80)) {
+    const { data, error } = await supabase
+      .from("contacts")
+      .select("id, full_name, title, email, email_status, linkedin_url, archived_at, prospect_companies!contacts_prospect_company_id_fkey(name, domain)")
+      .in("id", ids)
+      .is("archived_at", null);
+    if (error) throw new Error(error.message);
+    for (const contact of data ?? []) {
+      const company = Array.isArray(contact.prospect_companies) ? contact.prospect_companies[0] : contact.prospect_companies;
+      leadsById.set(contact.id, {
+        id: contact.id,
+        fullName: contact.full_name,
+        title: contact.title,
+        email: contact.email,
+        emailStatus: contact.email_status ?? "unverified",
+        linkedinUrl: contact.linkedin_url ?? null,
+        companyName: company?.name ?? "",
+        companyDomain: company?.domain ?? "",
+      });
+    }
+  }
+}
+
 export default async function CampaignsPage({
   searchParams,
 }: {
@@ -77,10 +133,8 @@ export default async function CampaignsPage({
   }
 
   const sequenceIds = (sequences ?? []).map((sequence) => sequence.id);
-  const { data: enrollmentRows } =
-    sequenceIds.length > 0
-      ? await supabase.from("enrollments").select("sequence_id, contact_id").in("sequence_id", sequenceIds)
-      : { data: [] };
+  const enrollmentRows = await loadEnrollmentRows(supabase, sequenceIds);
+  await addEnrolledLeads(supabase, leadsById, [...new Set(enrollmentRows.map((row) => row.contact_id))]);
 
   const { data: draftRows, error: draftLoadError } =
     sequenceIds.length > 0

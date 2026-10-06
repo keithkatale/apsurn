@@ -42,6 +42,14 @@ export async function getOwnedContact(
   return { ...contact, company };
 }
 
+const ID_CHUNK = 80;
+
+function chunks<T>(values: T[], size: number) {
+  const out: T[][] = [];
+  for (let index = 0; index < values.length; index += size) out.push(values.slice(index, index + size));
+  return out;
+}
+
 export async function listOwnedContactsByIds(
   db: SupabaseClient,
   userId: string,
@@ -49,23 +57,37 @@ export async function listOwnedContactsByIds(
 ): Promise<Array<{ id: string; email: string | null; archived_at: string | null }>> {
   if (contactIds.length === 0) return [];
 
-  const { data: contacts, error } = await db
-    .from("contacts")
-    .select("id, email, archived_at, prospect_company_id")
-    .in("id", contactIds);
-  if (error) throw new Error(error.message);
-  const rows = contacts ?? [];
+  const rows: Array<{ id: string; email: string | null; archived_at: string | null; prospect_company_id: string }> = [];
+  for (const ids of chunks(contactIds, ID_CHUNK)) {
+    const { data: contacts, error } = await db
+      .from("contacts")
+      .select("id, email, archived_at, prospect_company_id")
+      .in("id", ids);
+    if (error) throw new Error(error.message);
+    rows.push(...(contacts ?? []));
+  }
   const companyIds = [...new Set(rows.map((row) => row.prospect_company_id))];
   if (companyIds.length === 0) return [];
 
   const { data: account } = await db.from("companies").select("id").eq("user_id", userId).maybeSingle();
-  let companyQuery = db.from("prospect_companies").select("id").in("id", companyIds);
-  companyQuery = account?.id
-    ? companyQuery.or(`user_id.eq.${userId},company_id.eq.${account.id}`)
-    : companyQuery.eq("user_id", userId);
-  const { data: companies, error: companyError } = await companyQuery;
-  if (companyError) throw new Error(companyError.message);
-  const owned = new Set((companies ?? []).map((row) => row.id));
+  const owned = new Set<string>();
+  for (const ids of chunks(companyIds, ID_CHUNK)) {
+    const { data: byUser, error: userError } = await db
+      .from("prospect_companies")
+      .select("id")
+      .in("id", ids)
+      .eq("user_id", userId);
+    if (userError) throw new Error(userError.message);
+    for (const row of byUser ?? []) owned.add(row.id);
+    if (!account?.id) continue;
+    const { data: byCompany, error: companyError } = await db
+      .from("prospect_companies")
+      .select("id")
+      .in("id", ids)
+      .eq("company_id", account.id);
+    if (companyError) throw new Error(companyError.message);
+    for (const row of byCompany ?? []) owned.add(row.id);
+  }
   return rows.filter((row) => owned.has(row.prospect_company_id));
 }
 

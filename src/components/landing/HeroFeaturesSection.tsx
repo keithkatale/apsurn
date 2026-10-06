@@ -109,7 +109,7 @@ function HeroLaunchFilm() {
         <button
           type="button"
           onClick={unmute}
-          className="hero-film-unmute absolute left-1/2 top-1/2 z-10 inline-flex items-center gap-2 rounded-full px-6 py-3.5 text-[16px] font-semibold"
+          className="hero-film-unmute absolute left-1/2 top-1/2 z-10 inline-flex items-center gap-2 whitespace-nowrap rounded-full px-6 py-3.5 text-[16px] font-semibold"
         >
           <Volume2 className="size-5" />
           Unmute
@@ -161,11 +161,11 @@ export function HeroFeaturesSection() {
   }
 
   return (
-    <section id="hero" className="landing-hero-shell flex h-svh flex-col bg-white px-[var(--hero-inset)]">
-      <div className="mx-auto flex h-full w-full min-h-0 flex-col">
+    <section id="hero" className="landing-hero-shell flex min-h-svh flex-col bg-white px-[var(--hero-inset)]">
+      <div className="mx-auto flex min-h-svh w-full flex-1 flex-col">
         <Navbar embedded />
-        <div className="relative mt-1 min-h-0 flex-1 pb-[var(--hero-inset)]">
-          <div className="relative h-full overflow-hidden rounded-[28px] sm:rounded-[32px]">
+        <div className="relative mt-1 flex flex-1 flex-col pb-[var(--hero-inset)]">
+          <div className="relative flex min-h-[26rem] flex-1 flex-col overflow-hidden rounded-[28px] sm:rounded-[32px]">
             <MeshGradient
               className="absolute inset-0"
               color1="#8eb8ff"
@@ -178,8 +178,8 @@ export function HeroFeaturesSection() {
               scale={1.35}
               rotation={110}
             />
-            <div className="relative z-10 flex h-full flex-col items-center justify-center px-5 py-10 text-center sm:px-10">
-              <h1 className="max-w-[920px] font-heading text-[40px] font-semibold leading-[1.08] tracking-[-0.045em] text-white sm:text-[52px] lg:text-[60px]">
+            <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 py-8 text-center sm:px-10 sm:py-10">
+              <h1 className="max-w-[920px] font-heading text-[clamp(32px,8vw,60px)] font-semibold leading-[1.08] tracking-[-0.045em] text-white">
                 Outbound and GTM for B2B SaaS startups
               </h1>
               <p className="mt-4 max-w-[560px] text-[17px] font-medium text-white/90 sm:text-[20px]">
@@ -227,7 +227,7 @@ export function HeroFeaturesSection() {
                   <Link
                     key={chip.label}
                     href={chip.href}
-                    className="hero-chip inline-flex h-8 items-center rounded-full px-3.5 text-[13px] font-medium"
+                    className="hero-chip inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-full px-3.5 text-[13px] font-medium"
                   >
                     {chip.label}
                   </Link>

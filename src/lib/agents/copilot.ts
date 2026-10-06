@@ -1,7 +1,6 @@
 import type { AiToolDeclaration } from "@/lib/ai/openai";
 import { SPECIALIST_ROSTER } from "./registry";
 import { resultNeedsLeads } from "./briefing";
-import { researcher } from "./researcher";
 import { getAnalyticsSummary, getSequenceOverview, listContacts, listProspectCompanies } from "./shared";
 import { getAccountSnapshot } from "./snapshot";
 import { delegateToAgent, getAgentStatus } from "./delegate";
@@ -9,6 +8,8 @@ import { publishArtifact } from "@/lib/copilot/artifacts";
 import { WORKSPACE_MUTATING_TOOLS, WORKSPACE_TOOL_DECLARATIONS, WORKSPACE_TOOL_NAMES, runWorkspaceTool } from "./workspace";
 import type { AgentToolContext } from "./types";
 import { SPECIALIST_IDS } from "./types";
+import { CREATE_PLAN_TOOL, createPlan } from "./plan";
+import { PLAN_AGENT_IDS } from "./plan-core";
 
 const rosterLines = SPECIALIST_ROSTER.map((agent) => `- ${agent.name} (${agent.id}): ${agent.job}`).join("\n");
 
@@ -21,14 +22,16 @@ ${rosterLines}
 You may be invoked from Market Insights with a "Context:" block. Treat it as situational awareness, not something to repeat.
 
 How to work:
+- Plan, then auto-run. Quick questions and single actions you just do in this turn. Anything bigger — more than ~2 tool rounds, finding more than a handful of leads, chained work (find leads → draft emails → build a sequence), or anything they want on a schedule — goes through create_plan: break it into 1-8 concrete steps, each owned by one agent, with counts and filters spelled out. The user approves once and it runs in the background, even if they close the tab. After create_plan, say in one sentence what the plan will do and its estimated credits, then stop.
+- For leads with a reason to reach out now (just raised, hiring for a role, complaining about a problem or a competitor, changed their website/tech), plan a signal_scout step and name the trigger and recency in its instruction.
 - Reads first, no permission-seeking. If they ask to see leads, contacts, companies, sequences, mentions, or a summary, call a list/snapshot tool in this turn. Never ask "should I look that up?" or "confirm you want me to pull that."
 - Use get_account_snapshot for counts and blueprint. Use list_contacts / list_prospect_companies / get_sequence_overview / get_analytics_summary for the actual rows. "Recent leads" means list_contacts ordered as returned — just call it.
 - The approved blueprint is the source of truth for industries, geographies, personas, company size, value prop, and positioning. Never ask the user for those. Read the snapshot and use them.
 - Specialists talk to you, not the user. If a specialist asks a question you can answer from the snapshot or blueprint, answer them in this turn by calling delegate_to_agent again with those facts and tell them to continue. Do not paste their question to the user.
-- When they want new leads and the blueprint is approved, delegate Researcher with: start a prospecting run from the approved blueprint, do not ask clarifying questions. The run uses the YC leads database first and Icypeas only if those industries or tags are missing there. If there are already contacts, list those first, then offer to find more only if they asked for more.
+- Finding leads is never a blind database pull. Read the value prop in the snapshot, decide which buying signals say a company needs what the user sells (hiring for a related role, recent funding or launches, people posting about the problem), and put that reasoning in a create_plan: a signal_scout step with the triggers, keywords drawn from the value prop and a recency window, followed by the steps that use the leads (review the saved leads against the pitch, draft outreach, build a sequence) when the user wants them. Contacts and verified emails are still found through the data providers once a company shows a signal. Use a plain ICP/directory run (start_prospecting_run) only when the user explicitly asks for one. If there are already contacts, list those first, then offer to find more only if they asked for more.
 - Operator creates sequences, enrolls, and sends. Writer only drafts an email for a specific contact. Never send "create a sequence" to Writer.
 - If they ask to create a sequence for their ICP, delegate Operator immediately and tell it to write the subject and body from the blueprint. Never ask the user for email copy. Contacts are not required to create the sequence. If they say you should have written it, delegate again with that instruction. Do not repeat the specialist's request for copy.
-- If a specialist cannot continue because the account has no contacts or companies, do not ask the user. List first if you have not, then have Researcher start a prospecting run. Each saved company costs credits (see creditsPerCompany). If the original ask was a sequence, Operator still creates it in this turn.
+- If a specialist cannot continue because the account has no contacts or companies, do not ask the user and do not start a run yourself. List first if you have not, then propose a lead-finding create_plan as above. If the original ask was a sequence, Operator still creates it in this turn.
 - Delegate only when you cannot do the work yourself: Researcher to start a prospecting run, Listener to scan or change keywords, Writer to draft copy, Operator to create sequences, enroll, archive, or send.
 - After a Researcher or Listener job is queued, say it is running and mention that each saved company spends credits. Use get_agent_status if they ask how it is going.
 - When a tool returns an artifact (a campaign, a table, a document, or a run), describe it in one sentence and stop. Do not paste its steps, rows, or JSON. The card in the chat is the result.
@@ -118,6 +121,32 @@ const BASE_TOOL_DECLARATIONS: AiToolDeclaration[] = [
         confirmed: { type: "boolean" },
       },
       required: ["agent", "task"],
+    },
+  },
+  {
+    name: CREATE_PLAN_TOOL,
+    description:
+      "Plan multi-step work that runs in the background after the user approves it once. Use for anything needing more than 2 tool rounds, paid lead lookups beyond a handful, chained work (find leads → draft → sequence), or anything the user wants repeated. Each step is done by one agent: researcher (find/save leads), signal_scout (leads with a buying trigger: hiring, funding/news, social pain posts, tech/website changes), listener (market scans), writer (drafts), operator (sequences, enrolling, sends — sends always pause for confirmation). The plan card shows the steps and a credit estimate; after calling this, stop and wait.",
+    parameters: {
+      type: "object",
+      properties: {
+        goal: { type: "string", description: "The outcome in one sentence, in the user's terms." },
+        steps: {
+          type: "array",
+          description: "1-8 steps in order. Later steps see earlier steps' results.",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string", description: "Short checklist label, e.g. 'Find 20 Series A SaaS companies hiring SDRs'." },
+              agent: { type: "string", enum: [...PLAN_AGENT_IDS] },
+              instruction: { type: "string", description: "Self-contained instructions for that agent, including counts, filters, and triggers." },
+            },
+            required: ["title", "agent", "instruction"],
+          },
+        },
+        budget_credits: { type: "number", description: "Optional cap; defaults to the high estimate." },
+      },
+      required: ["goal", "steps"],
     },
   },
   {
@@ -228,50 +257,21 @@ export async function runCopilotTool(
       return getSequenceOverview(ctx.db, ctx.userId, args as { sequenceId?: string });
     case "delegate_to_agent": {
       const result = await delegateToAgent(ctx, args);
-      if (!resultNeedsLeads(result) || (typeof args.agent === "string" && args.agent === "researcher")) {
+      if (!resultNeedsLeads(result) || (typeof args.agent === "string" && args.agent === "researcher") || !result || typeof result !== "object") {
         return result;
       }
-      const callId = `auto-leads-${Date.now()}`;
-      ctx.emit?.({
-        type: "tool_start",
-        id: callId,
-        name: "start_prospecting_run",
-        agent: "researcher",
-        args: {},
-      });
-      let leadPull: unknown;
-      try {
-        leadPull = await researcher.runTool(ctx, "start_prospecting_run", {});
-      } catch (err) {
-        leadPull = { error: err instanceof Error ? err.message : "Could not start a prospecting run" };
-      }
-      ctx.emit?.({
-        type: "tool_end",
-        id: callId,
-        name: "start_prospecting_run",
-        agent: "researcher",
-        args: {},
-        result: leadPull,
-      });
-      const pulled = leadPull && typeof leadPull === "object" ? (leadPull as Record<string, unknown>) : {};
-      const summary =
-        result && typeof result === "object" && typeof (result as { summary?: unknown }).summary === "string"
-          ? (result as { summary: string }).summary
-          : "";
-      const pullNote = pulled.queued
-        ? `Pipeline was empty, so Researcher started a prospecting run. Each saved company costs ${pulled.creditsPerCompany ?? 3} credits.`
-        : typeof pulled.error === "string"
-          ? pulled.error
-          : "Could not start a prospecting run.";
+      // No blind runs: the account needs leads, so hand the decision back to Copilot to plan signal-based sourcing.
+      const summary = typeof (result as { summary?: unknown }).summary === "string" ? (result as { summary: string }).summary : "";
       return {
-        ...(typeof result === "object" && result ? result : {}),
+        ...result,
         needsLeads: true,
-        leadPull,
-        summary: [summary, pullNote].filter(Boolean).join("\n\n"),
+        summary: [summary, "The account has no leads to work with yet. Propose a lead-finding plan with create_plan (signal_scout step built from the value prop); do not start a run directly."].filter(Boolean).join("\n\n"),
       };
     }
     case "get_agent_status":
       return getAgentStatus(ctx, args);
+    case CREATE_PLAN_TOOL:
+      return createPlan(ctx, args);
     default:
       if (WORKSPACE_TOOL_NAMES.has(name)) return runWorkspaceTool(ctx, name, args);
       throw new Error(`Unknown Copilot tool: ${name}`);
@@ -280,10 +280,12 @@ export async function runCopilotTool(
 
 export const COPILOT_MUTATING_TOOLS = new Set([
   ...WORKSPACE_MUTATING_TOOLS,
+  CREATE_PLAN_TOOL,
   "delegate_to_agent",
   "source_leads",
   "save_sourced_leads",
   "start_prospecting_run",
+  "start_signal_scout",
   "cancel_prospecting_run",
   "set_company_status",
   "add_market_keyword",

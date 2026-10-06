@@ -73,7 +73,7 @@
   margin-top: 28vh;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   .feature-stack-card.scroll-stack-card {
     height: auto;
     border-radius: 20px;

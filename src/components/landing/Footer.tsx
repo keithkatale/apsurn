@@ -50,7 +50,7 @@ export function Footer() {
                   />
                   <button
                     type="submit"
-                    className="h-11 sm:h-12 rounded-xl bg-black px-5 text-sm sm:text-base font-medium text-white shadow-[0px_4px_10px_0px_rgba(0,0,0,0.25)] hover:bg-neutral-900 active:scale-[0.98] transition-all shrink-0"
+                    className="h-11 shrink-0 whitespace-nowrap rounded-xl bg-black px-5 text-sm font-medium text-white shadow-[0px_4px_10px_0px_rgba(0,0,0,0.25)] transition-all hover:bg-neutral-900 active:scale-[0.98] sm:h-12 sm:text-base"
                   >
                     Subscribe
                   </button>

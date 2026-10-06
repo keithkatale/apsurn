@@ -49,11 +49,24 @@ export interface AiClient {
   };
 }
 
+/** `thinking_budget` is a Gemini-only knob (see vertex.ts); the real Responses API would reject it. */
+function withoutVendorParams(client: OpenAI): AiClient {
+  return {
+    responses: {
+      create(params, options) {
+        const { thinking_budget: _ignored, ...rest } = params;
+        void _ignored;
+        return client.responses.create(rest as never, options);
+      },
+    },
+  };
+}
+
 function createOpenAiClient(): { ai: AiClient; model: string } {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error("OpenAI is not configured. Set OPENAI_API_KEY.");
   return {
-    ai: new OpenAI({ apiKey }) as unknown as AiClient,
+    ai: withoutVendorParams(new OpenAI({ apiKey })),
     model: process.env.OPENAI_MODEL?.trim() || OPENAI_DEFAULT_MODEL,
   };
 }
@@ -62,11 +75,13 @@ function createOpenRouterClient(): { ai: AiClient; model: string } {
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();
   if (!apiKey) throw new Error("OpenRouter is not configured. Set OPENROUTER_API_KEY.");
   return {
-    ai: new OpenAI({
-      apiKey,
-      baseURL: OPENROUTER_BASE_URL,
-      defaultHeaders: { "HTTP-Referer": "https://apsurn.com", "X-Title": "apsurn" },
-    }) as unknown as AiClient,
+    ai: withoutVendorParams(
+      new OpenAI({
+        apiKey,
+        baseURL: OPENROUTER_BASE_URL,
+        defaultHeaders: { "HTTP-Referer": "https://apsurn.com", "X-Title": "apsurn" },
+      }),
+    ),
     model: process.env.OPENROUTER_MODEL?.trim() || OPENROUTER_DEFAULT_MODEL,
   };
 }

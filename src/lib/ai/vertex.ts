@@ -98,14 +98,32 @@ interface CreateParams {
   text?: { format?: { type?: string } };
   tools?: Tool[];
   stream?: boolean;
+  /**
+   * Gemini-only. Thinking tokens are drawn from the same budget as
+   * max_output_tokens, so a tight cap with thinking on can return empty
+   * text. 0 disables thinking (use for short JSON/label extraction);
+   * omitted leaves Gemini's dynamic default. Stripped for other providers.
+   */
+  thinking_budget?: number;
 }
 
 interface CreateOptions {
   signal?: AbortSignal;
 }
 
-type GeminiFunctionCall = { name?: string; args?: Record<string, unknown> };
-type GeminiChunk = { text?: string; functionCalls?: GeminiFunctionCall[] };
+type GeminiPart = {
+  text?: string;
+  thought?: boolean;
+  thoughtSignature?: string;
+  functionCall?: { name?: string; args?: Record<string, unknown> };
+};
+type GeminiChunk = { candidates?: Array<{ content?: { parts?: GeminiPart[] } }> };
+
+function thinkingConfigOf(params: CreateParams): Record<string, unknown> | undefined {
+  if (params.thinking_budget === undefined) return undefined;
+  const thinkingBudget = Math.max(0, Math.floor(params.thinking_budget));
+  return thinkingBudget > 0 ? { thinkingBudget, includeThoughts: true } : { thinkingBudget: 0 };
+}
 
 function usesWebSearch(tools: CreateParams["tools"]): boolean {
   return Array.isArray(tools) && tools.some((t) => t.type === "web_search");
@@ -135,14 +153,18 @@ function convertInput(input: CreateParams["input"]): string | { role: string; pa
       const role = item.role === "assistant" ? "model" : "user";
       contents.push({ role, parts: [{ text: (item as { content: string }).content }] });
     } else if ("type" in item && item.type === "function_call") {
-      const call = item as { name: string; arguments: string };
+      const call = item as { name: string; arguments: string; thought_signature?: string };
       let args: Record<string, unknown> = {};
       try {
         args = JSON.parse(call.arguments || "{}");
       } catch {
         // leave args empty if the model produced malformed JSON
       }
-      contents.push({ role: "model", parts: [{ functionCall: { name: call.name, args } }] });
+      // Newer Gemini thinking models reject a replayed function call that
+      // lost the signature it was emitted with.
+      const part: Record<string, unknown> = { functionCall: { name: call.name, args } };
+      if (call.thought_signature) part.thoughtSignature = call.thought_signature;
+      contents.push({ role: "model", parts: [part] });
     } else if ("type" in item && item.type === "function_call_output") {
       const out = item as { call_id: string; output: string };
       const name = callIdToName.get(out.call_id) ?? "unknown_function";
@@ -177,6 +199,8 @@ async function createNonStreaming(genAI: GoogleGenAI, params: CreateParams) {
   if (params.text?.format?.type === "json_object") config.responseMimeType = "application/json";
   if (usesWebSearch(params.tools)) config.tools = [{ googleSearch: {} }];
   if (params.instructions) config.systemInstruction = params.instructions;
+  const thinkingConfig = thinkingConfigOf(params);
+  if (thinkingConfig) config.thinkingConfig = { ...thinkingConfig, includeThoughts: false };
 
   const response = await genAI.models.generateContent({
     model: params.model,
@@ -190,6 +214,9 @@ async function createNonStreaming(genAI: GoogleGenAI, params: CreateParams) {
 async function* createStreaming(genAI: GoogleGenAI, params: CreateParams, options?: CreateOptions) {
   const config: Record<string, unknown> = {};
   if (params.instructions) config.systemInstruction = params.instructions;
+  if (params.max_output_tokens) config.maxOutputTokens = params.max_output_tokens;
+  const thinkingConfig = thinkingConfigOf(params);
+  if (thinkingConfig) config.thinkingConfig = thinkingConfig;
   const functionDeclarations = functionDeclarationsOf(params.tools);
   if (functionDeclarations) config.tools = [{ functionDeclarations }];
   else if (usesWebSearch(params.tools)) config.tools = [{ googleSearch: {} }];
@@ -201,18 +228,24 @@ async function* createStreaming(genAI: GoogleGenAI, params: CreateParams, option
   });
 
   let textAccum = "";
-  const calls: { callId: string; name: string; args: Record<string, unknown> }[] = [];
+  const calls: { callId: string; name: string; args: Record<string, unknown>; thoughtSignature?: string }[] = [];
 
   try {
     for await (const chunk of stream as AsyncIterable<GeminiChunk>) {
       if (options?.signal?.aborted) throw new Error("Request aborted");
-      if (chunk.text) {
-        textAccum += chunk.text;
-        yield { type: "response.output_text.delta", delta: chunk.text };
-      }
-      if (chunk.functionCalls) {
-        for (const call of chunk.functionCalls) {
-          if (call.name) calls.push({ callId: nextCallId(), name: call.name, args: call.args ?? {} });
+      for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
+        if (part.functionCall?.name) {
+          calls.push({
+            callId: nextCallId(),
+            name: part.functionCall.name,
+            args: part.functionCall.args ?? {},
+            thoughtSignature: part.thoughtSignature,
+          });
+        } else if (part.text && part.thought) {
+          yield { type: "response.reasoning_summary_text.delta", delta: part.text };
+        } else if (part.text) {
+          textAccum += part.text;
+          yield { type: "response.output_text.delta", delta: part.text };
         }
       }
     }
@@ -226,7 +259,13 @@ async function* createStreaming(genAI: GoogleGenAI, params: CreateParams, option
     output.push({ type: "message", role: "assistant", content: [{ type: "output_text", text: textAccum }] });
   }
   for (const call of calls) {
-    output.push({ type: "function_call", call_id: call.callId, name: call.name, arguments: JSON.stringify(call.args) });
+    output.push({
+      type: "function_call",
+      call_id: call.callId,
+      name: call.name,
+      arguments: JSON.stringify(call.args),
+      ...(call.thoughtSignature ? { thought_signature: call.thoughtSignature } : {}),
+    });
   }
 
   yield { type: "response.completed", response: { output } };

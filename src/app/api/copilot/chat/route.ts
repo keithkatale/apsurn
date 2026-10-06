@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import type { ResponseFunctionToolCall, ResponseInputItem, ResponseOutputItem } from "openai/resources/responses/responses";
+import type { ResponseInputItem } from "openai/resources/responses/responses";
+import { COPILOT_MUTATING_TOOLS } from "@/lib/agents/copilot";
+import { ORCHESTRATION_THINKING_BUDGET, runAgentLoop } from "@/lib/agents/loop";
+import { CREATE_PLAN_TOOL } from "@/lib/agents/plan";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
 import { getAiClient, toFunctionTool } from "@/lib/ai/openai";
@@ -145,137 +148,101 @@ export async function POST(request: NextRequest) {
         }
 
         const { ai, model } = await getAiClient();
-        const tools = COPILOT_TOOL_DECLARATIONS.map(toFunctionTool);
-        let finalText = "";
         const turnArtifacts: CopilotArtifact[] = [];
-        const nestedToolRows: Array<{
+        type ToolRow = {
           conversation_id: string;
           role: "tool";
           tool_name: string;
           tool_call_id: string;
           content: string;
           metadata: { args: Record<string, unknown>; agent?: string; callId: string; parentCallId?: string };
-        }> = [];
+        };
+        const nestedToolRows: ToolRow[] = [];
+        const agentOf = (name: string, args: Record<string, unknown>) =>
+          name === "delegate_to_agent" && typeof args.agent === "string" ? args.agent : undefined;
 
-        for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-          send({ type: "status", status: "thinking" });
-
-          let roundText = "";
-          let outputItems: ResponseOutputItem[] = [];
-
-          const responseStream = await ai.responses.create({
-            model,
-            input,
-            instructions: COPILOT_SYSTEM_INSTRUCTION,
-            tools,
-            stream: true,
-          });
-
-          for await (const event of responseStream) {
-            const type = event.type as string;
-            if (type === "response.output_text.delta") {
-              roundText += event.delta;
-              send({ type: "reasoning", text: event.delta, agent: "copilot" });
-            } else if (type === "response.reasoning_summary_text.delta" || type === "response.reasoning.delta") {
-              const delta = "delta" in event && typeof event.delta === "string" ? event.delta : "";
-              if (delta) send({ type: "reasoning", text: delta, agent: "copilot" });
-            } else if (type === "response.completed") {
-              outputItems = event.response.output;
-            } else if (type === "error") {
-              throw new Error(event.message);
-            }
-          }
-
-          for (const item of outputItems) input.push(item as ResponseInputItem);
-
-          const calls = outputItems.filter((item): item is ResponseFunctionToolCall => item.type === "function_call");
-          if (calls.length === 0) {
-            finalText = roundText;
-            send({ type: "answer", text: roundText });
-            break;
-          }
-
-          const toolRows: Array<{
-            conversation_id: string;
-            role: "tool";
-            tool_name: string;
-            tool_call_id: string;
-            content: string;
-            metadata: { args: Record<string, unknown>; agent?: string; callId: string };
-          }> = [];
-
-          for (const call of calls) {
-            const toolName = call.name;
-            const args = JSON.parse(call.arguments || "{}") as Record<string, unknown>;
-
-            const agent = toolName === "delegate_to_agent" && typeof args.agent === "string" ? args.agent : undefined;
-            send({
-              type: "tool_start",
-              id: call.call_id,
-              name: toolName,
-              args,
-              agent,
-            });
-            let resultData: unknown;
-            try {
-              resultData = await runCopilotTool(
-                {
-                  db,
-                  userId,
-                  conversationId: conversationIdFinal,
-                  parentId: call.call_id,
-                  emit: (event) => {
-                    send({ ...event });
-                    if (event.type === "artifact" && event.artifact) turnArtifacts.push(event.artifact);
-                    if (event.type === "tool_end" && event.parentId && event.name) {
-                      nestedToolRows.push({
-                        conversation_id: conversationIdFinal,
-                        role: "tool",
-                        tool_name: event.name,
-                        tool_call_id: event.id ?? event.name,
-                        content: JSON.stringify(event.result ?? {}).slice(0, 20000),
-                        metadata: {
-                          args: event.args ?? {},
-                          agent: event.agent,
-                          callId: event.id ?? event.name,
-                          parentCallId: event.parentId,
-                        },
-                      });
-                    }
-                  },
-                },
-                toolName,
-                args,
-              );
-            } catch (err) {
-              resultData = { error: err instanceof Error ? err.message : "Tool failed" };
-            }
+        const loop = await runAgentLoop({
+          ai,
+          model,
+          instructions: COPILOT_SYSTEM_INSTRUCTION,
+          tools: COPILOT_TOOL_DECLARATIONS.map(toFunctionTool),
+          input,
+          maxRounds: MAX_TOOL_ROUNDS,
+          thinkingBudget: ORCHESTRATION_THINKING_BUDGET,
+          isCancelled: () => request.signal.aborted,
+          isParallelSafe: (name) => !COPILOT_MUTATING_TOOLS.has(name),
+          stopAfterRound: (results) =>
+            results.some((done) => done.name === CREATE_PLAN_TOOL && (done.result as { planned?: boolean } | null)?.planned),
+          onRoundStart: () => send({ type: "status", status: "thinking" }),
+          onText: (delta) => send({ type: "reasoning", text: delta, agent: "copilot" }),
+          onThought: (delta) => send({ type: "reasoning", text: delta, agent: "copilot" }),
+          onToolStart: (call) =>
+            send({ type: "tool_start", id: call.id, name: call.name, args: call.args, agent: agentOf(call.name, call.args) }),
+          onToolEnd: (done) =>
             send({
               type: "tool_end",
-              id: call.call_id,
-              name: toolName,
-              args,
-              result: resultData,
-              agent,
-            });
-
-            input.push({ type: "function_call_output", call_id: call.call_id, output: JSON.stringify(resultData) });
-            toolRows.push({
+              id: done.id,
+              name: done.name,
+              args: done.args,
+              result: done.result,
+              agent: agentOf(done.name, done.args),
+            }),
+          runTool: (call) =>
+            runCopilotTool(
+              {
+                db,
+                userId,
+                conversationId: conversationIdFinal,
+                parentId: call.id,
+                isCancelled: () => request.signal.aborted,
+                emit: (event) => {
+                  send({ ...event });
+                  if (event.type === "artifact" && event.artifact) turnArtifacts.push(event.artifact);
+                  if (event.type === "tool_end" && event.parentId && event.name) {
+                    nestedToolRows.push({
+                      conversation_id: conversationIdFinal,
+                      role: "tool",
+                      tool_name: event.name,
+                      tool_call_id: event.id ?? event.name,
+                      content: JSON.stringify(event.result ?? {}).slice(0, 20000),
+                      metadata: {
+                        args: event.args ?? {},
+                        agent: event.agent,
+                        callId: event.id ?? event.name,
+                        parentCallId: event.parentId,
+                      },
+                    });
+                  }
+                },
+              },
+              call.name,
+              call.args,
+            ),
+          onRoundEnd: async (results) => {
+            const toolRows: ToolRow[] = results.map((done) => ({
               conversation_id: conversationIdFinal,
               role: "tool",
-              tool_name: toolName,
-              tool_call_id: call.call_id,
-              content: JSON.stringify(resultData).slice(0, 20000),
-              metadata: { args, agent, callId: call.call_id },
-            });
-          }
+              tool_name: done.name,
+              tool_call_id: done.id,
+              content: JSON.stringify(done.result).slice(0, 20000),
+              metadata: { args: done.args, agent: agentOf(done.name, done.args), callId: done.id },
+            }));
+            if (toolRows.length > 0) await db.from("copilot_messages").insert(toolRows);
+            if (nestedToolRows.length > 0) {
+              await db.from("copilot_messages").insert(nestedToolRows.splice(0));
+            }
+          },
+        });
 
-          if (toolRows.length > 0) await db.from("copilot_messages").insert(toolRows);
-          if (nestedToolRows.length > 0) {
-            await db.from("copilot_messages").insert(nestedToolRows);
-            nestedToolRows.length = 0;
-          }
+        let finalText = loop.finalText;
+        const planned = loop.toolResults.find(
+          (done) => done.name === CREATE_PLAN_TOOL && (done.result as { planned?: boolean } | null)?.planned,
+        );
+        if (planned) {
+          const estimate = (planned.result as { estimate?: { low?: number; high?: number } }).estimate;
+          finalText = `Here's the plan. It should cost about ${estimate?.low ?? "?"}–${estimate?.high ?? "?"} credits. Approve it and I'll run it in the background — you can close this tab.`;
         }
+        if (finalText) send({ type: "answer", text: finalText });
 
         if (!finalText.trim() && (turnArtifacts.length > 0)) {
           finalText = "Done — the result is in the card below.";
@@ -379,8 +346,32 @@ export async function GET(request: NextRequest) {
     .order("updated_at", { ascending: false })
     .limit(40);
 
+  // Latest background-task status per conversation, for the sidebar's status dot.
+  const ids = (conversations ?? []).map((conversation) => conversation.id);
+  const taskStatusByConversation = new Map<string, string>();
+  if (ids.length > 0) {
+    const { data: tasks, error: tasksError } = await db
+      .from("agent_tasks")
+      .select("conversation_id, status, created_at")
+      .in("conversation_id", ids)
+      .order("created_at", { ascending: false });
+    if (!tasksError) {
+      for (const task of tasks ?? []) {
+        if (task.conversation_id && !taskStatusByConversation.has(task.conversation_id)) {
+          taskStatusByConversation.set(task.conversation_id, task.status);
+        }
+      }
+    }
+  }
+
   const { data: company } = await db.from("companies").select("name").eq("user_id", userId).maybeSingle();
-  return NextResponse.json({ conversations: conversations ?? [], companyName: company?.name ?? null });
+  return NextResponse.json({
+    conversations: (conversations ?? []).map((conversation) => ({
+      ...conversation,
+      taskStatus: taskStatusByConversation.get(conversation.id) ?? null,
+    })),
+    companyName: company?.name ?? null,
+  });
 }
 
 export async function DELETE(request: NextRequest) {

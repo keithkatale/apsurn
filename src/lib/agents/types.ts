@@ -15,7 +15,7 @@ export interface AgentDefinition {
   starter: string;
 }
 
-export type ArtifactKind = "sequence" | "lead_table" | "run" | "ui" | "document";
+export type ArtifactKind = "sequence" | "lead_table" | "run" | "ui" | "document" | "plan";
 
 export interface CopilotArtifact {
   id: string;
@@ -44,6 +44,9 @@ export interface AgentToolContext {
   conversationId?: string;
   parentId?: string;
   emit?: (event: AgentToolEvent) => void;
+  /** Durable task this call runs under, for budget accounting. */
+  taskId?: string;
+  isCancelled?: () => boolean;
 }
 
 export interface SpecialistModule {

@@ -31,6 +31,8 @@ export interface AgentRunContext {
   pageCache: Map<string, FetchedPage>; // url -> fetched page (avoid refetch)
   /** Setup's free lead cap is saved without a credit balance. Paid runs still spend. */
   chargeCredits: boolean;
+  /** Durable agent task that started this run; its approved budget is charged too. */
+  agentTaskId?: string;
 }
 
 export function budgetExhausted(ctx: AgentRunContext): string | null {

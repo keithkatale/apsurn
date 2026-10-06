@@ -11,6 +11,8 @@ export interface ConversationSummary {
   title: string | null;
   icon: string | null;
   updated_at: string;
+  /** Latest background task in this conversation, if any. */
+  taskStatus?: string | null;
 }
 
 function RowMenu({
@@ -160,7 +162,7 @@ export function CopilotThreadsMenu() {
                         : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
                     }`}
                   >
-                    <TaskIcon text={c.title ?? ""} storedIcon={c.icon} className="size-3.5 opacity-70" />
+                    <TaskIcon text={c.title ?? ""} storedIcon={c.icon} status={c.taskStatus} className="size-3.5 opacity-70" />
                     <span className="truncate">{c.title ?? "New task"}</span>
                   </button>
                   <RowMenu
@@ -202,7 +204,7 @@ export function CopilotThreadsChips() {
             activeId === c.id ? "bg-neutral-100 font-medium text-neutral-900" : "text-neutral-500"
           }`}
         >
-          <TaskIcon text={c.title ?? ""} storedIcon={c.icon} className="size-3 opacity-70" />
+          <TaskIcon text={c.title ?? ""} storedIcon={c.icon} status={c.taskStatus} className="size-3 opacity-70" />
           <span className="truncate">{c.title ?? "New task"}</span>
         </button>
       ))}

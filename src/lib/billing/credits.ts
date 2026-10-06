@@ -57,21 +57,67 @@ export async function adjustCredits(params: {
   return next;
 }
 
+function codedError(message: string, code: string): Error {
+  const err = new Error(message);
+  (err as Error & { code: string }).code = code;
+  return err;
+}
+
+/** The RPC isn't there until migration 0030 is applied; until then fall back to the legacy read-then-write path. */
+function rpcMissing(error: { code?: string; message?: string } | null): boolean {
+  return Boolean(error && (error.code === "PGRST202" || /could not find the function/i.test(error.message ?? "")));
+}
+
+/**
+ * Atomic spend via the spend_credits RPC (migration 0030): the balance check
+ * and decrement are one statement, and an optional agent task budget is
+ * charged in the same transaction.
+ */
+async function spendAtomically(params: {
+  userId: string;
+  amount: number;
+  action: string;
+  metadata?: Record<string, unknown>;
+  taskId?: string;
+}): Promise<number | null> {
+  const db = createAdminClient();
+  const { data, error } = await db.rpc("spend_credits", {
+    p_user: params.userId,
+    p_amount: params.amount,
+    p_action: params.action,
+    p_metadata: params.metadata ?? {},
+    p_task: params.taskId ?? null,
+  });
+  if (rpcMissing(error)) return null;
+  if (error) {
+    const hint = (error as { hint?: string }).hint;
+    if (hint === "credits_exhausted") throw codedError("Not enough credits. Buy a top-up or upgrade your plan.", "credits_exhausted");
+    if (hint === "budget_exhausted") throw codedError("This task reached its credit budget.", "budget_exhausted");
+    throw new Error(error.message);
+  }
+  return typeof data === "number" ? data : Number(data ?? 0);
+}
+
 export async function spendCredits(params: {
   userId: string;
   amount: number;
   action: string;
   metadata?: Record<string, unknown>;
+  /** Charge this agent task's approved budget too; throws code "budget_exhausted" past it. */
+  taskId?: string;
 }): Promise<number> {
   if (params.amount <= 0) return (await adjustCredits({ userId: params.userId, delta: 0, reason: "noop" })) || 0;
   try {
-    const next = await adjustCredits({
-      userId: params.userId,
-      delta: -params.amount,
-      reason: "spend",
-      action: params.action,
-      metadata: params.metadata,
-    });
+    const atomic = await spendAtomically(params);
+    const next =
+      atomic ??
+      (await adjustCredits({
+        userId: params.userId,
+        delta: -params.amount,
+        reason: "spend",
+        action: params.action,
+        metadata: params.metadata,
+      }));
     if (next === 0) {
       await requestPlanCharge(params.userId);
     }
@@ -99,6 +145,15 @@ export async function grantCredits(params: {
   metadata?: Record<string, unknown>;
 }): Promise<number> {
   if (params.amount <= 0) return 0;
+  const db = createAdminClient();
+  const { data, error } = await db.rpc("grant_credits", {
+    p_user: params.userId,
+    p_amount: params.amount,
+    p_reason: params.reason,
+    p_metadata: params.metadata ?? {},
+  });
+  if (!error) return typeof data === "number" ? data : Number(data ?? 0);
+  if (!rpcMissing(error)) throw new Error(error.message);
   return adjustCredits({
     userId: params.userId,
     delta: params.amount,

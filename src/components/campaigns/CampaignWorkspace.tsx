@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, Search, Upload } from "lucide-react";
 import { CampaignIcon } from "@/components/campaigns/CampaignIcon";
-import { NewCampaignDialog } from "@/components/campaigns/NewCampaignDialog";
+import { CsvImportProgress, rememberProgressLog } from "@/components/campaigns/CsvImportProgress";
+import { NewCampaignDialog, type CsvProgressUpdate } from "@/components/campaigns/NewCampaignDialog";
 import { useCampaignNav } from "@/components/campaigns/CampaignsNav";
 import { CompanyFavicon } from "@/components/prospects/CompanyFavicon";
 import { ContactAvatar } from "@/components/prospects/ContactAvatar";
@@ -19,6 +20,7 @@ import { tokenizeLeadMentions } from "@/lib/outreach/merge-fields";
 import type { PlanKey } from "@/lib/billing/plans";
 import { notifyCreditsChanged } from "@/components/billing/CreditsBalance";
 import { redirectGuestToAccount } from "@/lib/auth/require-account-client";
+import { readSse } from "@/lib/http/read-sse";
 
 export type CompanyProfile = {
   name: string;
@@ -128,14 +130,12 @@ export function CampaignWorkspace({
   const [addOpen, setAddOpen] = useState(false);
   const [contactQuery, setContactQuery] = useState("");
   const [pickedIds, setPickedIds] = useState<Set<string>>(new Set());
-  const [manualName, setManualName] = useState("");
-  const [manualEmail, setManualEmail] = useState("");
-  const [manualCompany, setManualCompany] = useState("");
-  const [manualTitle, setManualTitle] = useState("");
   const [addBusy, setAddBusy] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [importBusy, setImportBusy] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importLogs, setImportLogs] = useState<string[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -158,7 +158,7 @@ export function CampaignWorkspace({
     if (fallback !== nav.activeId) nav.select(fallback);
   }, [items, initialCampaignId, nav.activeId, nav.select]);
   useEffect(() => {
-    setLeadMap(leadsById);
+    setLeadMap((current) => ({ ...current, ...leadsById }));
   }, [leadsById]);
   const [trialOpen, setTrialOpen] = useState(false);
   const [trialPlan, setTrialPlan] = useState<PlanKey>("startup");
@@ -636,12 +636,21 @@ export function CampaignWorkspace({
     );
   }, [availableContacts, contactQuery]);
 
-  function enrollIds(sequenceId: string, contactIds: string[]) {
-    return fetch(`/api/sequences/${sequenceId}/enroll`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contactIds }),
-    });
+  async function enrollIds(sequenceId: string, contactIds: string[]) {
+    let enrolled = 0;
+    let missingEmail = 0;
+    for (let index = 0; index < contactIds.length; index += 400) {
+      const res = await fetch(`/api/sequences/${sequenceId}/enroll`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactIds: contactIds.slice(index, index + 400) }),
+      });
+      const data = (await res.json().catch(() => null)) as { error?: string; enrolled?: number; missingEmail?: number } | null;
+      if (!res.ok) throw new Error(data?.error || "Could not add contacts");
+      enrolled += data?.enrolled ?? 0;
+      missingEmail += data?.missingEmail ?? 0;
+    }
+    return { enrolled, missingEmail };
   }
 
   function rememberEnrolled(sequenceId: string, people: CampaignLead[]) {
@@ -706,12 +715,10 @@ export function CampaignWorkspace({
     setAddError(null);
     try {
       const ids = [...pickedIds];
-      const res = await enrollIds(campaign.id, ids);
-      const data = (await res.json().catch(() => null)) as { error?: string; enrolled?: number; missingEmail?: number } | null;
-      if (!res.ok) throw new Error(data?.error || "Could not add contacts");
-      if (!data?.enrolled) {
+      const data = await enrollIds(campaign.id, ids);
+      if (!data.enrolled) {
         throw new Error(
-          data?.missingEmail
+          data.missingEmail
             ? "Those contacts need an email before they can be added."
             : "Could not add those contacts to this campaign.",
         );
@@ -730,76 +737,60 @@ export function CampaignWorkspace({
     }
   }
 
-  async function addManualContact() {
-    if (!campaign) return;
-    setAddBusy(true);
-    setAddError(null);
-    try {
-      const res = await fetch("/api/contacts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fullName: manualName,
-          email: manualEmail,
-          companyName: manualCompany,
-          title: manualTitle || undefined,
-        }),
-      });
-      const data = (await res.json().catch(() => null)) as { error?: string; contact?: CampaignLead } | null;
-      if (!res.ok || !data?.contact) throw new Error(data?.error || "Could not save contact");
-      const enrolled = await enrollIds(campaign.id, [data.contact.id]);
-      const enrolledData = (await enrolled.json().catch(() => null)) as { error?: string } | null;
-      if (!enrolled.ok) throw new Error(enrolledData?.error || "Could not add contact to this campaign");
-      rememberEnrolled(campaign.id, [data.contact]);
-      setManualName("");
-      setManualEmail("");
-      setManualCompany("");
-      setManualTitle("");
-      setAddOpen(false);
-      router.refresh();
-    } catch (error) {
-      setAddError(error instanceof Error ? error.message : "Could not add contact");
-    } finally {
-      setAddBusy(false);
-    }
+  function noteImport(label: string, progress: number) {
+    setImportStatus(label);
+    setImportProgress((current) => Math.max(current, progress));
+    setImportLogs((prev) => rememberProgressLog(prev, label));
   }
 
   async function importCsvFile(file: File) {
     setImportBusy(true);
     setImportError(null);
-    setImportStatus("Reading file…");
+    setImportProgress(4);
+    setImportLogs(["Reading the file…"]);
+    setImportStatus("Reading the file…");
     try {
       const body = new FormData();
       body.append("file", file);
+      if (campaign) body.append("sequenceId", campaign.id);
       const res = await fetch("/api/prospects/import", { method: "POST", body });
-      if (!res.ok || !res.body) {
+      const contentType = res.headers.get("content-type") ?? "";
+      if (contentType.includes("application/json") || !res.ok || !res.body) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error ?? "Import failed");
       }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
       let finalMessage: string | null = null;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
-        for (const part of parts) {
-          const line = part.split("\n").find((l) => l.startsWith("data:"));
-          if (!line) continue;
-          const event = JSON.parse(line.slice(5).trim());
-          if (event.type === "mapping") {
-            setImportStatus(`Reading columns for ${event.total} row${event.total === 1 ? "" : "s"}…`);
-          } else if (event.type === "progress") {
-            setImportStatus(`Saved ${event.companiesSaved} compan${event.companiesSaved === 1 ? "y" : "ies"}, ${event.contactsSaved} contact${event.contactsSaved === 1 ? "" : "s"} (${event.processed}/${event.total})…`);
-          } else if (event.type === "result") {
-            finalMessage = `Imported ${event.companiesSaved} compan${event.companiesSaved === 1 ? "y" : "ies"} and ${event.contactsSaved} contact${event.contactsSaved === 1 ? "" : "s"}${event.skipped ? ` — ${event.skipped} row${event.skipped === 1 ? "" : "s"} skipped` : ""}.`;
-          } else if (event.type === "error") {
-            throw new Error(event.error);
-          }
+      let importedIds: string[] = [];
+      let importedLeads: CampaignLead[] = [];
+      await readSse(res.body, (event) => {
+        if (event.type === "error") throw new Error(typeof event.error === "string" ? event.error : "Import failed");
+        if (typeof event.label === "string") noteImport(event.label, typeof event.progress === "number" ? event.progress : 0);
+        if (event.type === "result") {
+          importedIds = Array.isArray(event.contactIds) ? event.contactIds.filter((id: unknown) => typeof id === "string") : [];
+          importedLeads = Array.isArray(event.leads) ? (event.leads as CampaignLead[]) : [];
+          const enrolled = Number(event.enrolled ?? 0);
+          const skipped = Number(event.skipped ?? 0);
+          finalMessage = enrolled
+            ? `Added ${enrolled} lead${enrolled === 1 ? "" : "s"} to this campaign.`
+            : `Saved ${importedIds.length} contact${importedIds.length === 1 ? "" : "s"}${skipped ? ` — ${skipped} row${skipped === 1 ? "" : "s"} skipped` : ""}.`;
+          noteImport(finalMessage, 100);
         }
+      });
+      if (importedLeads.length > 0) {
+        setLeadMap((prev) => {
+          const next = { ...prev };
+          for (const person of importedLeads) next[person.id] = person;
+          return next;
+        });
+      }
+      if (campaign && importedIds.length > 0) {
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === campaign.id
+              ? { ...item, contactIds: [...new Set([...item.contactIds, ...importedIds])] }
+              : item,
+          ),
+        );
       }
       setImportStatus(finalMessage);
       router.refresh();
@@ -812,14 +803,23 @@ export function CampaignWorkspace({
     }
   }
 
-  async function createManualCampaign(input: { name: string; about: string; file: File }) {
+  async function createManualCampaign(
+    input: { name: string; about: string; file: File },
+    report: (update: CsvProgressUpdate) => void,
+  ) {
     const body = new FormData();
     body.set("name", input.name);
     body.set("about", input.about);
     body.set("file", input.file);
+    report({ label: "Uploading the file…", progress: 2 });
     const res = await fetch("/api/campaigns/manual", { method: "POST", body });
-    const data = (await res.json().catch(() => null)) as {
-      error?: string;
+    const contentType = res.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      const failed = (await res.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(failed?.error || "Could not create that campaign");
+    }
+    if (!res.body) throw new Error("Could not create that campaign");
+    type ManualCampaignResult = {
       sequenceId?: string;
       name?: string;
       description?: string;
@@ -827,10 +827,27 @@ export function CampaignWorkspace({
       contactIds?: string[];
       leads?: CampaignLead[];
       steps?: CampaignEmailStep[];
-    } | null;
-    if (!res.ok || !data?.sequenceId) throw new Error(data?.error || "Could not create that campaign");
-    const sequenceId = data.sequenceId;
-    const leads = data.leads ?? [];
+    };
+    const outcome: { data: ManualCampaignResult | null; error: string | null } = { data: null, error: null };
+    await readSse(res.body, (event) => {
+      if (event.type === "error") {
+        outcome.error = typeof event.error === "string" ? event.error : "Could not create that campaign";
+        return;
+      }
+      if (event.type === "result") {
+        outcome.data = event as ManualCampaignResult;
+        report({ label: "Campaign ready.", progress: 100 });
+        return;
+      }
+      if (typeof event.label === "string") {
+        report({ label: event.label, progress: typeof event.progress === "number" ? event.progress : 0 });
+      }
+    });
+    if (outcome.error) throw new Error(outcome.error);
+    const created = outcome.data;
+    if (!created?.sequenceId) throw new Error("Could not create that campaign");
+    const sequenceId = created.sequenceId;
+    const leads = created.leads ?? [];
     setLeadMap((prev) => {
       const next = { ...prev };
       for (const person of leads) next[person.id] = person;
@@ -839,19 +856,19 @@ export function CampaignWorkspace({
     setItems((prev) => [
       {
         id: sequenceId,
-        name: data.name || input.name,
-        description: data.description || input.about,
+        name: created.name || input.name,
+        description: created.description || input.about,
         pain: input.about,
         targeting: [],
-        estimatedVolume: data.contactIds?.length ?? leads.length,
-        iconSvg: data.iconSvg ?? null,
+        estimatedVolume: created.contactIds?.length ?? leads.length,
+        iconSvg: created.iconSvg ?? null,
         status: "draft",
-        contactIds: data.contactIds ?? leads.map((person) => person.id),
-        steps: data.steps ?? [],
+        contactIds: created.contactIds ?? leads.map((person) => person.id),
+        steps: created.steps ?? [],
       },
       ...prev.filter((item) => item.id !== sequenceId),
     ]);
-    setStepsByCampaign((prev) => ({ ...prev, [sequenceId]: data.steps ?? [] }));
+    setStepsByCampaign((prev) => ({ ...prev, [sequenceId]: created.steps ?? [] }));
     nav.select(sequenceId);
     setNewCampaignOpen(false);
     router.refresh();
@@ -936,7 +953,22 @@ export function CampaignWorkspace({
               </div>
             </header>
 
-            <div className="campaign-canvas relative flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 md:flex-row md:gap-4 md:overflow-hidden md:p-6">
+            <div className="campaign-canvas relative flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2 md:flex-row md:gap-3 md:overflow-hidden md:p-3">
+              {importBusy && (
+                <div className="absolute inset-0 z-30 flex items-center justify-center bg-[color-mix(in_srgb,var(--background)_82%,transparent)] px-4 backdrop-blur-[2px]">
+                  <CsvImportProgress progress={importProgress} label={importStatus ?? "Reading the file…"} logs={importLogs} />
+                </div>
+              )}
+              <input
+                ref={csvInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void importCsvFile(file);
+                }}
+              />
               <section className="relative z-10 flex max-h-72 min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-lg border border-[#EEEEEE] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)] md:h-full md:max-h-none md:w-[320px]">
                 <div className="flex shrink-0 items-center justify-between gap-2 border-b border-neutral-100 px-3 py-2.5">
                   <div>
@@ -958,20 +990,30 @@ export function CampaignWorkspace({
                 </div>
                 <ul className="min-h-0 flex-1 overflow-y-auto p-2">
                   {campaignLeads.length === 0 && (
-                    <li className="flex flex-col items-center gap-3 px-3 py-8 text-center">
+                    <li className="flex flex-col items-center gap-2 px-3 py-8 text-center">
                       <p className="text-[12px] text-neutral-500">No people in this campaign yet.</p>
-                      <ThreeDButton
-                        type="button"
-                        variant="solid"
-                        size="sm"
-                        onClick={() => {
-                          setAddError(null);
-                          setPickedIds(new Set());
-                          setAddOpen(true);
-                        }}
-                      >
-                        Add Contacts
-                      </ThreeDButton>
+                      <div className="flex flex-wrap items-center justify-center gap-2">
+                        <ThreeDButton
+                          type="button"
+                          variant="solid"
+                          size="sm"
+                          onClick={() => {
+                            setAddError(null);
+                            setPickedIds(new Set());
+                            setAddOpen(true);
+                          }}
+                        >
+                          Add contacts
+                        </ThreeDButton>
+                        <ThreeDButton type="button" variant="soft" size="sm" disabled={importBusy} onClick={() => csvInputRef.current?.click()}>
+                          {importBusy ? "Uploading…" : "Upload CSV"}
+                        </ThreeDButton>
+                      </div>
+                      {(importStatus || importError) && (
+                        <p className={cn("max-w-[220px] text-[11px]", importError ? "text-red-600" : "text-neutral-500")}>
+                          {importError || importStatus}
+                        </p>
+                      )}
                     </li>
                   )}
                   {campaignLeads.map((person) => {
@@ -1018,33 +1060,44 @@ export function CampaignWorkspace({
 
               <section className="relative z-10 min-h-[70vh] min-w-0 flex-1 overflow-hidden md:min-h-0">
                 {campaign && addOpen ? (
-                  <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-[#EEEEEE] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
-                    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3">
-                      <div>
+                  <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-[#EEEEEE] bg-white">
+                    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-neutral-100 px-3 py-2">
+                      <div className="min-w-0">
                         <p className="text-[13px] font-semibold text-neutral-900">Add contacts</p>
-                        <p className="text-[12px] text-neutral-500">Select people to receive this campaign’s message.</p>
+                        <p className="truncate text-[12px] text-neutral-500">Select people, or upload a CSV.</p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setAddOpen(false)}
-                        className="text-[12px] font-semibold text-neutral-500 hover:text-neutral-800"
-                      >
-                        Back to sequence
-                      </button>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button
+                          type="button"
+                          disabled={importBusy}
+                          onClick={() => csvInputRef.current?.click()}
+                          className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2.5 py-1 text-[11px] font-semibold text-neutral-700 hover:bg-[#E8F1FC] hover:text-[#4379EE] disabled:opacity-50"
+                        >
+                          <Upload className="size-3" />
+                          {importBusy ? "Uploading…" : "Upload CSV"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={addBusy || pickedIds.size === 0}
+                          onClick={() => void addPickedContacts()}
+                          className="rounded-full bg-neutral-900 px-2.5 py-1 text-[11px] font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-500"
+                        >
+                          {addBusy ? "Adding…" : `Add${pickedIds.size ? ` ${pickedIds.size}` : ""}`}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAddOpen(false)}
+                          className="text-[12px] font-semibold text-neutral-500 hover:text-neutral-800"
+                        >
+                          Back to sequence
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2 border-b border-neutral-100 px-4 py-2.5">
-                      <input
-                        value={contactQuery}
-                        onChange={(event) => setContactQuery(event.target.value)}
-                        placeholder="Search name, company, or email"
-                        className="input min-w-0 flex-1 py-2 text-sm"
-                      />
-                    </div>
-                    <ul className="min-h-0 flex-1 overflow-y-auto p-2">
+                    <ul className="min-h-0 flex-1 overflow-y-auto px-1 py-1">
                       {filteredContacts.length === 0 ? (
                         <li className="px-3 py-10 text-center text-[13px] text-neutral-500">
                           {availableContacts.length === 0
-                            ? "No other contacts yet. Prospect for new leads, or add someone below."
+                            ? "No other contacts yet. Upload a CSV to add people to this campaign."
                             : "No contacts match that search."}
                         </li>
                       ) : (
@@ -1094,69 +1147,25 @@ export function CampaignWorkspace({
                           );
                         })
                       )}
-                      <li className="flex gap-2 px-2 pb-2 pt-3">
-                        <button
-                          type="button"
-                          onClick={() => router.push("/dashboard/prospects?find=1")}
-                          className="flex-1 rounded-lg border border-dashed border-neutral-200 px-3 py-2.5 text-[12px] font-semibold text-neutral-600 hover:border-[#4379EE] hover:text-[#4379EE]"
-                        >
-                          Prospect for new leads
-                        </button>
-                        <button
-                          type="button"
-                          disabled={importBusy}
-                          onClick={() => csvInputRef.current?.click()}
-                          className="flex-1 rounded-lg border border-dashed border-neutral-200 px-3 py-2.5 text-[12px] font-semibold text-neutral-600 hover:border-[#4379EE] hover:text-[#4379EE] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {importBusy ? "Importing…" : "Import from CSV"}
-                        </button>
-                        <input
-                          ref={csvInputRef}
-                          type="file"
-                          accept=".csv"
-                          className="hidden"
-                          onChange={(event) => {
-                            const file = event.target.files?.[0];
-                            if (file) void importCsvFile(file);
-                          }}
-                        />
-                      </li>
-                      {(importStatus || importError) && (
-                        <li className="px-2 pb-1">
-                          <p className={cn("text-[12px]", importError ? "text-red-600" : "text-neutral-500")}>
-                            {importError || importStatus}
+                      {(importStatus || importError || addError) && (
+                        <li className="px-2 py-1">
+                          <p className={cn("text-[12px]", importError || addError ? "text-red-600" : "text-neutral-500")}>
+                            {importError || addError || importStatus}
                           </p>
                         </li>
                       )}
                     </ul>
-                    <div className="shrink-0 border-t border-neutral-100 px-4 py-3">
-                      <div className="grid gap-2 sm:grid-cols-4">
-                        <input className="input py-2 text-sm" placeholder="Name" value={manualName} onChange={(event) => setManualName(event.target.value)} />
-                        <input className="input py-2 text-sm" placeholder="Email" value={manualEmail} onChange={(event) => setManualEmail(event.target.value)} />
-                        <input className="input py-2 text-sm" placeholder="Company" value={manualCompany} onChange={(event) => setManualCompany(event.target.value)} />
-                        <input className="input py-2 text-sm" placeholder="Title" value={manualTitle} onChange={(event) => setManualTitle(event.target.value)} />
-                      </div>
-                      {addError && <p className="mt-2 text-[12px] text-red-600">{addError}</p>}
-                      <div className="mt-3 flex items-center justify-end gap-2">
-                        <ThreeDButton
-                          type="button"
-                          variant="soft"
-                          size="sm"
-                          disabled={addBusy || !manualName.trim() || !manualEmail.trim() || !manualCompany.trim()}
-                          onClick={() => void addManualContact()}
-                        >
-                          Add manually
-                        </ThreeDButton>
-                        <ThreeDButton
-                          type="button"
-                          variant="solid"
-                          size="sm"
-                          disabled={addBusy || pickedIds.size === 0}
-                          onClick={() => void addPickedContacts()}
-                        >
-                          {addBusy ? "Adding…" : `Add${pickedIds.size ? ` ${pickedIds.size}` : ""}`}
-                        </ThreeDButton>
-                      </div>
+                    <div className="flex shrink-0 items-center border-t border-neutral-100 px-2 py-1.5">
+                      <label className="relative w-full max-w-[260px]">
+                        <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-neutral-400" />
+                        <input
+                          value={contactQuery}
+                          onChange={(event) => setContactQuery(event.target.value)}
+                          placeholder="Search name, company, or email"
+                          aria-label="Search contacts"
+                          className="w-full rounded-lg border border-neutral-200 bg-neutral-50 py-1.5 pl-7 pr-2 text-[13px] text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-[#4379EE]"
+                        />
+                      </label>
                     </div>
                   </div>
                 ) : campaign ? (
