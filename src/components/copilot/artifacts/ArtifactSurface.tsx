@@ -16,6 +16,7 @@ export function ArtifactSurface({
   onCollapse,
   onChange,
   onPrompt,
+  onAgentWork,
 }: {
   artifact: CopilotArtifact;
   expanded?: boolean;
@@ -23,8 +24,10 @@ export function ArtifactSurface({
   onCollapse?: () => void;
   onChange?: (next: CopilotArtifact) => void;
   onPrompt?: (text: string) => void;
+  /** The agent started working in the background (e.g. a plan was approved); the chat should follow along. */
+  onAgentWork?: () => void;
 }) {
-  if (artifact.kind === "plan") return <PlanRunner artifact={artifact} />;
+  if (artifact.kind === "plan") return <PlanRunner artifact={artifact} onAgentWork={onAgentWork} />;
 
   return (
     <article

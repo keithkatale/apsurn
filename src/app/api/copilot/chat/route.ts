@@ -1,17 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import type { ResponseInputItem } from "openai/resources/responses/responses";
-import { COPILOT_MUTATING_TOOLS } from "@/lib/agents/copilot";
-import { ORCHESTRATION_THINKING_BUDGET, runAgentLoop } from "@/lib/agents/loop";
-import { CREATE_PLAN_TOOL } from "@/lib/agents/plan";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
-import { getAiClient, toFunctionTool } from "@/lib/ai/openai";
 import { spendCredits } from "@/lib/billing/credits";
 import { CREDIT_COSTS } from "@/lib/billing/plans";
+import { runCopilotTurn } from "@/lib/agents/copilot-turn";
+import { acquireTurnLease, enqueueCopilotWakeup, isConversationBusy } from "@/lib/agents/wakeups";
 import { listArtifactsForConversation } from "@/lib/copilot/artifacts";
-import { COPILOT_SYSTEM_INSTRUCTION, COPILOT_TOOL_DECLARATIONS, getAccountSnapshot, runCopilotTool } from "@/lib/copilot/tools";
-import type { CopilotArtifact } from "@/lib/agents/types";
+import { getAccountSnapshot } from "@/lib/copilot/tools";
 import { generateConversationTitle } from "@/lib/copilot/title";
 import { generateTaskIcon } from "@/lib/copilot/task-icon";
 
@@ -19,36 +15,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-const MAX_TOOL_ROUNDS = 6;
-
 const requestSchema = z.object({
   conversationId: z.string().uuid().nullable().optional(),
   message: z.string().trim().min(1).max(4000),
 });
-
-interface MessageRow {
-  role: "user" | "model" | "tool";
-  content: string;
-  tool_name: string | null;
-  tool_call_id: string | null;
-  metadata: Record<string, unknown>;
-}
-
-function buildResponsesInput(rows: MessageRow[]): ResponseInputItem[] {
-  const input: ResponseInputItem[] = [];
-  for (const row of rows) {
-    if (row.role === "user") {
-      input.push({ role: "user", content: row.content });
-    } else if (row.role === "model") {
-      if (row.content) input.push({ role: "assistant", content: row.content });
-    } else if (row.role === "tool" && row.tool_name && row.tool_call_id) {
-      const args = (row.metadata?.args as Record<string, unknown>) ?? {};
-      input.push({ type: "function_call", call_id: row.tool_call_id, name: row.tool_name, arguments: JSON.stringify(args) });
-      input.push({ type: "function_call_output", call_id: row.tool_call_id, output: row.content });
-    }
-  }
-  return input;
-}
 
 function sseEncode(payload: Record<string, unknown>): Uint8Array {
   return new TextEncoder().encode(`data: ${JSON.stringify(payload)}\n\n`);
@@ -98,32 +68,30 @@ export async function POST(request: NextRequest) {
     if (error || !created) return NextResponse.json({ error: error?.message ?? "Failed to start task" }, { status: 500 });
     conversationId = created.id;
   }
+  const conversationIdFinal: string = conversationId as string;
 
   const { count: existingCount } = await db
     .from("copilot_messages")
     .select("id", { count: "exact", head: true })
-    .eq("conversation_id", conversationId)
+    .eq("conversation_id", conversationIdFinal)
     .eq("role", "user");
   const isFirstTurn = (existingCount ?? 0) === 0;
 
-  await db.from("copilot_messages").insert({ conversation_id: conversationId, role: "user", content: parsed.data.message });
+  await db.from("copilot_messages").insert({ conversation_id: conversationIdFinal, role: "user", content: parsed.data.message });
 
   let title: string | null = null;
   if (isFirstTurn) {
     title = await generateConversationTitle(parsed.data.message);
     const icon = generateTaskIcon(`${title} ${parsed.data.message}`);
-    await db.from("copilot_conversations").update({ title, icon }).eq("id", conversationId);
+    await db.from("copilot_conversations").update({ title, icon }).eq("id", conversationIdFinal);
   }
 
-  const { data: historyRows } = await db
-    .from("copilot_messages")
-    .select("role, content, tool_name, tool_call_id, metadata")
-    .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: true })
-    .limit(120);
-
-  const input = buildResponsesInput((historyRows ?? []) as MessageRow[]);
-  const conversationIdFinal: string = conversationId as string;
+  // One live turn per conversation. If a background turn (plan step, run analysis) is mid-flight, queue this message behind it.
+  const lease = await acquireTurnLease(db, conversationIdFinal);
+  if (!lease) {
+    await enqueueCopilotWakeup(db, { conversationId: conversationIdFinal, userId, kind: "user_message" });
+    return NextResponse.json({ queued: true, conversationId: conversationIdFinal, title });
+  }
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -134,133 +102,30 @@ export async function POST(request: NextRequest) {
 
         if (isFirstTurn) {
           const snapshot = await getAccountSnapshot(db, userId);
-          const briefingId = "briefing";
-          input.push({ type: "function_call", call_id: briefingId, name: "get_account_snapshot", arguments: "{}" });
-          input.push({ type: "function_call_output", call_id: briefingId, output: JSON.stringify(snapshot) });
           await db.from("copilot_messages").insert({
             conversation_id: conversationIdFinal,
             role: "tool",
             tool_name: "get_account_snapshot",
-            tool_call_id: briefingId,
+            tool_call_id: "briefing",
             content: JSON.stringify(snapshot).slice(0, 20000),
             metadata: { args: {} },
           });
         }
 
-        const { ai, model } = await getAiClient();
-        const turnArtifacts: CopilotArtifact[] = [];
-        type ToolRow = {
-          conversation_id: string;
-          role: "tool";
-          tool_name: string;
-          tool_call_id: string;
-          content: string;
-          metadata: { args: Record<string, unknown>; agent?: string; callId: string; parentCallId?: string };
-        };
-        const nestedToolRows: ToolRow[] = [];
-        const agentOf = (name: string, args: Record<string, unknown>) =>
-          name === "delegate_to_agent" && typeof args.agent === "string" ? args.agent : undefined;
-
-        const loop = await runAgentLoop({
-          ai,
-          model,
-          instructions: COPILOT_SYSTEM_INSTRUCTION,
-          tools: COPILOT_TOOL_DECLARATIONS.map(toFunctionTool),
-          input,
-          maxRounds: MAX_TOOL_ROUNDS,
-          thinkingBudget: ORCHESTRATION_THINKING_BUDGET,
+        await runCopilotTurn({
+          db,
+          userId,
+          conversationId: conversationIdFinal,
+          send,
           isCancelled: () => request.signal.aborted,
-          isParallelSafe: (name) => !COPILOT_MUTATING_TOOLS.has(name),
-          stopAfterRound: (results) =>
-            results.some((done) => done.name === CREATE_PLAN_TOOL && (done.result as { planned?: boolean } | null)?.planned),
-          onRoundStart: () => send({ type: "status", status: "thinking" }),
-          onText: (delta) => send({ type: "reasoning", text: delta, agent: "copilot" }),
-          onThought: (delta) => send({ type: "reasoning", text: delta, agent: "copilot" }),
-          onToolStart: (call) =>
-            send({ type: "tool_start", id: call.id, name: call.name, args: call.args, agent: agentOf(call.name, call.args) }),
-          onToolEnd: (done) =>
-            send({
-              type: "tool_end",
-              id: done.id,
-              name: done.name,
-              args: done.args,
-              result: done.result,
-              agent: agentOf(done.name, done.args),
-            }),
-          runTool: (call) =>
-            runCopilotTool(
-              {
-                db,
-                userId,
-                conversationId: conversationIdFinal,
-                parentId: call.id,
-                isCancelled: () => request.signal.aborted,
-                emit: (event) => {
-                  send({ ...event });
-                  if (event.type === "artifact" && event.artifact) turnArtifacts.push(event.artifact);
-                  if (event.type === "tool_end" && event.parentId && event.name) {
-                    nestedToolRows.push({
-                      conversation_id: conversationIdFinal,
-                      role: "tool",
-                      tool_name: event.name,
-                      tool_call_id: event.id ?? event.name,
-                      content: JSON.stringify(event.result ?? {}).slice(0, 20000),
-                      metadata: {
-                        args: event.args ?? {},
-                        agent: event.agent,
-                        callId: event.id ?? event.name,
-                        parentCallId: event.parentId,
-                      },
-                    });
-                  }
-                },
-              },
-              call.name,
-              call.args,
-            ),
-          onRoundEnd: async (results) => {
-            const toolRows: ToolRow[] = results.map((done) => ({
-              conversation_id: conversationIdFinal,
-              role: "tool",
-              tool_name: done.name,
-              tool_call_id: done.id,
-              content: JSON.stringify(done.result).slice(0, 20000),
-              metadata: { args: done.args, agent: agentOf(done.name, done.args), callId: done.id },
-            }));
-            if (toolRows.length > 0) await db.from("copilot_messages").insert(toolRows);
-            if (nestedToolRows.length > 0) {
-              await db.from("copilot_messages").insert(nestedToolRows.splice(0));
-            }
-          },
+          deadlineAt: Date.now() + (maxDuration - 10) * 1000,
         });
-
-        let finalText = loop.finalText;
-        const planned = loop.toolResults.find(
-          (done) => done.name === CREATE_PLAN_TOOL && (done.result as { planned?: boolean } | null)?.planned,
-        );
-        if (planned) {
-          const estimate = (planned.result as { estimate?: { low?: number; high?: number } }).estimate;
-          finalText = `Here's the plan. It should cost about ${estimate?.low ?? "?"}–${estimate?.high ?? "?"} credits. Approve it and I'll run it in the background — you can close this tab.`;
-        }
-        if (finalText) send({ type: "answer", text: finalText });
-
-        if (!finalText.trim() && (turnArtifacts.length > 0)) {
-          finalText = "Done — the result is in the card below.";
-          send({ type: "answer", text: finalText });
-        }
-
-        await db.from("copilot_messages").insert({
-          conversation_id: conversationIdFinal,
-          role: "model",
-          content: finalText,
-          metadata: { artifactIds: turnArtifacts.map((artifact) => artifact.id) },
-        });
-        await db.from("copilot_conversations").update({ updated_at: new Date().toISOString() }).eq("id", conversationIdFinal);
 
         send({ type: "done", conversationId: conversationIdFinal });
       } catch (err) {
         send({ type: "error", error: err instanceof Error ? err.message : "Copilot failed" });
       } finally {
+        await lease.release();
         controller.close();
       }
     },
@@ -303,7 +168,7 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: true });
 
     const messages = (rows ?? [])
-      .filter((r) => r.tool_call_id !== "briefing")
+      .filter((r) => r.tool_call_id !== "briefing" && !(r.metadata as { synthetic?: boolean } | null)?.synthetic)
       .map((r) => {
         if (r.role === "tool") {
           let result: unknown = null;
@@ -329,7 +194,9 @@ export async function GET(request: NextRequest) {
       });
 
     const artifacts = await listArtifactsForConversation(db, userId, id);
+    const agentBusy = await isConversationBusy(db, id);
     return NextResponse.json({
+      agentBusy,
       conversationId: conversation.id,
       title: conversation.title,
       icon: conversation.icon,

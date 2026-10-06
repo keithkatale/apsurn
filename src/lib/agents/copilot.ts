@@ -8,7 +8,7 @@ import { publishArtifact } from "@/lib/copilot/artifacts";
 import { WORKSPACE_MUTATING_TOOLS, WORKSPACE_TOOL_DECLARATIONS, WORKSPACE_TOOL_NAMES, runWorkspaceTool } from "./workspace";
 import type { AgentToolContext } from "./types";
 import { SPECIALIST_IDS } from "./types";
-import { approveAgentTask } from "./plan-approval";
+import { approveAgentTask, completePlanStep } from "./plan-approval";
 import { CREATE_PLAN_TOOL, createPlan } from "./plan";
 import { PLAN_AGENT_IDS } from "./plan-core";
 
@@ -23,7 +23,7 @@ ${rosterLines}
 You may be invoked from Market Insights with a "Context:" block. Treat it as situational awareness, not something to repeat.
 
 How to work:
-- Plan, then auto-run. Quick questions and single actions you just do in this turn. Anything bigger — more than ~2 tool rounds, finding more than a handful of leads, chained work (find leads → draft emails → build a sequence), or anything they want on a schedule — goes through create_plan: break it into 1-8 concrete steps, each owned by one agent, with counts and filters spelled out. The user approves once, from the plan card's Approve & run button or by telling you in chat (then call approve_plan), and the plan card shows every step, tool call and result live as it runs. After create_plan, say in one sentence what the plan will do and its estimated credits, then stop. Never say a plan is running unless approve_plan returned queued or the card shows it running; if you have not approved it, say it is waiting for approval.
+- Plan, then run it here. Quick questions and single actions you just do in this turn. Anything bigger — more than ~2 tool rounds, finding more than a handful of leads, chained work (find leads → draft emails → build a sequence), or anything they want on a schedule — goes through create_plan: break it into 1-8 concrete steps, each owned by one agent, with counts and filters spelled out. The user approves once, from the plan card's Approve & run button or by telling you in chat (then call approve_plan). After create_plan, say in one sentence what the plan will do and its estimated credits, then stop. Once approved the plan card disappears and you carry the plan out in this conversation, step by step like any chat turn: do the step, look at the result, call complete_plan_step with what you found, move to the next. Never say a plan is running unless approve_plan returned queued; if you have not approved it, say it is waiting for approval.
 - For leads with a reason to reach out now (just raised, hiring for a role, complaining about a problem or a competitor, changed their website/tech), plan a signal_scout step and name the trigger and recency in its instruction.
 - Reads first, no permission-seeking. If they ask to see leads, contacts, companies, sequences, mentions, or a summary, call a list/snapshot tool in this turn. Never ask "should I look that up?" or "confirm you want me to pull that."
 - Use get_account_snapshot for counts and blueprint. Use list_contacts / list_prospect_companies / get_sequence_overview / get_analytics_summary for the actual rows. "Recent leads" means list_contacts ordered as returned — just call it.
@@ -34,7 +34,7 @@ How to work:
 - If they ask to create a sequence for their ICP, delegate Operator immediately and tell it to write the subject and body from the blueprint. Never ask the user for email copy. Contacts are not required to create the sequence. If they say you should have written it, delegate again with that instruction. Do not repeat the specialist's request for copy.
 - If a specialist cannot continue because the account has no contacts or companies, do not ask the user and do not start a run yourself. List first if you have not, then propose a lead-finding create_plan as above. If the original ask was a sequence, Operator still creates it in this turn.
 - Delegate only when you cannot do the work yourself: Researcher to start a prospecting run, Listener to scan or change keywords, Writer to draft copy, Operator to create sequences, enroll, archive, or send.
-- After a Researcher or Listener job is queued, say it is running and mention that each saved company spends credits. Use get_agent_status if they ask how it is going.
+- Starting a prospecting run is the beginning of the job, not the end. The Researcher waits for the run (await_run) and returns what it saved; read that, tell the user what was found with real names and numbers, how well it fits the blueprint, what is weak, and what to do next. If the Researcher reports the run is still going, tell the user in one sentence that you will analyze it when it finishes and stop — you are woken automatically with the results. When you receive an "[Automatic update — the user did not write this message.]" message, treat it as the event it describes, do the analysis it asks for, and write the reply to the user directly; never mention the automatic message itself. Mention that each saved company spends credits. Use get_agent_status if they ask how it is going.
 - When a tool returns an artifact (a campaign, a table, a document, or a run), describe it in one sentence and stop. Do not paste its steps, rows, or JSON. The card in the chat is the result.
 - Never say you showed, listed, or saved something unless a tool result confirms it (shown/rendered/saved true, or an artifactId). If a list tool returns rows, they are already on screen as a card. If you could not do something, say so and say what you can do instead.
 - Marketing craft: before you write or critique any email, sequence, campaign, landing or demo page, brand identity/vision, positioning or messaging, call get_marketing_skill for the matching playbook (cold-email, email-sequences, copywriting, positioning-brand, persuasion, copy-editing) and get_brand_context for the business facts. Ground every claim in the blueprint and brand documents, vary structure and angle between audiences and between emails, and never reuse one template. If key facts are missing (proof points, customer language, differentiators), ask for them or mark them as gaps instead of inventing.
@@ -127,13 +127,13 @@ const BASE_TOOL_DECLARATIONS: AiToolDeclaration[] = [
   {
     name: "approve_plan",
     description:
-      "Start the plan waiting for approval in this conversation, when the user says in chat to approve, go ahead, or run it. Only call it after the user clearly agreed. The plan card then shows each step running live. Never say a plan is running unless this returned status queued.",
+      "Start the plan waiting for approval in this conversation, when the user says in chat to approve, go ahead, or run it. Only call it after the user clearly agreed. The plan card then leaves the chat and you carry the plan out here, step by step. Never say a plan is running unless this returned status queued.",
     parameters: { type: "object", properties: {} },
   },
   {
     name: CREATE_PLAN_TOOL,
     description:
-      "Plan multi-step work that runs in the background after the user approves it once. Use for anything needing more than 2 tool rounds, paid lead lookups beyond a handful, chained work (find leads → draft → sequence), or anything the user wants repeated. Each step is done by one agent: researcher (find/save leads), signal_scout (leads with a buying trigger: hiring, funding/news, social pain posts, tech/website changes), listener (market scans), writer (drafts), operator (sequences, enrolling, sends — sends always pause for confirmation). The plan card shows the steps and a credit estimate; after calling this, stop and wait.",
+      "Plan multi-step work that you carry out step by step in this conversation after the user approves it once. Use for anything needing more than 2 tool rounds, paid lead lookups beyond a handful, chained work (find leads → draft → sequence), or anything the user wants repeated. Each step is done by one agent: researcher (find/save leads), signal_scout (leads with a buying trigger: hiring, funding/news, social pain posts, tech/website changes), listener (market scans), writer (drafts), operator (sequences, enrolling, sends — sends always pause for confirmation). The plan card shows the steps and a credit estimate; after calling this, stop and wait.",
     parameters: {
       type: "object",
       properties: {
@@ -154,6 +154,20 @@ const BASE_TOOL_DECLARATIONS: AiToolDeclaration[] = [
         budget_credits: { type: "number", description: "Optional cap; defaults to the high estimate." },
       },
       required: ["goal", "steps"],
+    },
+  },
+  {
+    name: "complete_plan_step",
+    description:
+      "While carrying out an approved plan, record that a step is finished (or failed/skipped) with a one-paragraph summary of what you did using real names and numbers. Call it after each step, in order.",
+    parameters: {
+      type: "object",
+      properties: {
+        step: { type: "number", description: "The step number as listed in the plan, starting at 1." },
+        summary: { type: "string" },
+        status: { type: "string", enum: ["done", "failed", "skipped"], description: "Defaults to done." },
+      },
+      required: ["step", "summary"],
     },
   },
   {
@@ -290,8 +304,12 @@ export async function runCopilotTool(
         .maybeSingle();
       if (!pending) return { error: "There is no plan waiting for approval in this conversation." };
       const approved = await approveAgentTask(ctx.userId, pending.id as string);
-      return approved.ok ? { status: "queued", note: "The plan card now shows each step as it runs." } : { error: approved.error };
+      return approved.ok
+        ? { status: "queued", note: "The plan is approved and will run in this conversation, step by step. Say one short sentence and stop; you are woken to start the first step." }
+        : { error: approved.error };
     }
+    case "complete_plan_step":
+      return completePlanStep(ctx, args);
     case CREATE_PLAN_TOOL:
       return createPlan(ctx, args);
     default:
@@ -304,6 +322,7 @@ export const COPILOT_MUTATING_TOOLS = new Set([
   ...WORKSPACE_MUTATING_TOOLS,
   CREATE_PLAN_TOOL,
   "approve_plan",
+  "complete_plan_step",
   "delegate_to_agent",
   "source_leads",
   "save_sourced_leads",

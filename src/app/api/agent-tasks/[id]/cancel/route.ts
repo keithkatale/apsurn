@@ -29,9 +29,15 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     await db.from("prospect_lists").update({ status: "cancelled", completed_at: now }).in("id", runs.map((run) => run.list_id));
   }
 
-  // A worker holding a live lease stops itself on its next check; otherwise cancel outright.
-  const leased = task.lease_expires_at && new Date(task.lease_expires_at).getTime() > Date.now();
-  const status = leased ? "cancelling" : "cancelled";
-  await setTaskStatus(db, task.id, status);
-  return NextResponse.json({ status });
+  // Plans run as Copilot turns now: cancelling stops queued follow-up turns, and any turn already running sees the status on its next check.
+  if (task.conversation_id) {
+    await db
+      .from("copilot_wakeups")
+      .update({ status: "done", finished_at: now })
+      .eq("conversation_id", task.conversation_id)
+      .eq("status", "pending")
+      .in("kind", ["plan_approved", "plan_continue"]);
+  }
+  await setTaskStatus(db, task.id, "cancelled");
+  return NextResponse.json({ status: "cancelled" });
 }

@@ -760,9 +760,12 @@ export async function executeAgentProspectingRun(runId: string, listId: string) 
     ]);
     throw error;
   } finally {
-    if (agentTaskId) {
-      const { enqueueAgentTask } = await import("@/lib/agents/task-executor");
-      enqueueAgentTask(agentTaskId);
+    // The run is terminal here (success, failure or cancel): wake the Copilot conversation that started it so the agent analyzes the result.
+    try {
+      const { wakeConversationForRun } = await import("@/lib/agents/wakeups");
+      await wakeConversationForRun(db, runId);
+    } catch (error) {
+      console.error("[prospecting] wake conversation failed", runId, error instanceof Error ? error.message : error);
     }
   }
 }

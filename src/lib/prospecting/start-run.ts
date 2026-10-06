@@ -11,6 +11,8 @@ export interface StartProspectingRunInput {
   criteria: ProspectCriteria;
   /** The durable agent task waiting on this run; the run wakes it when it finishes. */
   agentTaskId?: string;
+  /** The Copilot conversation that started this run; it is woken with the results when the run finishes. */
+  conversationId?: string;
 }
 
 export type ReserveProspectingRunResult =
@@ -68,6 +70,7 @@ export async function reserveProspectingRun(
       status: "queued",
       target_count: input.limit,
       ...(input.agentTaskId ? { agent_task_id: input.agentTaskId } : {}),
+      ...(input.conversationId ? { conversation_id: input.conversationId } : {}),
     })
     .select()
     .single();

@@ -66,6 +66,10 @@ function messagesFromHistory(rows: HistoryRow[], artifacts: CopilotArtifact[] = 
       pendingTools = [];
     }
   }
+  // Tool rows with no answer yet: the agent is mid-turn in the background. Show them as live activity.
+  if (pendingTools.length > 0) {
+    out.push({ id: `working-${pendingTools[pendingTools.length - 1].id}`, role: "model", content: "", tools: nestHistoryTools(pendingTools) });
+  }
   return out;
 }
 
@@ -184,6 +188,7 @@ function CopilotChatSession({
 }: CopilotChatProps & { initialConversationId: string | null }) {
   const [activeId, setActiveIdState] = useState<string | null>(initialConversationId);
   function setActiveId(id: string) {
+    activeIdRef.current = id;
     setActiveIdState(id);
     onConversationIdChange?.(id);
   }
@@ -199,6 +204,9 @@ function CopilotChatSession({
   const [liveArtifacts, setLiveArtifacts] = useState<CopilotArtifact[]>([]);
   const [expandedArtifactId, setExpandedArtifactId] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState<string | null>(null);
+  /** The agent is working on this conversation outside the chat request (a plan, or analysis after a run finished). */
+  const [agentBusy, setAgentBusy] = useState(false);
+  const activeIdRef = useRef<string | null>(initialConversationId);
   const bottomRef = useRef<HTMLDivElement>(null);
   const marketMode = Boolean(buildContext);
   const isEmpty = messages.length === 0 && !sending && streamingText === null && activeTools.length === 0 && !liveReasoning;
@@ -238,6 +246,7 @@ function CopilotChatSession({
         const data = await res.json();
         if (cancelled) return;
         setMessages(messagesFromHistory(data.messages ?? [], data.artifacts ?? []));
+        setAgentBusy(Boolean(data.agentBusy));
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load task");
       }
@@ -248,6 +257,35 @@ function CopilotChatSession({
     // Runs once per mount: a new conversationId remounts this component via `key` in CopilotChat.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /**
+   * Re-reads the conversation. `onlyIfBusy` leaves the local transcript alone when the agent is idle,
+   * because a just-finished live turn carries reasoning the stored rows don't.
+   */
+  async function syncConversation(onlyIfBusy: boolean): Promise<boolean> {
+    const id = activeIdRef.current;
+    if (!id) return false;
+    try {
+      const res = await fetch(`/api/copilot/chat?id=${id}`);
+      if (!res.ok) return false;
+      const data = await res.json();
+      const busy = Boolean(data.agentBusy);
+      if (busy || !onlyIfBusy) setMessages(messagesFromHistory(data.messages ?? [], data.artifacts ?? []));
+      setAgentBusy(busy);
+      if (!busy) onTurnComplete?.();
+      return busy;
+    } catch {
+      return false;
+    }
+  }
+
+  // While the agent works in the background, follow along: new tool activity and answers appear as they are saved.
+  useEffect(() => {
+    if (!agentBusy || sending) return;
+    const timer = window.setTimeout(() => void syncConversation(false), 2500);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentBusy, sending, messages]);
 
   async function sendMessage(message: string) {
     if (sending) return;
@@ -272,6 +310,14 @@ function CopilotChatSession({
       if (!res.ok || !res.body) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error ?? "Copilot request failed");
+      }
+
+      if (res.headers.get("content-type")?.includes("application/json")) {
+        // The agent is still finishing background work; the message is queued behind it and answered next.
+        const queued = await res.json().catch(() => ({}));
+        if (!activeId && queued.conversationId) setActiveId(queued.conversationId);
+        setAgentBusy(true);
+        return;
       }
 
       const reader = res.body.getReader();
@@ -401,6 +447,8 @@ function CopilotChatSession({
       setLiveReasoning("");
       setLiveArtifacts([]);
       setReasoningStreaming(false);
+      // The turn may have handed work to the background (an approved plan, a run still going): keep following it.
+      void syncConversation(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Copilot request failed");
     } finally {
@@ -461,6 +509,7 @@ function CopilotChatSession({
                         key={artifact.id}
                         artifact={artifact}
                         onPrompt={(text) => void sendMessage(text)}
+                        onAgentWork={() => setAgentBusy(true)}
                         expanded={expandedArtifactId === artifact.id}
                         onExpand={() => setExpandedArtifactId(artifact.id)}
                         onCollapse={() => setExpandedArtifactId(null)}
@@ -494,11 +543,16 @@ function CopilotChatSession({
                 />
               ) : null}
 
+              {agentBusy && !sending ? (
+                <CopilotTurnProgress reasoning="" tools={[]} working selectedId={selectedId} onSelect={setSelectedId} />
+              ) : null}
+
               {liveArtifacts.map((artifact) => (
                 <ArtifactSurface
                   key={artifact.id}
                   artifact={artifact}
                   onPrompt={(text) => void sendMessage(text)}
+                  onAgentWork={() => setAgentBusy(true)}
                         expanded={expandedArtifactId === artifact.id}
                   onExpand={() => setExpandedArtifactId(artifact.id)}
                   onCollapse={() => setExpandedArtifactId(null)}

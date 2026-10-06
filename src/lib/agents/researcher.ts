@@ -3,6 +3,7 @@ import { getBillingStatus } from "@/lib/billing/entitlements";
 import { setProspectCompanyStatus } from "@/lib/prospecting/mutations";
 import { parseTriggers } from "@/lib/prospecting/signals/triggers";
 import { startProspectingRun } from "@/lib/prospecting/start-run";
+import { awaitRun } from "./wakeups";
 import type { ProspectCriteria } from "@/lib/prospecting/types";
 import { publishArtifact } from "@/lib/copilot/artifacts";
 import { saveSourcedLeads, sourceLeads } from "./source-leads";
@@ -16,6 +17,7 @@ You find companies that match the approved ICP and the decision-makers at those 
 You may:
 - List prospected companies and contacts
 - Start a background prospecting run from the approved blueprint
+- Wait for a run you started and read what it saved (await_run)
 - Check or cancel an active run
 - Qualify or reject companies Copilot named
 
@@ -24,6 +26,7 @@ Rules:
 - When asked to find, get, or source leads/companies, default to start_signal_scout: read the value prop in the briefing, choose the buying signals that mean a company needs what the account sells, set keywords from the value prop and a recency window, and call it. Contacts and verified emails are still found through the data providers once a company shows a signal. Call start_prospecting_run (plain ICP/directory pull, no buying signal) only when the task explicitly asks for that. Omit industries, geographies, and personas — the tools read the approved blueprint.
 - When asked for leads with a reason to reach out now (just raised, hiring for a role, complaining about a problem, changed their site/tech), call start_signal_scout with the matching trigger(s) and a recency window. Live triggers: hiring (open roles), funding_news (recent funding, launches, expansions, key executive hires — set eventKinds) and social_pain (LinkedIn posts where a named person describes a current problem; set keywords to the problem in their words; yield is low, so say so). tech_website is not live yet; say so plainly and offer a live one instead. A signal run finds only companies with dated evidence, so it may save fewer than asked — that is correct, not a failure.
 - When asked to source leads from a named place, registry, URL, or social network, call source_leads. Do not ask the user to confirm the place they already named.
+- Starting a run is not the end of the job. Right after start_prospecting_run or start_signal_scout returns a runId, call await_run with that runId. If it returns the finished outcome, report what was saved with real company and contact names, how well they fit, and any gaps. If it says the run is still going, say so in one sentence and stop: Copilot is woken automatically with the results when the run finishes. Never claim results you have not seen.
 - Never ask Copilot or the user which industries, geographies, personas, or company size to use. Those live on the blueprint and in the briefing.
 - If the tool says there is no approved blueprint or the ICP is empty, report that error and stop. Do not interview anyone.
 - Do not send email, write outreach copy, or rewrite the ICP.`;
@@ -129,6 +132,19 @@ export const RESEARCHER_TOOLS = [
     },
   },
   {
+    name: "await_run",
+    description:
+      "Wait up to about a minute for a prospecting run you started, then return its result (counts, saved companies with fit and contacts, buying signals). If the run is still going it returns will_resume: Copilot will be woken with the results when it finishes. Call this right after start_prospecting_run or start_signal_scout.",
+    parameters: {
+      type: "object",
+      properties: {
+        runId: { type: "string" },
+        maxWaitSeconds: { type: "number", description: "Default and max 60." },
+      },
+      required: ["runId"],
+    },
+  },
+  {
     name: "get_prospecting_run",
     description: "Status of a prospecting run. If runId is omitted, returns the user's most recent run.",
     parameters: {
@@ -229,6 +245,7 @@ async function startRun(ctx: AgentToolContext, args: Record<string, unknown>) {
     limit,
     criteria,
     agentTaskId: ctx.taskId,
+    conversationId: ctx.conversationId,
   });
   if (!started.ok) return { error: started.error };
   const published = {
@@ -300,6 +317,14 @@ async function runTool(ctx: AgentToolContext, name: string, args: Record<string,
         return { error: "start_signal_scout needs at least one valid trigger (hiring, funding_news, social_pain, tech_website)." };
       }
       return startRun(ctx, args);
+    case "await_run":
+      return awaitRun(ctx.db, {
+        runId: String(args.runId ?? ""),
+        userId: ctx.userId,
+        maxWaitSeconds: typeof args.maxWaitSeconds === "number" ? args.maxWaitSeconds : undefined,
+        deadlineAt: ctx.deadlineAt,
+        isCancelled: ctx.isCancelled,
+      });
     case "get_prospecting_run":
       return getRun(ctx, args);
     case "cancel_prospecting_run":

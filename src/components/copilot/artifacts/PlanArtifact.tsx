@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Circle, Loader2, PauseCircle, SkipForward, X } from "lucide-react";
 import type { CopilotArtifact } from "@/lib/agents/types";
 import { Plan, PlanContent, PlanDescription, PlanFooter, PlanHeader, PlanTitle, PlanTrigger, PlanAction } from "@/components/ai-elements/plan";
 import { Queue, QueueItem, QueueItemContent, QueueItemDescription, QueueItemIndicator, QueueList, QueueSection, QueueSectionContent, QueueSectionLabel, QueueSectionTrigger } from "@/components/ai-elements/queue";
-import { useAgentTaskEvents, type TaskStep } from "../useAgentTaskEvents";
+import { useAgentTaskEvents } from "../useAgentTaskEvents";
 
 interface PlannedStep {
   title: string;
@@ -21,34 +20,15 @@ const AGENT_LABEL: Record<string, string> = {
   operator: "Operator",
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  awaiting_approval: "Waiting for your approval",
-  queued: "Starting…",
-  running: "Running",
-  waiting: "Waiting on a prospecting run",
-  paused: "Paused",
-  completed: "Done",
-  failed: "Failed",
-  cancelling: "Cancelling…",
-  cancelled: "Cancelled",
-};
-
-const TOOL_LABEL: Record<string, string> = {
-  send_email_now: "send an email",
-  run_send_pass: "send the queued outreach emails",
-  activate_sequence: "activate a sequence (it will start sending)",
-};
-
-function StepIcon({ status }: { status: TaskStep["status"] | "planned" }) {
-  if (status === "done") return <Check className="size-3.5 text-emerald-500" />;
-  if (status === "running") return <Loader2 className="size-3.5 animate-spin text-[#4379EE]" />;
-  if (status === "failed") return <X className="size-3.5 text-red-500" />;
-  if (status === "skipped") return <SkipForward className="size-3.5 text-[var(--copilot-muted)]" />;
-  if (status === "awaiting_confirmation") return <PauseCircle className="size-3.5 text-amber-500" />;
-  return <Circle className="size-3.5 text-[var(--copilot-muted)]" />;
-}
-
-export function PlanArtifact({ artifact, live }: { artifact: CopilotArtifact; live: ReturnType<typeof useAgentTaskEvents> }) {
+export function PlanArtifact({
+  artifact,
+  live,
+  onAgentWork,
+}: {
+  artifact: CopilotArtifact;
+  live: ReturnType<typeof useAgentTaskEvents>;
+  onAgentWork?: () => void;
+}) {
   const taskId = typeof artifact.payload.taskId === "string" ? artifact.payload.taskId : null;
   const planned = (Array.isArray(artifact.payload.steps) ? artifact.payload.steps : []) as PlannedStep[];
   const estimate = (artifact.payload.estimate ?? {}) as { low?: number; high?: number };
@@ -59,9 +39,7 @@ export function PlanArtifact({ artifact, live }: { artifact: CopilotArtifact; li
 
   const status = task?.status ?? "awaiting_approval";
   const isDraft = status === "awaiting_approval";
-  const isLive = ["queued", "running", "waiting", "cancelling"].includes(status);
-  const budgetPaused = status === "paused" && Boolean(task?.error);
-  const confirmStep = steps.find((step) => step.status === "awaiting_confirmation");
+  const budgetPaused = status === "paused";
 
   async function post(path: string, body: Record<string, unknown> = {}) {
     if (!taskId) return;
@@ -75,6 +53,7 @@ export function PlanArtifact({ artifact, live }: { artifact: CopilotArtifact; li
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) setMessage(data.error ?? "Something went wrong");
+      else if (path === "approve") onAgentWork?.();
       refresh();
     } finally {
       setBusy(false);
@@ -84,23 +63,23 @@ export function PlanArtifact({ artifact, live }: { artifact: CopilotArtifact; li
   const budgetNumber = Number(budget);
   const approve = () => post("approve", Number.isFinite(budgetNumber) && budgetNumber > 0 ? { budget: Math.floor(budgetNumber) } : {});
 
-  const rows: Array<{ key: string; title: string; agent: string; status: TaskStep["status"] | "planned"; summary: string | null; instruction?: string }> =
+  const rows =
     steps.length > 0
-      ? steps.map((step) => ({ key: step.id, title: step.title, agent: step.agent ?? "", status: step.status, summary: step.summary }))
-      : planned.map((step, index) => ({ key: String(index), title: step.title, agent: step.agent, status: "planned", summary: null, instruction: step.instruction }));
-  const doneCount = rows.filter((row) => row.status === "done" || row.status === "skipped").length;
+      ? steps.map((step) => ({ key: step.id, title: step.title, agent: step.agent ?? "", instruction: undefined as string | undefined }))
+      : planned.map((step, index) => ({ key: String(index), title: step.title, agent: step.agent, instruction: step.instruction as string | undefined }));
   const title = task?.goal ?? artifact.title ?? "Plan";
-  const description = isDraft
-    ? `${rows.length} step${rows.length === 1 ? "" : "s"} · ${STATUS_LABEL[status]}`
-    : `${STATUS_LABEL[status] ?? status} · ${doneCount} of ${rows.length} steps done`;
+
+  // Approved, running, finished or cancelled: the plan card leaves the chat and the agent's own messages carry on.
+  if (!task && !error) return null;
+  if (task && !isDraft && !budgetPaused) return null;
 
   return (
-    <Plan isStreaming={status === "running" || status === "queued"} defaultOpen>
+    <Plan defaultOpen>
       <PlanHeader>
         <div className="min-w-0">
           <p className="copilot-artifact-kicker">Plan</p>
           <PlanTitle className="mt-1">{title}</PlanTitle>
-          <PlanDescription>{description}</PlanDescription>
+          <PlanDescription>{`${rows.length} step${rows.length === 1 ? "" : "s"} · ${isDraft ? "Waiting for your approval" : "Paused"}`}</PlanDescription>
         </div>
         <PlanAction>
           <PlanTrigger />
@@ -115,44 +94,25 @@ export function PlanArtifact({ artifact, live }: { artifact: CopilotArtifact; li
             </QueueSectionTrigger>
             <QueueSectionContent>
               <QueueList>
-                {rows.map((row) => {
-                  const done = row.status === "done" || row.status === "skipped";
-                  return (
-                    <QueueItem key={row.key}>
-                      <div className="flex items-start gap-2">
-                        <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
-                          {row.status === "pending" || row.status === "planned" ? <QueueItemIndicator /> : <StepIcon status={row.status} />}
-                        </span>
-                        <QueueItemContent completed={done}>
-                          {row.title}
-                          {row.agent ? <span className="ml-1.5 text-[11px] text-[var(--copilot-muted)]">{AGENT_LABEL[row.agent] ?? row.agent}</span> : null}
-                        </QueueItemContent>
-                      </div>
-                      {isDraft && row.instruction ? <QueueItemDescription>{row.instruction}</QueueItemDescription> : null}
-                    </QueueItem>
-                  );
-                })}
+                {rows.map((row) => (
+                  <QueueItem key={row.key}>
+                    <div className="flex items-start gap-2">
+                      <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
+                        <QueueItemIndicator />
+                      </span>
+                      <QueueItemContent>
+                        {row.title}
+                        {row.agent ? <span className="ml-1.5 text-[11px] text-[var(--copilot-muted)]">{AGENT_LABEL[row.agent] ?? row.agent}</span> : null}
+                      </QueueItemContent>
+                    </div>
+                    {isDraft && row.instruction ? <QueueItemDescription>{row.instruction}</QueueItemDescription> : null}
+                  </QueueItem>
+                ))}
               </QueueList>
             </QueueSectionContent>
           </QueueSection>
         </Queue>
 
-
-      {confirmStep ? (
-        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-[13px] text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-          <p>
-            <span className="font-medium">{confirmStep.title}</span> wants to {TOOL_LABEL[confirmStep.pendingTool ?? ""] ?? confirmStep.pendingTool}. Go ahead?
-          </p>
-          <div className="mt-2 flex gap-2">
-            <button type="button" className="copilot-artifact-btn copilot-artifact-btn-solid" disabled={busy} onClick={() => void post("confirm", { stepId: confirmStep.id, approve: true })}>
-              Approve
-            </button>
-            <button type="button" className="copilot-artifact-btn" disabled={busy} onClick={() => void post("confirm", { stepId: confirmStep.id, approve: false })}>
-              Skip
-            </button>
-          </div>
-        </div>
-      ) : null}
 
       {task?.error && status !== "awaiting_approval" ? <p className="mt-2 text-[13px] text-red-500">{task.error}</p> : null}
 
@@ -180,13 +140,13 @@ export function PlanArtifact({ artifact, live }: { artifact: CopilotArtifact; li
             </button>
           </>
         ) : null}
-        {isDraft || isLive || status === "paused" ? (
+        {isDraft || budgetPaused ? (
           <button type="button" className="copilot-artifact-btn" disabled={busy || !taskId} onClick={() => void post("cancel")}>
             Cancel
           </button>
         ) : null}
       </PlanFooter>
-      {isDraft ? <p className="px-4 pb-4 text-[12px] text-[var(--copilot-muted)]">Runs in the background — you can close this tab. Sends always ask first.</p> : null}
+      {isDraft ? <p className="px-4 pb-4 text-[12px] text-[var(--copilot-muted)]">Once approved I&apos;ll work through this here, step by step. Sends always ask first.</p> : null}
       {message || error ? <p className="px-4 pb-4 text-[13px] text-red-500">{message ?? error}</p> : null}
     </Plan>
   );

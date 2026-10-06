@@ -46,6 +46,8 @@ export interface AgentToolContext {
   emit?: (event: AgentToolEvent) => void;
   /** Durable task this call runs under, for budget accounting. */
   taskId?: string;
+  /** Epoch ms after which the surrounding request is cut off; long waits (await_run) stay inside it. */
+  deadlineAt?: number;
   isCancelled?: () => boolean;
 }
 
