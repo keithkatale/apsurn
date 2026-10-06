@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendResendEmail } from "@/lib/email/resend";
+import { appOrigin, supportAlertEmail, supportReplyEmail } from "@/lib/email/templates";
 
 export const SUPPORT_INBOX = "hello@apsurn.com";
 
@@ -81,17 +82,9 @@ export async function updateConversation(id: string, patch: Partial<SupportConve
   await db().from("support_conversations").update(patch).eq("id", id);
 }
 
-function escapeHtml(value: string) {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
 function who(conversation: SupportConversation) {
   if (conversation.email) return `${conversation.email}${conversation.user_id ? " (signed in)" : " (not signed in)"}`;
   return conversation.user_id ? "Guest session (no personal email yet)" : "Anonymous visitor (no email yet)";
-}
-
-function appOrigin() {
-  return process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "https://apsurn.com";
 }
 
 /** Emails the support inbox. Never throws: support must keep working if email is down. */
@@ -102,16 +95,12 @@ export async function notifyAdmin(params: {
   messages: SupportMessage[];
 }) {
   const { conversation, messages } = params;
-  const label = (role: SupportMessage["role"]) => (role === "user" ? "Customer" : role === "admin" ? "Team" : "AI assistant");
-  const text =
-    `${params.intro}\n\nFrom: ${who(conversation)}\nOpen in admin: ${appOrigin()}/admin/support?id=${conversation.id}\n\n` +
-    messages.map((m) => `${label(m.role)}: ${m.content}`).join("\n\n");
-  const html =
-    `<p>${escapeHtml(params.intro)}</p><p><strong>From:</strong> ${escapeHtml(who(conversation))}<br/>` +
-    `<a href="${appOrigin()}/admin/support?id=${conversation.id}">Open in admin</a></p><hr/>` +
-    messages
-      .map((m) => `<p><strong>${label(m.role)}:</strong><br/>${escapeHtml(m.content).replace(/\n/g, "<br/>")}</p>`)
-      .join("");
+  const { html, text } = supportAlertEmail({
+    intro: params.intro,
+    from: who(conversation),
+    adminUrl: `${appOrigin()}/admin/support?id=${conversation.id}`,
+    messages,
+  });
   try {
     await sendResendEmail({
       to: SUPPORT_INBOX,
@@ -141,12 +130,13 @@ export async function emailTranscript(conversation: SupportConversation, subject
 
 export async function emailVisitor(conversation: SupportConversation, content: string) {
   if (!conversation.email) return;
+  const reply = supportReplyEmail({ content });
   try {
     await sendResendEmail({
       to: conversation.email,
       subject: "A reply from the Apsurn team",
-      text: `${content}\n\n— Apsurn support\nYou can reply to this email, or continue the chat in the Apsurn app.`,
-      html: `<p>${escapeHtml(content).replace(/\n/g, "<br/>")}</p><p style="color:#888">— Apsurn support<br/>You can reply to this email, or continue the chat in the Apsurn app.</p>`,
+      text: reply.text,
+      html: reply.html,
       replyTo: SUPPORT_INBOX,
     });
   } catch (error) {

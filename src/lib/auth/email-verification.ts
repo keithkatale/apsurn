@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomInt, timingSafeEqual } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { sendResendEmail } from "@/lib/email/resend";
+import { verificationEmail, welcomeEmail } from "@/lib/email/templates";
 import { findAuthUserByEmail } from "@/lib/auth/account-exists";
 import { isGuestUser } from "@/lib/auth/guest";
 
@@ -22,29 +23,6 @@ function hashesMatch(presented: string, expected: string) {
   const a = Buffer.from(presented);
   const b = Buffer.from(expected);
   return a.length === b.length && timingSafeEqual(a, b);
-}
-
-function verificationEmail(params: { code: string; link: string }) {
-  const text = [
-    `Your apsurn verification code is ${params.code}.`,
-    "",
-    "Or open this link to verify and continue:",
-    params.link,
-  ].join("\n");
-  const html = `<!doctype html>
-<html>
-  <body style="margin:0;background:#111;color:#f0f0f0;font-family:Georgia,serif;">
-    <div style="max-width:480px;margin:0 auto;padding:32px 24px;">
-      <p style="margin:0 0 8px;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#8eb0ff;">apsurn</p>
-      <h1 style="margin:0 0 12px;font-size:28px;font-weight:600;">Verify your email</h1>
-      <p style="margin:0 0 20px;font-size:16px;line-height:1.5;color:#d0d0d0;">Enter this code in apsurn.</p>
-      <p style="margin:0 0 24px;font-family:ui-monospace,monospace;font-size:32px;letter-spacing:0.18em;color:#f0f0f0;">${params.code}</p>
-      <a href="${params.link}" style="display:inline-block;background:#4379ee;color:#fff;text-decoration:none;border-radius:12px;padding:12px 18px;font-family:sans-serif;font-size:14px;font-weight:600;">Verify and continue</a>
-      <p style="margin:24px 0 0;font-size:13px;line-height:1.5;color:#9a9a9a;">If you did not ask for this, you can ignore the email.</p>
-    </div>
-  </body>
-</html>`;
-  return { text, html };
 }
 
 export async function startEmailVerification(params: {
@@ -232,6 +210,10 @@ export async function confirmEmailVerification(params: { userId?: string; code?:
   }
 
   await admin.from("email_verifications").update({ consumed_at: new Date().toISOString() }).eq("id", row.id);
+  const welcome = welcomeEmail();
+  await sendResendEmail({ to: row.email, subject: "Welcome to apsurn", html: welcome.html, text: welcome.text }).catch((error) =>
+    console.error("[auth/verify] welcome", error instanceof Error ? error.message : error)
+  );
   const sessionReady = await establishSession(row.user_id, row.email);
   if (!sessionReady) {
     return { ok: false as const, status: 500, error: "Email verified. Sign in with your password to continue." };
