@@ -159,7 +159,7 @@ async function runStep(task: AgentTaskRow, step: AgentStepRow, priorSummaries: s
           `Overall goal: ${task.goal}`,
           priorSummaries.length ? `Earlier steps already finished:\n${priorSummaries.map((s, i) => `${i + 1}. ${s}`).join("\n")}` : "",
           `Your step: ${step.title}\n${step.instruction}`,
-          "Do the work with your tools now. Do not ask questions — decide from the briefing. Finish with a one-paragraph summary of what you did with real names and numbers.",
+          "Do the work with your tools now. Do not ask questions — decide from the briefing. Finish with a one-paragraph summary of what you did with real names and numbers. Only report actions a tool call actually performed in this step — if you could not do something because no tool exists for it, say so plainly instead of claiming it was done.",
         ]
           .filter(Boolean)
           .join("\n\n"),

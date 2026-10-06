@@ -22,6 +22,18 @@ const OVERSAMPLE = 3;
 const CONCURRENCY = 4;
 const KEY_CHUNK = 50;
 
+const TRIGGER_NAME: Record<TriggerSpec["type"], string> = {
+  hiring: "hiring",
+  funding_news: "funding or news",
+  social_pain: "social pain-post",
+  tech_website: "tech",
+};
+const TRIGGER_NARRATION: Record<TriggerSpec["type"], string> = {
+  hiring: "Searching job boards for companies hiring for the roles that signal a need…",
+  funding_news: "Searching recent news for funding rounds, launches, expansions and key hires, and checking each against its source article…",
+  social_pain: "Searching LinkedIn for people describing this problem right now, then matching each to their company…",
+  tech_website: "Checking company websites for tech changes…",
+};
 export const SUPPORTED_TRIGGERS: ReadonlyArray<TriggerSpec["type"]> = ["hiring", "funding_news", "social_pain"];
 
 /** Drops signals this user has already been told about; a company with nothing new left is dropped. Tolerates the table not existing yet. */
@@ -93,17 +105,18 @@ export async function runSignalScout(opts: {
     if (stopped) return result(stopped, stopped === "cancelled");
     const collect = spec.type === "hiring" ? collectHiringSignals : spec.type === "funding_news" ? collectNewsSignals : spec.type === "social_pain" ? collectSocialSignals : null;
     if (!collect) continue;
+    emit({ type: "token", text: TRIGGER_NARRATION[spec.type] });
     try {
-      candidates.push(
-        ...(await collect({
+      const found = await collect({
           criteria: ctx.criteria,
           spec,
           known: ctx.savedDomains,
           want,
           productSummary: ctx.productSummary,
           shouldStop: () => Date.now() >= ctx.budget.deadlineMs,
-        })),
-      );
+      });
+      candidates.push(...found);
+      emit({ type: "token", text: `${found.length} ${found.length === 1 ? "company" : "companies"} with a ${TRIGGER_NAME[spec.type]} signal.` });
     } catch (error) {
       // One trigger failing (search down, a quota) must not discard what the others found.
       ctx.counters.warnings += 1;
@@ -115,6 +128,7 @@ export async function runSignalScout(opts: {
   const recencyByType = Object.fromEntries(supported.map((spec) => [spec.type, spec.recencyDays]));
   const ranked = await dropReportedSignals(db, userId, rankLeads(candidates, recencyByType, Date.now()));
   const queue = ranked.slice(0, targetCount * OVERSAMPLE);
+  emit({ type: "token", text: queue.length ? `Ranked ${queue.length} companies by signal strength and recency. Finding decision makers and verified emails next.` : "No company showed a recent, evidenced signal." });
   emit({
     type: "tool_end",
     name: "find_companies",

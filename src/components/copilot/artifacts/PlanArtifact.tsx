@@ -1,11 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Check, Circle, Loader2, PauseCircle, SkipForward, X } from "lucide-react";
 import type { CopilotArtifact } from "@/lib/agents/types";
 import { Plan, PlanContent, PlanDescription, PlanFooter, PlanHeader, PlanTitle, PlanTrigger, PlanAction } from "@/components/ai-elements/plan";
 import { Queue, QueueItem, QueueItemContent, QueueItemDescription, QueueItemIndicator, QueueList, QueueSection, QueueSectionContent, QueueSectionLabel, QueueSectionTrigger } from "@/components/ai-elements/queue";
-import { stepActivity } from "../stepActivity";
 import { useAgentTaskEvents, type TaskStep } from "../useAgentTaskEvents";
 
 interface PlannedStep {
@@ -49,11 +48,11 @@ function StepIcon({ status }: { status: TaskStep["status"] | "planned" }) {
   return <Circle className="size-3.5 text-[var(--copilot-muted)]" />;
 }
 
-export function PlanArtifact({ artifact }: { artifact: CopilotArtifact; onChange?: (next: CopilotArtifact) => void }) {
+export function PlanArtifact({ artifact, live }: { artifact: CopilotArtifact; live: ReturnType<typeof useAgentTaskEvents> }) {
   const taskId = typeof artifact.payload.taskId === "string" ? artifact.payload.taskId : null;
   const planned = (Array.isArray(artifact.payload.steps) ? artifact.payload.steps : []) as PlannedStep[];
   const estimate = (artifact.payload.estimate ?? {}) as { low?: number; high?: number };
-  const { task, steps, events, error, refresh } = useAgentTaskEvents(taskId);
+  const { task, steps, error, refresh } = live;
   const [budget, setBudget] = useState<string>(String(artifact.payload.budget ?? estimate.high ?? ""));
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -63,10 +62,6 @@ export function PlanArtifact({ artifact }: { artifact: CopilotArtifact; onChange
   const isLive = ["queued", "running", "waiting", "cancelling"].includes(status);
   const budgetPaused = status === "paused" && Boolean(task?.error);
   const confirmStep = steps.find((step) => step.status === "awaiting_confirmation");
-  const summary = useMemo(() => {
-    const row = [...events].reverse().find((event) => event.type === "task_summary");
-    return typeof row?.payload.summary === "string" ? row.payload.summary : null;
-  }, [events]);
 
   async function post(path: string, body: Record<string, unknown> = {}) {
     if (!taskId) return;
@@ -113,79 +108,35 @@ export function PlanArtifact({ artifact }: { artifact: CopilotArtifact; onChange
       </PlanHeader>
 
       <PlanContent>
-        {isDraft ? (
-          <ol className="space-y-2.5">
-            {rows.map((row, index) => (
-              <li key={row.key} className="flex gap-2.5">
-                <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center text-[11px] font-semibold text-[var(--copilot-muted)]">{index + 1}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[14px] leading-snug text-[var(--copilot-foreground)]">
-                    {row.title}
-                    {row.agent ? <span className="ml-1.5 text-[11px] text-[var(--copilot-muted)]">{AGENT_LABEL[row.agent] ?? row.agent}</span> : null}
-                  </span>
-                  {row.instruction ? <span className="mt-0.5 block text-[12px] leading-snug text-[var(--copilot-muted)]">{row.instruction}</span> : null}
-                </span>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <Queue>
-            <QueueSection>
-              <QueueSectionTrigger>
-                <QueueSectionLabel count={rows.length} label="tasks" />
-              </QueueSectionTrigger>
-              <QueueSectionContent>
-                <QueueList>
-                  {rows.map((row) => {
-                    const done = row.status === "done" || row.status === "skipped";
-                    const entries = steps.length > 0 ? stepActivity(events, row.key) : [];
-                    return (
-                      <QueueItem key={row.key}>
-                        <div className="flex items-start gap-2">
-                          <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
-                            {row.status === "pending" || row.status === "planned" ? <QueueItemIndicator /> : <StepIcon status={row.status} />}
-                          </span>
-                          <QueueItemContent completed={done}>
-                            {row.title}
-                            {row.agent ? <span className="ml-1.5 text-[11px] text-[var(--copilot-muted)]">{AGENT_LABEL[row.agent] ?? row.agent}</span> : null}
-                          </QueueItemContent>
-                        </div>
-                        {entries.length > 0 || row.summary ? (
-                          <QueueItemDescription completed={false} className="space-y-1">
-                            {entries.slice(row.status === "running" ? -6 : -12).map((entry) =>
-                              entry.kind === "thought" ? (
-                                <p key={entry.key} className="italic leading-snug">
-                                  {entry.text}
-                                </p>
-                              ) : (
-                                <p key={entry.key} className="flex items-start gap-1.5 leading-snug">
-                                  <span className="mt-0.5 shrink-0">
-                                    {entry.status === "running" ? (
-                                      <Loader2 className="size-3 animate-spin text-[#4379EE]" />
-                                    ) : entry.status === "failed" ? (
-                                      <X className="size-3 text-red-500" />
-                                    ) : (
-                                      <Check className="size-3 text-emerald-500" />
-                                    )}
-                                  </span>
-                                  <span className={entry.status === "running" ? "copilot-reason-shimmer" : undefined}>
-                                    {entry.label}
-                                    {entry.detail ? <span className="text-[var(--copilot-muted)]"> — {entry.detail.length > 160 ? `${entry.detail.slice(0, 157)}…` : entry.detail}</span> : null}
-                                  </span>
-                                </p>
-                              ),
-                            )}
-                            {row.summary && row.status !== "running" ? <p className="whitespace-pre-line leading-snug text-[var(--copilot-foreground)]">{row.summary.length > 400 ? `${row.summary.slice(0, 397)}…` : row.summary}</p> : null}
-                          </QueueItemDescription>
-                        ) : null}
-                      </QueueItem>
-                    );
-                  })}
-                </QueueList>
-              </QueueSectionContent>
-            </QueueSection>
-          </Queue>
-        )}
+        <Queue>
+          <QueueSection>
+            <QueueSectionTrigger>
+              <QueueSectionLabel count={rows.length} label={rows.length === 1 ? "task" : "tasks"} />
+            </QueueSectionTrigger>
+            <QueueSectionContent>
+              <QueueList>
+                {rows.map((row) => {
+                  const done = row.status === "done" || row.status === "skipped";
+                  return (
+                    <QueueItem key={row.key}>
+                      <div className="flex items-start gap-2">
+                        <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
+                          {row.status === "pending" || row.status === "planned" ? <QueueItemIndicator /> : <StepIcon status={row.status} />}
+                        </span>
+                        <QueueItemContent completed={done}>
+                          {row.title}
+                          {row.agent ? <span className="ml-1.5 text-[11px] text-[var(--copilot-muted)]">{AGENT_LABEL[row.agent] ?? row.agent}</span> : null}
+                        </QueueItemContent>
+                      </div>
+                      {isDraft && row.instruction ? <QueueItemDescription>{row.instruction}</QueueItemDescription> : null}
+                    </QueueItem>
+                  );
+                })}
+              </QueueList>
+            </QueueSectionContent>
+          </QueueSection>
+        </Queue>
+
 
       {confirmStep ? (
         <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-[13px] text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
@@ -204,7 +155,6 @@ export function PlanArtifact({ artifact }: { artifact: CopilotArtifact; onChange
       ) : null}
 
       {task?.error && status !== "awaiting_approval" ? <p className="mt-2 text-[13px] text-red-500">{task.error}</p> : null}
-      {summary && status === "completed" ? <p className="mt-3 whitespace-pre-line text-[13px] leading-relaxed text-[var(--copilot-foreground)]">{summary}</p> : null}
 
       </PlanContent>
 

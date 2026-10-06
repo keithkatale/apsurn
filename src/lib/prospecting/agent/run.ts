@@ -347,6 +347,39 @@ async function saveYcLeadsFirst(input: {
   };
 }
 
+/**
+ * Mirrors a run's progress into its agent task's event log, in order, so the
+ * plan card shows what the run is doing instead of going quiet until it ends.
+ */
+function taskEventForwarder(db: SupabaseClient, taskId: string, runId: string) {
+  let chain: Promise<unknown> = Promise.resolve();
+  let stepId: string | null | undefined;
+  let counter = 0;
+  const open = new Map<string, string[]>();
+  return (event: AgentStreamEvent) => {
+    chain = chain
+      .then(async () => {
+        const { appendTaskEvent } = await import("@/lib/agents/tasks");
+        if (stepId === undefined) {
+          const { data } = await db.from("agent_task_steps").select("id").eq("task_id", taskId).eq("run_id", runId).maybeSingle();
+          stepId = (data as { id?: string } | null)?.id ?? null;
+        }
+        if (!stepId) return;
+        if (event.type === "token") return appendTaskEvent(db, taskId, "reasoning", { text: `${event.text}\n`, stepId });
+        if (event.type === "tool_start") {
+          const id = `run-${runId}-${++counter}`;
+          open.set(event.name, [...(open.get(event.name) ?? []), id]);
+          return appendTaskEvent(db, taskId, "tool_start", { id, name: event.name, args: event.args, stepId });
+        }
+        const queue = open.get(event.name) ?? [];
+        const id = queue.shift() ?? `run-${runId}-${++counter}`;
+        open.set(event.name, queue);
+        return appendTaskEvent(db, taskId, "tool_end", { id, name: event.name, result: event.result, stepId });
+      })
+      .catch(() => undefined);
+  };
+}
+
 export async function runDirectoryAgent(opts: {
   db: SupabaseClient;
   runId: string;
@@ -393,7 +426,11 @@ export async function runDirectoryAgent(opts: {
     chargeCredits: opts.chargeCredits !== false,
   };
 
-  const emit = (event: AgentStreamEvent) => onEvent?.(event);
+  const forward = opts.agentTaskId ? taskEventForwarder(db, opts.agentTaskId, runId) : null;
+  const emit = (event: AgentStreamEvent) => {
+    onEvent?.(event);
+    forward?.(event);
+  };
   // Only the real constraints: an explicit stop, running out of time, or a
   // cancelled run. This deliberately does not call budgetExhausted() any
   // more — that included a step-count ceiling (ctx.budget.maxSteps) that

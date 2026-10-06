@@ -8,6 +8,7 @@ import { publishArtifact } from "@/lib/copilot/artifacts";
 import { WORKSPACE_MUTATING_TOOLS, WORKSPACE_TOOL_DECLARATIONS, WORKSPACE_TOOL_NAMES, runWorkspaceTool } from "./workspace";
 import type { AgentToolContext } from "./types";
 import { SPECIALIST_IDS } from "./types";
+import { approveAgentTask } from "./plan-approval";
 import { CREATE_PLAN_TOOL, createPlan } from "./plan";
 import { PLAN_AGENT_IDS } from "./plan-core";
 
@@ -22,7 +23,7 @@ ${rosterLines}
 You may be invoked from Market Insights with a "Context:" block. Treat it as situational awareness, not something to repeat.
 
 How to work:
-- Plan, then auto-run. Quick questions and single actions you just do in this turn. Anything bigger — more than ~2 tool rounds, finding more than a handful of leads, chained work (find leads → draft emails → build a sequence), or anything they want on a schedule — goes through create_plan: break it into 1-8 concrete steps, each owned by one agent, with counts and filters spelled out. The user approves once and it runs in the background, even if they close the tab. After create_plan, say in one sentence what the plan will do and its estimated credits, then stop.
+- Plan, then auto-run. Quick questions and single actions you just do in this turn. Anything bigger — more than ~2 tool rounds, finding more than a handful of leads, chained work (find leads → draft emails → build a sequence), or anything they want on a schedule — goes through create_plan: break it into 1-8 concrete steps, each owned by one agent, with counts and filters spelled out. The user approves once, from the plan card's Approve & run button or by telling you in chat (then call approve_plan), and the plan card shows every step, tool call and result live as it runs. After create_plan, say in one sentence what the plan will do and its estimated credits, then stop. Never say a plan is running unless approve_plan returned queued or the card shows it running; if you have not approved it, say it is waiting for approval.
 - For leads with a reason to reach out now (just raised, hiring for a role, complaining about a problem or a competitor, changed their website/tech), plan a signal_scout step and name the trigger and recency in its instruction.
 - Reads first, no permission-seeking. If they ask to see leads, contacts, companies, sequences, mentions, or a summary, call a list/snapshot tool in this turn. Never ask "should I look that up?" or "confirm you want me to pull that."
 - Use get_account_snapshot for counts and blueprint. Use list_contacts / list_prospect_companies / get_sequence_overview / get_analytics_summary for the actual rows. "Recent leads" means list_contacts ordered as returned — just call it.
@@ -122,6 +123,12 @@ const BASE_TOOL_DECLARATIONS: AiToolDeclaration[] = [
       },
       required: ["agent", "task"],
     },
+  },
+  {
+    name: "approve_plan",
+    description:
+      "Start the plan waiting for approval in this conversation, when the user says in chat to approve, go ahead, or run it. Only call it after the user clearly agreed. The plan card then shows each step running live. Never say a plan is running unless this returned status queued.",
+    parameters: { type: "object", properties: {} },
   },
   {
     name: CREATE_PLAN_TOOL,
@@ -270,6 +277,21 @@ export async function runCopilotTool(
     }
     case "get_agent_status":
       return getAgentStatus(ctx, args);
+    case "approve_plan": {
+      if (!ctx.conversationId) return { error: "No plan to approve here." };
+      const { data: pending } = await ctx.db
+        .from("agent_tasks")
+        .select("id")
+        .eq("user_id", ctx.userId)
+        .eq("conversation_id", ctx.conversationId)
+        .eq("status", "awaiting_approval")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!pending) return { error: "There is no plan waiting for approval in this conversation." };
+      const approved = await approveAgentTask(ctx.userId, pending.id as string);
+      return approved.ok ? { status: "queued", note: "The plan card now shows each step as it runs." } : { error: approved.error };
+    }
     case CREATE_PLAN_TOOL:
       return createPlan(ctx, args);
     default:
@@ -281,6 +303,7 @@ export async function runCopilotTool(
 export const COPILOT_MUTATING_TOOLS = new Set([
   ...WORKSPACE_MUTATING_TOOLS,
   CREATE_PLAN_TOOL,
+  "approve_plan",
   "delegate_to_agent",
   "source_leads",
   "save_sourced_leads",

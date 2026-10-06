@@ -4,7 +4,7 @@ import { Maximize2, Minimize2 } from "lucide-react";
 import type { CopilotArtifact } from "@/lib/agents/types";
 import { LeadTableArtifact } from "./LeadTableArtifact";
 import { DocumentArtifact } from "./DocumentArtifact";
-import { PlanArtifact } from "./PlanArtifact";
+import { PlanRunner } from "./PlanRunner";
 import { RunArtifact } from "./RunArtifact";
 import { SequenceArtifact } from "./SequenceArtifact";
 import { UiArtifact } from "./UiArtifact";
@@ -24,6 +24,8 @@ export function ArtifactSurface({
   onChange?: (next: CopilotArtifact) => void;
   onPrompt?: (text: string) => void;
 }) {
+  if (artifact.kind === "plan") return <PlanRunner artifact={artifact} />;
+
   return (
     <article
       className={`copilot-artifact-surface ${expanded ? "copilot-artifact-surface-inline" : ""}`}
@@ -57,8 +59,6 @@ export function ArtifactSurface({
         <UiArtifact artifact={artifact} onPrompt={onPrompt} />
       ) : artifact.kind === "document" ? (
         <DocumentArtifact artifact={artifact} />
-      ) : artifact.kind === "plan" ? (
-        <PlanArtifact artifact={artifact} onChange={onChange} />
       ) : null}
     </article>
   );

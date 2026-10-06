@@ -47,9 +47,10 @@ const MAX_EVENTS = 300;
 
 function pollDelay(status: TaskStatus | undefined): number | null {
   if (!status || TERMINAL.includes(status)) return null;
-  if (status === "running" || status === "queued" || status === "cancelling") return 1500;
-  // Waiting on a prospecting run, paused for a confirmation, or not approved yet.
-  return 8000;
+  if (status === "running" || status === "queued" || status === "cancelling" || status === "waiting") return 1500;
+  if (status === "awaiting_approval") return 3000;
+  // Waiting on a prospecting run or paused for a confirmation.
+  return 4000;
 }
 
 /**

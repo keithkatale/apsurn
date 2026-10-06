@@ -9,6 +9,12 @@ export const AGENT_DISPLAY_NAME: Record<SpecialistId, string> = {
 
 export const AGENT_TOOL_LABELS: Record<string, string> = {
   get_account_snapshot: "Checking your account",
+  find_companies: "Finding companies with a buying signal",
+  find_people: "Finding the decision maker",
+  resolve_email: "Verifying their email",
+  save_lead: "Saving the lead",
+  approve_plan: "Starting the plan",
+  create_plan: "Drafting a plan",
   render_ui: "Building a view",
   list_documents: "Looking through the Library",
   get_document: "Reading a document",
