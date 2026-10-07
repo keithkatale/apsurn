@@ -5,7 +5,6 @@ import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
 import { ensureLeadDraft, LeadDraftError } from "@/lib/outreach/lead-draft";
 import { getOwnedContact } from "@/lib/outreach/owned-contact";
 import { saveOutreachDraft } from "@/lib/outreach/persist-draft";
-import { requireActiveBilling } from "@/lib/billing/entitlements";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -39,18 +38,6 @@ export async function POST(request: NextRequest) {
   const userId = await userIdOr401();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  try {
-    await requireActiveBilling(userId);
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Billing required",
-        code: "billing_required",
-      },
-      { status: 402 },
-    );
-  }
-
   const parsed = generateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
@@ -63,6 +50,8 @@ export async function POST(request: NextRequest) {
       stepId: parsed.data.stepId,
       stepIndex: parsed.data.stepIndex,
       regenerate: parsed.data.regenerate,
+      // Guests and new accounts can write the email before a card is on file. Sending still requires checkout.
+      allowWithoutCredits: true,
     });
     return NextResponse.json(draft);
   } catch (error) {

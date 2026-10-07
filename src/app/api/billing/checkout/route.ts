@@ -131,9 +131,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
     console.error("[billing/checkout]", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Checkout failed" },
-      { status: 500 },
-    );
+    const raw = error instanceof Error ? error.message : "";
+    const safe = /^\d{3}\b/.test(raw) || /unauthorized/i.test(raw) ? "Checkout could not start. Try again in a moment." : raw;
+    return NextResponse.json({ error: safe || "Checkout failed" }, { status: 500 });
   }
 }

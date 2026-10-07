@@ -6,6 +6,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { spendCredits } from "@/lib/billing/credits";
+import { getBillingStatus } from "@/lib/billing/entitlements";
 import { CREDIT_COSTS } from "@/lib/billing/plans";
 import { draftFollowupForContact, draftOpener } from "./draft";
 import { loadLeadDossier } from "./lead-context";
@@ -29,6 +30,8 @@ export interface EnsureLeadDraftInput {
   stepId?: string | null;
   stepIndex?: number;
   regenerate?: boolean;
+  /** Write the email even when this account has no credits yet. Used by the editor for guests and new accounts. */
+  allowWithoutCredits?: boolean;
 }
 
 export type EnsuredLeadDraft = StoredDraft & { stepId: string | null; cached: boolean; creditBalance?: number };
@@ -124,15 +127,22 @@ export async function ensureLeadDraft(db: SupabaseClient, input: EnsureLeadDraft
   }
 
   let creditBalance: number | undefined;
-  try {
-    creditBalance = await spendCredits({
-      userId,
-      amount: CREDIT_COSTS.email_draft,
-      action: "email_draft",
-      metadata: { contactId: contact.id, campaignId: sequence.id, stepId },
-    });
-  } catch (error) {
-    throw new LeadDraftError(error instanceof Error ? error.message : "Out of credits", "credits_exhausted");
+  const billing = await getBillingStatus(userId);
+  const shouldCharge = billing.active || billing.creditBalance > 0 || !input.allowWithoutCredits;
+  if (shouldCharge) {
+    try {
+      creditBalance = await spendCredits({
+        userId,
+        amount: CREDIT_COSTS.email_draft,
+        action: "email_draft",
+        metadata: { contactId: contact.id, campaignId: sequence.id, stepId },
+      });
+    } catch (error) {
+      // A guest or a brand-new account has no card yet. Still save the copy. Sending is what requires checkout.
+      if (!(input.allowWithoutCredits && !billing.active)) {
+        throw new LeadDraftError(error instanceof Error ? error.message : "Out of credits", "credits_exhausted");
+      }
+    }
   }
 
   const saved = await saveOutreachDraft(db, userId, {
