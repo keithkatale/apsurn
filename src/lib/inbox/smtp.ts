@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import { htmlToPlain, plainToHtml, sanitizeEmailHtml, wrapEmailHtml } from "@/lib/outreach/email-html";
+import { htmlToPlain, plainToEmailHtml, sanitizeEmailHtml, wrapEmailHtml } from "@/lib/outreach/email-html";
 import { decryptToken } from "./token-crypto";
 import type { ConnectedInbox, GmailSendResult } from "./gmail";
 
@@ -45,7 +45,7 @@ export async function sendSmtpMessage(
   const password = decryptToken(inbox.refresh_token_enc);
   const transport = gmailTransport(inbox.email_address, password);
   const plain = htmlToPlain(opts.body) || opts.body;
-  const html = wrapEmailHtml(sanitizeEmailHtml(plainToHtml(opts.body)));
+  const html = wrapEmailHtml(sanitizeEmailHtml(plainToEmailHtml(opts.body)));
   try {
     const info = await transport.sendMail({
       from: inbox.email_address,

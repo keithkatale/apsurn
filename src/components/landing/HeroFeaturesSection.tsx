@@ -211,7 +211,7 @@ export function HeroFeaturesSection() {
                         aria-label="Start with this website"
                         className={`inline-flex size-8 shrink-0 items-center justify-center rounded-full transition ${
                           canSubmit
-                            ? "bg-neutral-900 text-white hover:opacity-90"
+                            ? "bg-[var(--copilot-foreground)] text-[var(--copilot-prompt-box)] hover:opacity-90"
                             : "cursor-not-allowed bg-[var(--copilot-dropdown-hover)] text-[var(--copilot-muted)] opacity-60"
                         }`}
                       >

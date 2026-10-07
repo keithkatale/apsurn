@@ -57,7 +57,8 @@ export function tokenizeLeadMentions(text: string, lead: LeadMergeSource | null 
   for (const [value, key] of replacements) {
     if (!value || value.length < 2) continue;
     const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    out = out.replace(new RegExp(escaped, "gi"), `{{${key}}}`);
+    // Whole words only: "Co-Founder" must not be tokenized inside "Co-Founders".
+    out = out.replace(new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "giu"), `{{${key}}}`);
   }
   return out;
 }

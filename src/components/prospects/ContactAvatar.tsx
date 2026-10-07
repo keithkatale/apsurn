@@ -43,8 +43,10 @@ function initialsOf(name?: string | null, email?: string | null): string {
 }
 
 /** Real profile photo URLs only — LinkedIn / email / Gravatar via unavatar. */
-export function contactPhotoSources(linkedinUrl?: string | null, email?: string | null): string[] {
+export function contactPhotoSources(linkedinUrl?: string | null, email?: string | null, photoUrl?: string | null): string[] {
   const sources: string[] = [];
+  // The photo saved with the lead comes first.
+  if (photoUrl && /^https:\/\//i.test(photoUrl)) sources.push(photoUrl);
   const handle = linkedinUrl ? linkedinHandle(linkedinUrl) : null;
   if (handle) {
     sources.push(`https://unavatar.io/linkedin/${encodeURIComponent(handle)}?fallback=false`);
@@ -65,14 +67,16 @@ export function ContactAvatar({
   name,
   linkedinUrl,
   email,
+  photoUrl,
   className = "size-9",
 }: {
   name: string | null | undefined;
   linkedinUrl?: string | null;
   email?: string | null;
+  photoUrl?: string | null;
   className?: string;
 }) {
-  const sources = useMemo(() => contactPhotoSources(linkedinUrl, email), [linkedinUrl, email]);
+  const sources = useMemo(() => contactPhotoSources(linkedinUrl, email, photoUrl), [linkedinUrl, email, photoUrl]);
   const initials = useMemo(() => initialsOf(name, email), [name, email]);
   // Defer <img> until after mount so SSR HTML always matches the first client paint.
   const [mounted, setMounted] = useState(false);
@@ -87,7 +91,7 @@ export function ContactAvatar({
   useEffect(() => {
     setIndex(0);
     setPhotoReady(false);
-  }, [linkedinUrl, email]);
+  }, [linkedinUrl, email, photoUrl]);
 
   return (
     <span

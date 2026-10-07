@@ -4,8 +4,9 @@ export function getPosthogKey() {
   return process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN?.trim() || "";
 }
 
+/** Same-origin path that next.config.ts rewrites to PostHog, so there is no cross-origin request to block. */
 export function getPosthogHost() {
-  return process.env.NEXT_PUBLIC_POSTHOG_HOST?.trim() || "https://apsurn.com";
+  return "/ingest";
 }
 
 export function initPosthog() {

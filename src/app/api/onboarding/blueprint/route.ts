@@ -35,7 +35,21 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const snapshot = await crawlSite(websiteUrl);
+    let snapshot;
+    try {
+      snapshot = await crawlSite(websiteUrl);
+    } catch (crawlError) {
+      // A wrong or unreachable address is the user's to fix, not a server failure: say so plainly and let the client send them back to enter it again.
+      console.error("[onboarding/blueprint] site unreachable", websiteUrl, crawlError instanceof Error ? crawlError.message : crawlError);
+      await supabase.from("companies").update({ status: "failed" }).eq("id", company.id);
+      return NextResponse.json(
+        {
+          error: "We couldn't open that website. Check the address for typos and try again.",
+          code: "site_unreachable",
+        },
+        { status: 422 },
+      );
+    }
     await supabase.from("companies").update({ status: "analyzing" }).eq("id", company.id);
 
     const blueprint = await generateCompanyBlueprint(snapshot);

@@ -73,6 +73,8 @@ function scanning(logs: string[], progress: number): ScanState {
   };
 }
 
+const AUTO_WRITE_LIMIT = 12;
+
 export type CampaignDraft = {
   subject: string;
   body: string;
@@ -120,6 +122,14 @@ export function CampaignWorkspace({
   leadIdRef.current = leadId;
   /** The lead whose own email is currently in the editor. Edits are saved to that lead only. */
   const editorOwnerRef = useRef<string | null>(null);
+  /** Text of the email being written right now, shown as it arrives. */
+  const [streamText, setStreamText] = useState<{ key: string; subject: string; body: string } | null>(null);
+  const [writing, setWriting] = useState<{ done: number; total: number } | null>(null);
+  const [writeBlocked, setWriteBlocked] = useState<string | null>(null);
+  const writeBlockedRef = useRef<string | null>(null);
+  writeBlockedRef.current = writeBlocked;
+  const autoWriting = useRef<string | null>(null);
+  const userPickedLead = useRef(false);
   const [scan, setScan] = useState<ScanState | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [subject, setSubject] = useState("");
@@ -208,7 +218,8 @@ export function CampaignWorkspace({
   const campaignSteps = campaign ? (stepsByCampaign[campaign.id] ?? canvasVisibleSteps(campaign.steps)) : [];
   const openerStepId = campaignSteps[0]?.id ?? null;
   const selectedKey = lead && campaign ? draftKey(lead.id, campaign.id, openerStepId) : null;
-  const selectedDrafting = Boolean(selectedKey && generatingKeys.has(selectedKey));
+  const selectedStreaming = Boolean(selectedKey && streamText?.key === selectedKey && (streamText.subject || streamText.body));
+  const selectedDrafting = Boolean(selectedKey && generatingKeys.has(selectedKey)) && !selectedStreaming;
   const leadIdsKey = campaignLeads.map((person) => person.id).join(",");
 
   useEffect(() => {
@@ -303,57 +314,120 @@ export function CampaignWorkspace({
     });
   }, [campaign, leadIdsKey, campaignLeads]);
 
-  async function generateDraft(contactId: string, sequenceId: string, regenerate: boolean, stepId?: string | null) {
+  /**
+   * Writes one lead's email and streams it into the editor as it is produced, like a chat reply.
+   * `auto` marks the queue that writes new leads' emails; it stops quietly instead of opening billing.
+   */
+  async function generateDraft(contactId: string, sequenceId: string, regenerate: boolean, stepId?: string | null, auto = false) {
     const resolvedStepId = stepId ?? openerStepId;
     const key = draftKey(contactId, sequenceId, resolvedStepId);
     if (inFlight.current.has(key)) return;
     if (!regenerate && (draftsRef.current[key] || (!resolvedStepId && draftsRef.current[draftKey(contactId, sequenceId)]))) return;
     inFlight.current.add(key);
     setGeneratingKeys((prev) => new Set(prev).add(key));
+    const isOpener = !resolvedStepId || resolvedStepId === openerStepId;
+    const person = leadMap[contactId];
+    let typedSubject = "";
+    let typedBody = "";
+    // While text arrives it belongs to nobody yet, so edits made mid-stream are never saved over it.
+    if (isOpener && leadIdRef.current === contactId) {
+      editorOwnerRef.current = null;
+      setSubject("");
+      setBody("");
+    }
+    const show = () => {
+      setStreamText({ key, subject: typedSubject, body: typedBody });
+      if (isOpener && leadIdRef.current === contactId) {
+        setSubject(typedSubject);
+        setBody(typedBody);
+      }
+    };
     try {
-      const res = await fetch("/api/outreach/draft", {
+      const res = await fetch("/api/outreach/draft/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contactId, campaignId: sequenceId, stepId: resolvedStepId ?? undefined, regenerate }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Could not write this email");
-      if (typeof data.creditBalance === "number") {
-        notifyCreditsChanged(data.creditBalance);
-      } else {
-        notifyCreditsChanged();
+      if (!res.ok || !res.body) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+        throw Object.assign(new Error(data.error ?? "Could not write this email"), { code: data.code });
       }
-      const person = leadMap[contactId];
-      const next = {
-        subject: tokenizeLeadMentions(String(data.subject ?? ""), person),
-        body: tokenizeLeadMentions(htmlToPlain(String(data.body ?? "")), person),
-      };
-      const saveKey = data.stepId ? draftKey(contactId, sequenceId, data.stepId) : key;
-      setDrafts((prev) => ({ ...prev, [saveKey]: next, [key]: next }));
-      const targetStepId = (typeof data.stepId === "string" ? data.stepId : resolvedStepId) ?? openerStepId;
-      if (targetStepId && targetStepId !== openerStepId) {
-        setStepsByCampaign((prev) => ({
-          ...prev,
-          [sequenceId]: (prev[sequenceId] ?? []).map((step) =>
-            step.id === targetStepId ? { ...step, subject: next.subject, body: next.body } : step,
-          ),
-        }));
-        // Shown for the selected lead only: one lead's email must never overwrite the campaign step for everyone.
-      } else if (leadIdRef.current === contactId) {
-        editorOwnerRef.current = contactId;
-        setSubject(next.subject);
-        setBody(next.body);
-        setSendMessage(null);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finished = false;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+        for (const part of parts) {
+          const line = part.split("\n").find((l) => l.startsWith("data:"));
+          if (!line) continue;
+          const event = JSON.parse(line.slice(5).trim()) as {
+            type: string;
+            text?: string;
+            subject?: string;
+            body?: string;
+            stepId?: string;
+            creditBalance?: number;
+            error?: string;
+            code?: string;
+          };
+          if (event.type === "subject") {
+            typedSubject += event.text ?? "";
+            show();
+          } else if (event.type === "body") {
+            typedBody += event.text ?? "";
+            show();
+          } else if (event.type === "error") {
+            throw Object.assign(new Error(event.error ?? "Could not write this email"), { code: event.code });
+          } else if (event.type === "done") {
+            finished = true;
+            if (typeof event.creditBalance === "number") notifyCreditsChanged(event.creditBalance);
+            else notifyCreditsChanged();
+            const next = {
+              subject: tokenizeLeadMentions(String(event.subject ?? ""), person),
+              body: tokenizeLeadMentions(htmlToPlain(String(event.body ?? "")), person),
+            };
+            const saveKey = event.stepId ? draftKey(contactId, sequenceId, event.stepId) : key;
+            setDrafts((prev) => ({ ...prev, [saveKey]: next, [key]: next }));
+            const targetStepId = (typeof event.stepId === "string" ? event.stepId : resolvedStepId) ?? openerStepId;
+            if (targetStepId && targetStepId !== openerStepId) {
+              setStepsByCampaign((prev) => ({
+                ...prev,
+                [sequenceId]: (prev[sequenceId] ?? []).map((step) =>
+                  step.id === targetStepId ? { ...step, subject: next.subject, body: next.body } : step,
+                ),
+              }));
+              // Shown for the selected lead only: one lead's email must never overwrite the campaign step for everyone.
+            } else if (leadIdRef.current === contactId) {
+              editorOwnerRef.current = contactId;
+              setSubject(next.subject);
+              setBody(next.body);
+              setSendMessage(null);
+            }
+          }
+        }
       }
+      if (!finished) throw new Error("The email was cut off. Try again.");
     } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (code === "billing_required") {
+        if (auto) setWriteBlocked("Add a card to write the rest of the emails.");
+        else void openCredits();
+      }
       setLeadId((current) => {
-        if (current === contactId && (!resolvedStepId || resolvedStepId === openerStepId)) {
+        if (current === contactId && isOpener && code !== "billing_required") {
           setSendMessage(error instanceof Error ? error.message : "Could not write this email");
         }
         return current;
       });
+      if (auto) throw error;
     } finally {
       inFlight.current.delete(key);
+      setStreamText((current) => (current?.key === key ? null : current));
       setGeneratingKeys((prev) => {
         const next = new Set(prev);
         next.delete(key);
@@ -361,6 +435,41 @@ export function CampaignWorkspace({
       });
     }
   }
+
+  // New leads get their email written automatically, one after another, each streaming into the editor.
+  useEffect(() => {
+    if (!campaign || !openerStepId || writeBlocked) return;
+    const pending = campaignLeads.filter((person) => person.email && !draftsRef.current[draftKey(person.id, campaign.id, openerStepId)]).slice(0, AUTO_WRITE_LIMIT);
+    if (pending.length === 0 || autoWriting.current === campaign.id) return;
+    autoWriting.current = campaign.id;
+    let cancelled = false;
+    void (async () => {
+      for (let index = 0; index < pending.length; index += 1) {
+        if (cancelled) break;
+        const person = pending[index];
+        setWriting({ done: index, total: pending.length });
+        // The editor follows the lead being written, unless they picked someone themselves.
+        if (!userPickedLead.current) setLeadId(person.id);
+        const key = draftKey(person.id, campaign.id, openerStepId);
+        try {
+          await generateDraft(person.id, campaign.id, false, openerStepId, true);
+        } catch {
+          // A failed email is skipped; the rest keep going. Billing stops the queue (writeBlocked).
+        }
+        // Selecting the lead may have started this same email from the editor: wait for it so emails are written one at a time.
+        while (inFlight.current.has(key)) await new Promise((resolve) => window.setTimeout(resolve, 150));
+        if (writeBlockedRef.current) break;
+        await new Promise((resolve) => window.setTimeout(resolve, 700));
+      }
+      setWriting(null);
+      if (autoWriting.current === campaign.id) autoWriting.current = null;
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // The queue starts per campaign and when its leads change; generateDraft is recreated every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaign?.id, openerStepId, leadIdsKey, writeBlocked]);
 
   // Show the selected lead's own email: their saved draft, or one written now from what we know about them.
   useEffect(() => {
@@ -911,7 +1020,9 @@ export function CampaignWorkspace({
                     onClick={() => void sendAllGenerated()}
                   >
                     {sendingAll ? (
-                      "Sending all…"
+                      <span className="inline-flex items-center justify-center" role="status" aria-label="Sending all">
+                        <Loader2 className="size-4 animate-spin" aria-hidden />
+                      </span>
                     ) : (
                       <span className="inline-flex items-center gap-1.5">
                         Send all now
@@ -1019,7 +1130,10 @@ export function CampaignWorkspace({
                       <li key={person.id}>
                         <button
                           type="button"
-                          onClick={() => setLeadId(selected ? null : person.id)}
+                          onClick={() => {
+                            userPickedLead.current = true;
+                            setLeadId(selected ? null : person.id);
+                          }}
                           className={cn(
                             "mb-1 flex w-full items-start gap-2.5 rounded-lg px-2.5 py-3 text-left",
                             selected ? "bg-[#E8F1FC]" : "hover:bg-neutral-50",
@@ -1180,6 +1294,10 @@ export function CampaignWorkspace({
                     onSubjectChange={setSubject}
                     onBodyChange={setBody}
                     drafting={selectedDrafting}
+                    streaming={selectedStreaming}
+                    writingStatus={
+                      writeBlocked ?? (writing ? `Writing email ${Math.min(writing.done + 1, writing.total)} of ${writing.total}…` : null)
+                    }
                     onRegenerateOpener={() => {
                       if (lead && campaign) void generateDraft(lead.id, campaign.id, true, openerStepId);
                     }}

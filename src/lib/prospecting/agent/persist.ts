@@ -9,6 +9,7 @@ import { spendCredits } from "@/lib/billing/credits";
 import { CREDIT_COSTS } from "@/lib/billing/plans";
 import { isSuppressed, saveCanonicalCompany, saveCanonicalContact } from "../pipeline";
 import type { CandidateCompany, CandidateContact } from "../types";
+import { contactPhotoUrl, countryFromLocation, fetchCompanyDescription, trackProfileTask } from "../profile";
 import type { AgentRunContext } from "./context";
 import { rememberDirectory } from "./directories";
 
@@ -74,10 +75,12 @@ export async function persistLead(
 
   const canonical = await saveCanonicalCompany(company);
 
-  const { data: snapshot, error } = await ctx.db
-    .from("prospect_companies")
-    .upsert(
-      {
+  // Profile details the leads table shows. Failures here never block saving the lead.
+  const sourceDescription = typeof company.sourceRef.description === "string" ? company.sourceRef.description : null;
+  const knownDescription = company.description ?? sourceDescription ?? null;
+  const companyCountry = company.country ?? countryFromLocation(company.location) ?? null;
+
+  const companyRow = {
         user_id: ctx.userId,
         company_id: ctx.listCompanyId,
         list_id: ctx.listId,
@@ -88,6 +91,8 @@ export async function persistLead(
         industry: company.industry,
         employee_range: company.employeeRange,
         location: company.location,
+        description: knownDescription,
+        country: companyCountry,
         source: company.source,
         source_ref: company.sourceRef,
         icp_fit_score: company.icpFitScore,
@@ -98,12 +103,27 @@ export async function persistLead(
         // (Step 2) — there is no separate judgment left for a human to
         // ratify before it becomes an actionable lead.
         status: "qualified",
-      },
-      { onConflict: "list_id,domain" }
-    )
-    .select()
-    .single();
+  };
+  const saveCompany = (row: Record<string, unknown>) =>
+    ctx.db.from("prospect_companies").upsert(row, { onConflict: "list_id,domain" }).select().single();
+  let { data: snapshot, error } = await saveCompany(companyRow);
+  // Before migration 0034 the profile columns don't exist: save the lead without them rather than losing it.
+  if (error && /description|country/i.test(error.message)) {
+    const { description: _d, country: _c, ...legacy } = companyRow;
+    ({ data: snapshot, error } = await saveCompany(legacy));
+  }
   if (error || !snapshot) throw new Error(error?.message ?? "Could not save prospect company");
+
+  // The description is read from the company's site in parallel with finding the next leads; the row is filled in when it arrives.
+  if (!knownDescription && company.websiteUrl) {
+    const companyRowId = snapshot.id;
+    trackProfileTask(
+      ctx.runId,
+      fetchCompanyDescription(company.websiteUrl).then(async (text) => {
+        if (text) await ctx.db.from("prospect_companies").update({ description: text }).eq("id", companyRowId);
+      }),
+    );
+  }
 
   let contactCount = 0;
   let recommended: { id: string; confidence: number; qualifyReason: string | null; evidence: CandidateContact["evidence"] } | null = null;
@@ -111,10 +131,7 @@ export async function persistLead(
     const canonicalPersonId = await saveCanonicalContact(canonical.id, company.domain, contact);
     const qualifyReason =
       typeof contact.sourceRef.qualifyReason === "string" ? contact.sourceRef.qualifyReason : null;
-    const { data: savedContact } = await ctx.db
-      .from("contacts")
-      .upsert(
-        {
+    const contactRow = {
           prospect_company_id: snapshot.id,
           canonical_person_id: canonicalPersonId,
           full_name: contact.fullName,
@@ -123,6 +140,8 @@ export async function persistLead(
           email_status: contact.emailStatus === "observed" ? "unverified" : contact.emailStatus,
           phone: contact.phone,
           linkedin_url: contact.linkedinUrl,
+          photo_url: contactPhotoUrl({ photoUrl: contact.photoUrl, linkedinUrl: contact.linkedinUrl }),
+          country: contact.country ?? countryFromLocation(contact.location) ?? companyCountry,
           source: contact.source,
           source_ref: contact.sourceRef,
           contact_origin: contact.origin,
@@ -130,11 +149,15 @@ export async function persistLead(
           evidence: contact.evidence,
           observed_at: contact.evidence[0]?.observedAt,
           qualify_reason: qualifyReason,
-        },
-        { onConflict: "prospect_company_id,canonical_person_id" }
-      )
-      .select("id")
-      .single();
+    };
+    const saveContact = (row: Record<string, unknown>) =>
+      ctx.db.from("contacts").upsert(row, { onConflict: "prospect_company_id,canonical_person_id" }).select("id").single();
+    const firstTry = await saveContact(contactRow);
+    let savedContact = firstTry.data;
+    if (firstTry.error && /photo_url|country/i.test(firstTry.error.message)) {
+      const { photo_url: _p, country: _c, ...legacyContact } = contactRow;
+      ({ data: savedContact } = await saveContact(legacyContact));
+    }
     contactCount += 1;
     if (savedContact && (!recommended || contact.confidence > recommended.confidence)) {
       recommended = { id: savedContact.id, confidence: contact.confidence, qualifyReason, evidence: contact.evidence };

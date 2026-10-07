@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { cn } from "@/lib/cn";
@@ -41,6 +41,9 @@ export function ScanOverlay({
   onRestart,
   restartLabel = "Run again",
   onRetry,
+  secondaryLabel,
+  onSecondary,
+  smooth = false,
   compact = false,
   className,
 }: {
@@ -57,10 +60,25 @@ export function ScanOverlay({
   onRestart?: () => void;
   restartLabel?: string;
   onRetry?: () => void;
+  /** A second, quieter action shown beside "Try again" when the run stopped. */
+  secondaryLabel?: string;
+  onSecondary?: () => void;
+  /** Keep the bar gently moving between real updates so it never looks stuck. */
+  smooth?: boolean;
   compact?: boolean;
   className?: string;
 }) {
   const logsRef = useRef<HTMLOListElement>(null);
+  const [creep, setCreep] = useState(0);
+
+  useEffect(() => {
+    if (!smooth || state.phase !== "scanning") return;
+    const cap = Math.min(96, state.progress + 14);
+    const id = window.setInterval(() => setCreep((c) => Math.min(cap, Math.max(c, state.progress) + (cap - Math.max(c, state.progress)) * 0.07)), 350);
+    return () => window.clearInterval(id);
+  }, [smooth, state.phase, state.progress]);
+
+  const shown = smooth && state.phase === "scanning" ? Math.max(state.progress, creep) : state.progress;
 
   useEffect(() => {
     const el = logsRef.current;
@@ -85,17 +103,17 @@ export function ScanOverlay({
           role="progressbar"
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-valuenow={Math.round(state.progress)}
+          aria-valuenow={Math.round(shown)}
           aria-label={title}
         >
           <span
             className={`market-scan-bar-fill ${state.phase === "scanning" ? "is-live" : ""}`}
-            style={{ width: `${Math.min(100, Math.max(4, state.progress))}%` }}
+            style={{ width: `${Math.min(100, Math.max(4, shown))}%` }}
           />
         </div>
 
         <div className="market-scan-meta">
-          <span>{Math.round(state.progress)}%</span>
+          <span>{Math.round(shown)}%</span>
           <span className="inline-flex items-center gap-1">
             {state.phase === "done" && <CheckCircle2 className="size-3.5 text-emerald-600" />}
             {state.phase === "error" ? errorLabel : state.phase === "done" ? doneLabel : runningLabel}
@@ -125,11 +143,18 @@ export function ScanOverlay({
         {state.phase === "error" && (
           <div className="mt-4 flex flex-col items-center gap-2">
             {state.error && <p className="text-sm text-red-600">{state.error}</p>}
-            {onRetry && (
-              <ThreeDButton type="button" variant="solid" size="sm" onClick={onRetry}>
-                Try again
-              </ThreeDButton>
-            )}
+            <div className="flex items-center gap-2">
+              {onRetry && (
+                <ThreeDButton type="button" variant="solid" size="sm" onClick={onRetry}>
+                  Try again
+                </ThreeDButton>
+              )}
+              {onSecondary && secondaryLabel && (
+                <ThreeDButton type="button" variant="soft" size="sm" onClick={onSecondary}>
+                  {secondaryLabel}
+                </ThreeDButton>
+              )}
+            </div>
           </div>
         )}
       </div>

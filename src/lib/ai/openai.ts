@@ -1,9 +1,10 @@
 import OpenAI from "openai";
 import type { Tool } from "openai/resources/responses/responses";
+import { createAnthropicClient, getAnthropicModel, isAnthropicConfigured } from "./anthropic";
 import { getActiveProvider, getGeminiApiKey, getVertexServiceAccountJson } from "./settings";
 import { createVertexAiClient, getVertexModel, isVertexConfigured } from "./vertex";
 
-// The app can route through OpenAI, OpenRouter, or Vertex AI/Gemini,
+// The app can route through Anthropic Claude, OpenAI, OpenRouter, or Vertex AI/Gemini,
 // switchable at runtime from the admin panel (see src/lib/ai/settings.ts).
 // OpenAI and OpenRouter both speak the real OpenAI Responses API, so they
 // share one code path here (just a different baseURL/key/model). Vertex is
@@ -32,7 +33,7 @@ export function toFunctionTool(decl: AiToolDeclaration): Tool {
 }
 
 export function isAiConfigured(): boolean {
-  return Boolean(process.env.OPENAI_API_KEY?.trim() || process.env.OPENROUTER_API_KEY?.trim() || isVertexConfigured());
+  return Boolean(isAnthropicConfigured() || process.env.OPENAI_API_KEY?.trim() || process.env.OPENROUTER_API_KEY?.trim() || isVertexConfigured());
 }
 
 /**
@@ -49,6 +50,13 @@ export interface AiClient {
   };
 }
 
+/**
+ * Reasoning models count their hidden thinking against `max_output_tokens`, so the tight caps the call sites
+ * were written with (24, 200, 700 tokens) can be used up before any text is produced and come back empty.
+ * Extra room is added to every capped call; it only raises the ceiling, it never makes answers longer.
+ */
+const REASONING_HEADROOM_TOKENS = 2048;
+
 /** `thinking_budget` is a Gemini-only knob (see vertex.ts); the real Responses API would reject it. */
 function withoutVendorParams(client: OpenAI): AiClient {
   return {
@@ -56,6 +64,7 @@ function withoutVendorParams(client: OpenAI): AiClient {
       create(params, options) {
         const { thinking_budget: _ignored, ...rest } = params;
         void _ignored;
+        if (typeof rest.max_output_tokens === "number") rest.max_output_tokens += REASONING_HEADROOM_TOKENS;
         return client.responses.create(rest as never, options);
       },
     },
@@ -64,7 +73,7 @@ function withoutVendorParams(client: OpenAI): AiClient {
 
 function createOpenAiClient(): { ai: AiClient; model: string } {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) throw new Error("OpenAI is not configured. Set OPENAI_API_KEY.");
+  if (!apiKey) throw new Error("OpenAI is selected as the AI provider but OPENAI_API_KEY is empty. Add the key to .env.local (or the Cloud Run service) and restart.");
   return {
     ai: withoutVendorParams(new OpenAI({ apiKey })),
     model: process.env.OPENAI_MODEL?.trim() || OPENAI_DEFAULT_MODEL,
@@ -105,6 +114,7 @@ export async function getAiClient(): Promise<{ ai: AiClient; model: string }> {
     return { ai: createVertexAiClient(geminiApiKey, serviceAccountJson) as unknown as AiClient, model: getVertexModel() };
   }
 
+  if (provider === "anthropic") return { ai: createAnthropicClient() as unknown as AiClient, model: getAnthropicModel() };
   if (provider === "openai") return createOpenAiClient();
   return createOpenRouterClient();
 }

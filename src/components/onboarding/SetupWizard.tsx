@@ -16,6 +16,12 @@ import { cn } from "@/lib/cn";
 import { SetupStepper } from "./SetupStepper";
 import type { BlueprintData } from "./BlueprintReviewForm";
 
+/** How many accounts setup looks for before it stops, and the longest the search may run. */
+const SETUP_LEADS = 10;
+const SETUP_SEARCH_MS = 110_000;
+/** Every setup step stays on screen exactly this long before the next one starts. */
+const STEP_HOLD_MS = 5000;
+
 let heroSetupStartedFor = "";
 let guestStart: Promise<Response> | null = null;
 
@@ -115,6 +121,9 @@ function mapProspects(raw: unknown): ProspectRow[] {
           email: typeof c.email === "string" ? c.email : null,
           email_status: typeof c.email_status === "string" ? c.email_status : "unverified",
           phone: typeof c.phone === "string" ? c.phone : null,
+          linkedin_url: typeof c.linkedin_url === "string" ? c.linkedin_url : null,
+          photo_url: typeof c.photo_url === "string" ? c.photo_url : null,
+          country: typeof c.country === "string" ? c.country : null,
           lead_status: (typeof c.lead_status === "string" ? c.lead_status : "new") as LeadStatus,
           qualify_reason: typeof c.qualify_reason === "string" ? c.qualify_reason : null,
         },
@@ -127,6 +136,8 @@ function mapProspects(raw: unknown): ProspectRow[] {
         domain: typeof company.domain === "string" ? company.domain : "",
         industry: typeof company.industry === "string" ? company.industry : null,
         location: typeof company.location === "string" ? company.location : null,
+        description: typeof company.description === "string" ? company.description : null,
+        country: typeof company.country === "string" ? company.country : null,
         icp_fit_score: typeof company.icp_fit_score === "number" ? company.icp_fit_score : null,
         data_confidence: typeof company.data_confidence === "number" ? company.data_confidence : null,
         status: typeof company.status === "string" ? company.status : "new",
@@ -160,7 +171,7 @@ function BlueprintFact({ label, value, className }: { label: string; value: stri
 
 function SetupScanFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-0 w-full flex-1 items-center justify-center p-4">
+    <div className="setup-fade flex min-h-0 w-full flex-1 items-center justify-center p-4">
       <div className="w-[22rem] shrink-0">{children}</div>
     </div>
   );
@@ -175,6 +186,8 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
     stripProtocol(initialUrl || searchParams.get("url") || searchParams.get("websiteUrl") || ""),
   );
   const [domainError, setDomainError] = useState(false);
+  /** The address we couldn't open; set when the website read fails so the user can go back and fix it. */
+  const [badDomain, setBadDomain] = useState<string | null>(null);
   const [scan, setScan] = useState<ScanState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
@@ -187,11 +200,15 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
   const [positioning, setPositioning] = useState("");
   const [productSummary, setProductSummary] = useState("");
   const [competitorsText, setCompetitorsText] = useState("");
+  const [competitorDetails, setCompetitorDetails] = useState<Record<string, { domain: string; reason: string }>>({});
   const [campaigns, setCampaigns] = useState<CampaignDefinition[]>([]);
   const [campaignLoading, setCampaignLoading] = useState(false);
   const [prospects, setProspects] = useState<ProspectRow[]>([]);
   const [competitorsReady, setCompetitorsReady] = useState(false);
   const [accountsReady, setAccountsReady] = useState(false);
+  const autoGoRef = useRef<() => void>(() => {});
+  /** An earlier step the person clicked in the progress bar. Null means follow the live step. */
+  const [viewStep, setViewStep] = useState<number | null>(null);
   const confirmLock = useRef(false);
   const fromQuery = useRef(
     Boolean(initialUrl || searchParams.get("url") || searchParams.get("websiteUrl")),
@@ -254,7 +271,9 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
     }
     setStarted(true);
     setStep(1);
+    setViewStep(null);
     setError(null);
+    setBadDomain(null);
     setScan(scanningState(["Reading your website…"], 12));
     const ticks = [
       { at: 400, text: "Extracting product and positioning", progress: 32 },
@@ -281,7 +300,15 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
         body: JSON.stringify({ websiteUrl: `https://${stripProtocol(domain)}` }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Could not analyze the website");
+      if (!res.ok) {
+        if (data.code === "site_unreachable") {
+          // Wrong address: show a plain message, then take them back to the landing page to enter the domain again.
+          setScan(null);
+          setBadDomain(stripProtocol(domain));
+          return;
+        }
+        throw new Error(data.error ?? "Could not analyze the website");
+      }
       setCompanyId(data.company.id);
       setCompanyName(displayCompanyName(data.company?.name, domain));
       applyBlueprint(data.blueprint as BlueprintData);
@@ -322,7 +349,11 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
       const data = await found.json().catch(() => ({ competitors: [] }));
       if (!found.ok) throw new Error(data.error ?? "Could not find competitors");
       const names = Array.isArray(data.competitors) ? data.competitors.filter((x: unknown): x is string => typeof x === "string") : [];
-      setCompetitorsText(listToText(names));
+      const details = Array.isArray(data.details) ? (data.details as Array<{ name?: string; domain?: string; reason?: string }>) : [];
+      setCompetitorDetails(
+        Object.fromEntries(details.filter((d) => d.name && d.domain).map((d) => [d.name as string, { domain: d.domain as string, reason: d.reason ?? "" }])),
+      );
+      setCompetitorsText(names.join(", "));
       setCompetitorsReady(true);
       setScan(null);
     } catch (err) {
@@ -395,13 +426,18 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
     setScan(scanningState(["Finding companies that match your ICP…"], 10));
     try {
       const personas = (blueprint.personas ?? []).map((p) => p.title).filter(Boolean);
+      // Setup looks for SETUP_LEADS accounts and stops there; a hard timer ends a slow search with whatever was found.
+      const controller = new AbortController();
+      const hardStop = window.setTimeout(() => controller.abort(), SETUP_SEARCH_MS);
       const res = await fetch("/api/prospecting/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           version: 1,
-          listName: "Setup — first 6 accounts",
-          limit: 6,
+          setup: true,
+          listName: `Setup — first ${SETUP_LEADS} accounts`,
+          limit: SETUP_LEADS,
           criteria: {
             industries: textToList(industries),
             companySizeRange,
@@ -423,13 +459,35 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
       const decoder = new TextDecoder();
       let buffer = "";
       let lastPoll = 0;
+      let refreshing = false;
+      let savedSoFar = 0;
+      // Never awaited inside the stream loop: a slow table load must not stall reading the search.
       const refresh = async () => {
-        const listRes = await fetch("/api/prospect-companies");
-        const listData = await listRes.json().catch(() => ({ companies: [] }));
-        setProspects(mapProspects(listData.companies));
+        if (refreshing) return;
+        refreshing = true;
+        try {
+          const listRes = await fetch("/api/prospect-companies");
+          const listData = await listRes.json().catch(() => ({ companies: [] }));
+          savedSoFar = Array.isArray(listData.companies) ? listData.companies.length : 0;
+          setProspects(mapProspects(listData.companies));
+          // Target reached: end the search here instead of letting it keep looking.
+          if (savedSoFar >= SETUP_LEADS) controller.abort();
+        } catch {
+          // A missed refresh is retried on the next tick.
+        } finally {
+          refreshing = false;
+        }
       };
       while (true) {
-        const { done, value } = await reader.read();
+        let chunk: ReadableStreamReadResult<Uint8Array>;
+        try {
+          chunk = await reader.read();
+        } catch (readError) {
+          // Aborted by the target or the time limit: keep what was found.
+          if ((readError as { name?: string }).name === "AbortError") break;
+          throw readError;
+        }
+        const { done, value } = chunk;
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
         const parts = buffer.split("\n\n");
@@ -480,6 +538,8 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
                 progress: 100,
                 logs: [{ id: uid(), text: `Saved ${found} companies · ${event.contactCount ?? 0} people` }],
               });
+              // Let the finished state register before the table takes over the screen.
+              await new Promise((resolve) => window.setTimeout(resolve, 900));
             }
           } catch (err) {
             if (err instanceof SyntaxError) continue;
@@ -487,12 +547,15 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
           }
         }
         const now = Date.now();
-        if (now - lastPoll > 2500) {
+        if (now - lastPoll > 2000) {
           lastPoll = now;
-          await refresh();
+          void refresh();
         }
       }
+      window.clearTimeout(hardStop);
+      refreshing = false;
       await refresh();
+      if (savedSoFar === 0) throw new Error("No accounts matched this search.");
       setAccountsReady(true);
       setScan(null);
     } catch (err) {
@@ -523,6 +586,11 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
 
   const showScan = Boolean(scan && (scan.phase === "scanning" || scan.phase === "error"));
   const blueprintReview = step === 1 && started && Boolean(blueprint) && !showScan;
+  // Setup keeps working through `step`; `view` is only what is on screen, so people can look back at an earlier step while it continues.
+  const view = viewStep ?? step;
+  const live = view === step;
+  const scanHere = live && showScan;
+  const reviewShown = view === 1 && started && Boolean(blueprint) && !scanHere;
 
   advanceRef.current = {
     approveAndContinue: () => {
@@ -539,62 +607,51 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
     },
   };
 
-  useEffect(() => {
-    if (step !== 1 || !blueprintReview) return;
-    const id = window.setTimeout(() => advanceRef.current.approveAndContinue(), 3000);
-    return () => window.clearTimeout(id);
-  }, [step, blueprintReview]);
-
-  useEffect(() => {
-    if (step !== 2 || !competitorsReady || showScan) return;
-    const id = window.setTimeout(() => advanceRef.current.loadCampaigns(), 2000);
-    return () => window.clearTimeout(id);
-  }, [step, competitorsReady, showScan]);
-
-  useEffect(() => {
-    if (step !== 3 || campaignLoading || campaigns.length === 0 || error) return;
-    const id = window.setTimeout(() => advanceRef.current.findAccounts(), 2000);
-    return () => window.clearTimeout(id);
-  }, [step, campaignLoading, campaigns.length, error]);
-
-  useEffect(() => {
-    if (step !== 4 || !accountsReady || showScan) return;
-    const id = window.setTimeout(() => advanceRef.current.finishSetup(), 2000);
-    return () => window.clearTimeout(id);
-  }, [step, accountsReady, showScan]);
-
   const competitorNames = textToList(competitorsText);
   const scanCentered =
-    (showScan && step !== 4) || (step === 3 && campaignLoading && campaigns.length === 0);
-  const accountRows =
-    prospects.length > 0
-      ? prospects
-      : showScan
-        ? Array.from({ length: 10 }, (_, index) => ({
-            id: `setup-placeholder-${index}`,
-            name: "Searching…",
-            domain: "",
-            industry: null,
-            location: null,
-            icp_fit_score: null,
-            data_confidence: null,
-            status: "new",
-            qualify_reason: null,
-            evidence: [],
-            recommended_contact_id: null,
-            archived_at: null,
-            contacts: [emptyContact(`setup-placeholder-${index}-c`, "Finding decision maker…")],
-          }))
-        : [];
+    (scanHere && view !== 4) || (view === 3 && live && campaignLoading && campaigns.length === 0);
+  // The table appears with the first real lead; there are no placeholder rows while the search starts.
+  const accountRows = prospects;
+
+  const auto = blueprintReview
+    ? { key: "review", label: "competitors", go: () => advanceRef.current.approveAndContinue() }
+    : step === 2 && competitorsReady && !showScan
+      ? { key: "competitors", label: "campaigns", go: () => advanceRef.current.loadCampaigns() }
+      : step === 3 && !campaignLoading && campaigns.length > 0 && !error
+        ? { key: "campaigns", label: "accounts", go: () => advanceRef.current.findAccounts() }
+        : step === 4 && accountsReady && !showScan
+          ? { key: "accounts", label: "your campaigns", go: () => advanceRef.current.finishSetup() }
+          : null;
+
+  // The next step starts after STEP_HOLD_MS, no matter what is on screen.
+  const autoKey = auto?.key ?? null;
+  useEffect(() => {
+    if (!autoKey) return;
+    const id = window.setTimeout(() => autoGoRef.current(), STEP_HOLD_MS);
+    return () => window.clearTimeout(id);
+  }, [autoKey]);
+  autoGoRef.current = auto?.go ?? (() => {});
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {started && (
+      {started && !badDomain && (
         <div className="shrink-0 pb-3">
-          <SetupStepper current={step} />
+          <SetupStepper
+            current={step}
+            viewing={view}
+            onSelect={(n) => setViewStep(n === step ? null : n)}
+          />
+          {!live ? (
+            <p className="mt-2 text-[12px] text-neutral-500">
+              Setup is still running in the background.{" "}
+              <button type="button" className="font-medium text-[#4379EE] hover:underline" onClick={() => setViewStep(null)}>
+                Jump to the current step
+              </button>
+            </p>
+          ) : null}
         </div>
       )}
-      {error && !showScan && (
+      {error && !showScan && live && (
         <div className="mb-3 flex shrink-0 items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           <span>{error}</span>
           <button
@@ -615,17 +672,17 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
       <div
         className={cn(
           "min-h-0 flex-1",
-          step === 1 && !started && "flex items-center justify-center pb-[8vh]",
-          scanCentered || step === 4
+          view === 1 && !started && "flex items-center justify-center pb-[8vh]",
+          scanCentered || view === 4
             ? "flex flex-col overflow-hidden"
-            : blueprintReview
+            : reviewShown
               ? "flex items-center justify-center overflow-y-auto"
-              : step === 1 && !started
+              : view === 1 && !started
                 ? ""
                 : "overflow-y-auto overscroll-contain",
         )}
       >
-      {step === 1 && !started && (
+      {view === 1 && !started && (
         <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-5 text-center">
           <div>
             <h1 className="text-2xl font-semibold text-neutral-900">Enter your business domain.</h1>
@@ -654,7 +711,31 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
         </div>
       )}
 
-      {step === 1 && started && showScan && (
+      {badDomain && (
+        <div className="setup-fade mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-4 px-4 text-center">
+          <div className="flex size-12 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+            <Globe className="size-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-neutral-900">We couldn&apos;t find {badDomain}</h2>
+            <p className="mt-1 text-sm text-neutral-600">
+              Something went wrong reaching that website. The address may have a typo, or the site may not exist or be down.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* Both start afresh from the landing page, where the domain is entered. */}
+            <ThreeDButton type="button" variant="solid" size="md" onClick={() => router.push("/")}>
+              <span>Edit address</span>
+              <ArrowRight className="size-3.5" />
+            </ThreeDButton>
+            <ThreeDButton type="button" variant="soft" size="md" onClick={() => router.push("/")}>
+              <span>Try again</span>
+            </ThreeDButton>
+          </div>
+        </div>
+      )}
+
+      {view === 1 && started && scanHere && (
         <SetupScanFrame>
           <ScanOverlay
             compact
@@ -662,16 +743,15 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
             kicker="Step 1"
             title="Researching your company"
             runningLabel="Reading"
-            onRetry={() => {
-              setScan(null);
-              setStarted(false);
-              setStep(1);
-            }}
+            smooth
+            onRetry={() => void analyze()}
+            secondaryLabel="Change address"
+            onSecondary={() => router.push("/")}
           />
         </SetupScanFrame>
       )}
 
-      {blueprintReview && blueprint && (
+      {reviewShown && blueprint && (
         <div className="setup-rise mx-auto flex w-full max-w-xl flex-col items-center px-1 py-4">
           <PricingCardShell highlight className="h-auto w-full p-2.5" innerClassName="flex-none gap-3 p-3 sm:p-3.5">
             <div className="flex items-center gap-3">
@@ -706,7 +786,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
         </div>
       )}
 
-      {step === 2 && showScan && (
+      {view === 2 && scanHere && (
         <SetupScanFrame>
           <ScanOverlay
             compact
@@ -714,12 +794,13 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
             kicker="Step 2"
             title="Exploring competitors"
             runningLabel="Listing"
+            smooth
             onRetry={() => void approveAndContinue()}
           />
         </SetupScanFrame>
       )}
 
-      {step === 2 && !showScan && (
+      {view === 2 && !scanHere && (
         <div className="setup-rise mx-auto w-full max-w-[920px]">
           <PricingCardShell className="p-3" innerClassName="p-3 sm:p-4">
             <div className="grid gap-4 md:grid-cols-2 md:gap-0">
@@ -748,8 +829,13 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
                   )}
                   {competitorNames.map((name) => (
                     <li key={name} className="flex items-center gap-2 rounded-lg bg-neutral-50 px-2 py-1.5 text-[13px]">
-                      <CompanyFavicon domain={competitorDomain(name)} name={name} className="size-4" />
-                      <span className="truncate text-neutral-800">{name}</span>
+                      <CompanyFavicon domain={competitorDetails[name]?.domain ?? competitorDomain(name)} name={name} className="size-4" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-neutral-800">{name}</span>
+                        {competitorDetails[name]?.reason ? (
+                          <span className="block truncate text-[11px] text-neutral-500">{competitorDetails[name].reason}</span>
+                        ) : null}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -759,7 +845,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
         </div>
       )}
 
-      {step === 3 && campaignLoading && campaigns.length === 0 && (
+      {view === 3 && live && campaignLoading && campaigns.length === 0 && (
         <SetupScanFrame>
           <ScanOverlay
             compact
@@ -767,11 +853,12 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
             kicker="Step 3"
             title="Defining campaigns"
             runningLabel="Designing"
+            smooth
           />
         </SetupScanFrame>
       )}
 
-      {step === 3 && campaigns.length > 0 && (
+      {view === 3 && campaigns.length > 0 && (
         <div className="mx-auto grid w-full max-w-[760px] gap-3 md:grid-cols-2">
           {campaigns.map((campaign) => (
             <div key={campaign.segmentKey} className="setup-rise">
@@ -782,8 +869,8 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
         </div>
       )}
 
-      {step === 4 && (
-        <div className="relative flex min-h-0 flex-1 flex-col">
+      {view === 4 && (
+        <div className="setup-fade relative flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {accountRows.length > 0 ? (
               <ContactsTable
@@ -791,13 +878,13 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
                 selected={new Set()}
                 onSelectedChange={() => {}}
                 readOnly
-                maskEmails={showScan}
+                maskEmails={scanHere}
               />
-            ) : (
+            ) : scanHere ? null : (
               <p className="py-10 text-center text-sm text-neutral-500">No accounts yet</p>
             )}
           </div>
-          {showScan && scan && (
+          {scanHere && scan && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center px-4">
               <div className="pointer-events-auto w-[22rem] shrink-0">
                 <ScanOverlay
@@ -806,6 +893,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
                   kicker="Step 4"
                   title="Finding accounts & people"
                   runningLabel="Searching"
+                  smooth
                   onRetry={() => void findAccounts()}
                 />
               </div>
@@ -814,7 +902,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
         </div>
       )}
 
-      {step === 5 && (
+      {view === 5 && (
         <SetupScanFrame>
           <ScanOverlay
             compact
@@ -822,6 +910,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
             kicker="Step 5"
             title="Opening campaigns"
             runningLabel="Drafting"
+            smooth
             onRetry={() => void finishSetup()}
           />
         </SetupScanFrame>

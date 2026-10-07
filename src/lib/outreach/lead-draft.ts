@@ -8,10 +8,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { spendCredits } from "@/lib/billing/credits";
 import { getBillingStatus } from "@/lib/billing/entitlements";
 import { CREDIT_COSTS } from "@/lib/billing/plans";
-import { draftFollowupForContact, draftOpener } from "./draft";
+import { buildFollowupPrompt, buildOpenerPrompt, runDraft, streamDraft, type OutreachDraft } from "./draft";
 import { loadLeadDossier } from "./lead-context";
 import { tokenizeLeadMentions } from "./merge-fields";
 import { getOwnedContact } from "./owned-contact";
+import { loadSenderProfile } from "./sender";
+import { fillSenderPlaceholders } from "./sender-name";
 import { getOutreachDraft, saveOutreachDraft, type StoredDraft } from "./persist-draft";
 
 export class LeadDraftError extends Error {
@@ -36,7 +38,16 @@ export interface EnsureLeadDraftInput {
 
 export type EnsuredLeadDraft = StoredDraft & { stepId: string | null; cached: boolean; creditBalance?: number };
 
-export async function ensureLeadDraft(db: SupabaseClient, input: EnsureLeadDraftInput): Promise<EnsuredLeadDraft> {
+interface PreparedDraft {
+  cached: EnsuredLeadDraft | null;
+  prompt: string;
+  failure: string;
+  /** Save the finished draft (formatted, tokenized) and charge for it. */
+  finish: (draft: OutreachDraft, options: { charge: boolean }) => Promise<EnsuredLeadDraft>;
+}
+
+/** Everything needed to write one lead's email at one step: their saved draft if there is one, else the prompt and how to save the result. */
+async function prepareLeadDraft(db: SupabaseClient, input: EnsureLeadDraftInput): Promise<PreparedDraft> {
   const { userId } = input;
   const contact = await getOwnedContact(db, userId, input.contactId);
   if (!contact) throw new LeadDraftError("Contact not found", "contact_not_found");
@@ -57,7 +68,9 @@ export async function ensureLeadDraft(db: SupabaseClient, input: EnsureLeadDraft
 
   if (!input.regenerate && stepId) {
     const existing = await getOutreachDraft(db, userId, contact.id, sequence.id, stepId);
-    if (existing?.subject && existing.body) return { ...existing, stepId, cached: true };
+    if (existing?.subject && existing.body) {
+      return { cached: { ...existing, stepId, cached: true }, prompt: "", failure: "", finish: async () => ({ ...existing, stepId, cached: true }) };
+    }
   }
 
   const company = contact.company;
@@ -68,92 +81,123 @@ export async function ensureLeadDraft(db: SupabaseClient, input: EnsureLeadDraft
     companyName: company.name,
     companyDomain: company.domain,
   };
-  const [{ data: blueprint }, { data: sender }, dossier] = await Promise.all([
+  const [{ data: blueprint }, senderProfile, dossier] = await Promise.all([
     db.from("company_blueprints").select("product_summary,value_prop").eq("company_id", company.company_id).maybeSingle(),
-    db.from("companies").select("name").eq("id", company.company_id).maybeSingle(),
+    loadSenderProfile(userId),
     loadLeadDossier(db, contact.id),
   ]);
-  const senderName = (sender?.name ?? "there").split(/\s+/)[0] ?? "there";
+  const senderName = senderProfile.firstName;
   const productSummary = blueprint?.product_summary ?? blueprint?.value_prop ?? null;
   const variant = input.regenerate ? Date.now() % 1000 : 0;
 
-  let draft;
+  let prompt: string;
+  if (stepIndex > 0) {
+    const previous = steps[stepIndex - 1];
+    // The previous email to THIS lead, not the campaign template.
+    const previousDraft = previous ? await getOutreachDraft(db, userId, contact.id, sequence.id, previous.id) : null;
+    prompt = await buildFollowupPrompt({
+      contactName: contact.full_name,
+      contactTitle: contact.title,
+      companyName: company.name,
+      companyDomain: company.domain,
+      campaignName: sequence.name,
+      campaignPain: sequence.pain,
+      campaignDescription: sequence.description,
+      productSummary,
+      senderName,
+      stepNumber: stepIndex + 1,
+      delayDays: step?.delay_days ?? 3,
+      previousSubject: previousDraft?.subject ?? null,
+      previousBody: previousDraft?.body ?? null,
+      userId,
+      contactId: contact.id,
+      variant,
+      leadDossier: dossier.text,
+      leadHasSpecifics: dossier.hasSpecifics,
+    });
+  } else {
+    prompt = await buildOpenerPrompt({
+      contactName: contact.full_name,
+      contactTitle: contact.title,
+      contactEmail: contact.email ?? "",
+      companyName: company.name,
+      companyDomain: company.domain,
+      qualifyReason: contact.qualify_reason,
+      productSummary,
+      senderName,
+      campaignName: sequence.name,
+      campaignPain: sequence.pain,
+      userId,
+      contactId: contact.id,
+      variant,
+      leadDossier: dossier.text,
+      leadHasSpecifics: dossier.hasSpecifics,
+    });
+  }
+
+  return {
+    cached: null,
+    prompt,
+    failure: stepIndex > 0 ? "Follow-up draft failed" : "Outreach draft failed",
+    finish: async (draft, options) => {
+      let creditBalance: number | undefined;
+      if (options.charge) {
+        try {
+          creditBalance = await spendCredits({
+            userId,
+            amount: CREDIT_COSTS.email_draft,
+            action: "email_draft",
+            metadata: { contactId: contact.id, campaignId: sequence.id, stepId },
+          });
+        } catch (error) {
+          throw new LeadDraftError(error instanceof Error ? error.message : "Out of credits", "credits_exhausted");
+        }
+      }
+      const saved = await saveOutreachDraft(db, userId, {
+        contactId: contact.id,
+        sequenceId: sequence.id,
+        sequenceStepId: stepId,
+        subject: tokenizeLeadMentions(draft.subject, leadSource),
+        body: tokenizeLeadMentions(fillSenderPlaceholders(draft.body, senderName), leadSource),
+        source: "ai",
+      });
+      return { ...saved, stepId, cached: false, creditBalance };
+    },
+  };
+}
+
+export async function ensureLeadDraft(db: SupabaseClient, input: EnsureLeadDraftInput): Promise<EnsuredLeadDraft> {
+  const prepared = await prepareLeadDraft(db, input);
+  if (prepared.cached) return prepared.cached;
+  let draft: OutreachDraft;
   try {
-    if (stepIndex > 0) {
-      const previous = steps[stepIndex - 1];
-      // The previous email to THIS lead, not the campaign template.
-      const previousDraft = previous ? await getOutreachDraft(db, userId, contact.id, sequence.id, previous.id) : null;
-      draft = await draftFollowupForContact({
-        contactName: contact.full_name,
-        contactTitle: contact.title,
-        companyName: company.name,
-        companyDomain: company.domain,
-        campaignName: sequence.name,
-        campaignPain: sequence.pain,
-        campaignDescription: sequence.description,
-        productSummary,
-        senderName,
-        stepNumber: stepIndex + 1,
-        delayDays: step?.delay_days ?? 3,
-        previousSubject: previousDraft?.subject ?? null,
-        previousBody: previousDraft?.body ?? null,
-        userId,
-        contactId: contact.id,
-        variant,
-        leadDossier: dossier.text,
-        leadHasSpecifics: dossier.hasSpecifics,
-      });
-    } else {
-      draft = await draftOpener({
-        contactName: contact.full_name,
-        contactTitle: contact.title,
-        contactEmail: contact.email ?? "",
-        companyName: company.name,
-        companyDomain: company.domain,
-        qualifyReason: contact.qualify_reason,
-        productSummary,
-        senderName,
-        campaignName: sequence.name,
-        campaignPain: sequence.pain,
-        userId,
-        contactId: contact.id,
-        variant,
-        leadDossier: dossier.text,
-        leadHasSpecifics: dossier.hasSpecifics,
-      });
-    }
+    draft = await runDraft(prepared.prompt, prepared.failure);
   } catch (error) {
     throw new LeadDraftError(error instanceof Error ? error.message : "Could not write this email", "draft_failed");
   }
+  return prepared.finish(draft, { charge: true });
+}
 
-  let creditBalance: number | undefined;
-  const billing = await getBillingStatus(userId);
-  const shouldCharge = billing.active || billing.creditBalance > 0 || !input.allowWithoutCredits;
-  if (shouldCharge) {
-    try {
-      creditBalance = await spendCredits({
-        userId,
-        amount: CREDIT_COSTS.email_draft,
-        action: "email_draft",
-        metadata: { contactId: contact.id, campaignId: sequence.id, stepId },
-      });
-    } catch (error) {
-      // A guest or a brand-new account has no card yet. Still save the copy. Sending is what requires checkout.
-      if (!(input.allowWithoutCredits && !billing.active)) {
-        throw new LeadDraftError(error instanceof Error ? error.message : "Out of credits", "credits_exhausted");
-      }
-    }
+/**
+ * Writes one lead's email while streaming it: `onSubject` / `onBody` get the
+ * text as it is produced. `charge: false` is for the free setup emails.
+ * A saved draft is returned immediately without streaming.
+ */
+export async function streamLeadDraft(
+  db: SupabaseClient,
+  input: EnsureLeadDraftInput,
+  handlers: { onSubject: (delta: string) => void; onBody: (delta: string) => void },
+  options: { charge: boolean },
+): Promise<EnsuredLeadDraft> {
+  const prepared = await prepareLeadDraft(db, input);
+  if (prepared.cached) return prepared.cached;
+  let draft: OutreachDraft;
+  try {
+    draft = await streamDraft(prepared.prompt, handlers, prepared.failure);
+  } catch (error) {
+    throw new LeadDraftError(error instanceof Error ? error.message : "Could not write this email", "draft_failed");
   }
-
-  const saved = await saveOutreachDraft(db, userId, {
-    contactId: contact.id,
-    sequenceId: sequence.id,
-    sequenceStepId: stepId,
-    subject: tokenizeLeadMentions(draft.subject, leadSource),
-    body: tokenizeLeadMentions(draft.body, leadSource),
-    source: "ai",
-  });
-  return { ...saved, stepId, cached: false, creditBalance };
+  return prepared.finish(draft, options);
 }
 
 const DRAFT_CONCURRENCY = 3;

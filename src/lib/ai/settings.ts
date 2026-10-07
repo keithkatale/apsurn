@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export const AI_PROVIDERS = ["openai", "openrouter", "vertex"] as const;
+export const AI_PROVIDERS = ["anthropic", "openai", "openrouter", "vertex"] as const;
 export type AiProviderId = (typeof AI_PROVIDERS)[number];
 
 const SETTINGS_KEY = "ai_provider";

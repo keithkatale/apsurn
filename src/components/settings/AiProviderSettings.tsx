@@ -5,6 +5,7 @@ import { Check, KeyRound, Trash2 } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 
 const PROVIDERS = [
+  { id: "anthropic", label: "Claude (Anthropic)", description: "Claude Haiku 4.5. Needs ANTHROPIC_API_KEY on the server." },
   { id: "openai", label: "OpenAI", description: "gpt-5.6-luna. Paid, most reliable tool-calling." },
   {
     id: "openrouter",

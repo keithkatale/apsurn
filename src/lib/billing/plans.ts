@@ -53,7 +53,7 @@ export const STARTER_CREDITS = 50;
 export const ACTIVATION_FEE_USD = 1;
 
 /** Leads allowed during setup before an active subscription. */
-export const SETUP_FREE_LEAD_CAP = 6;
+export const SETUP_FREE_LEAD_CAP = 10;
 
 /** Dodo Payments brand — checkout / receipts show as Apsurn. */
 export const DODO_BRAND_ID = {

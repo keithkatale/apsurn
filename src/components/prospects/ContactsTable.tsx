@@ -80,7 +80,7 @@ export function ContactsTable({
                   onClick={() => onOpenProfile?.({ contact, company })}
                   disabled={!onOpenProfile}
                 >
-                  <ContactAvatar name={contact.full_name} linkedinUrl={contact.linkedin_url} email={contact.email} className="size-9" />
+                  <ContactAvatar name={contact.full_name} linkedinUrl={contact.linkedin_url} email={contact.email} photoUrl={contact.photo_url} className="size-9" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium text-neutral-900">{contact.full_name || "—"}</span>
                     <span className="mt-0.5 block truncate text-[13px] text-neutral-500">{contact.title || "Role unknown"}</span>
@@ -88,9 +88,20 @@ export function ContactsTable({
                       <CompanyFavicon domain={company.domain} name={company.name} />
                       <span className="truncate">{company.name}</span>
                     </span>
-                    <span className="mt-1 block truncate text-[12px] text-neutral-500">
-                      {maskEmails ? "Email hidden" : contact.email || "No email"}
-                    </span>
+                    {readOnly ? (
+                      <>
+                        {company.description ? (
+                          <span className="mt-1 line-clamp-2 block text-[12px] leading-snug text-neutral-500">{company.description}</span>
+                        ) : null}
+                        {company.country || contact.country ? (
+                          <span className="mt-1 block truncate text-[12px] text-neutral-400">{contact.country || company.country}</span>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className="mt-1 block truncate text-[12px] text-neutral-500">
+                        {maskEmails ? "Email hidden" : contact.email || "No email"}
+                      </span>
+                    )}
                   </span>
                 </button>
               </div>
@@ -125,18 +136,27 @@ export function ContactsTable({
               <th className="px-3 py-2.5 font-medium">Name</th>
               <th className="px-3 py-2.5 font-medium">Title</th>
               <th className="px-3 py-2.5 font-medium">Company</th>
-              <th className="px-3 py-2.5 font-medium">Email</th>
-              <th className="px-3 py-2.5 font-medium">Phone</th>
-              <th className="px-3 py-2.5 font-medium">Stage</th>
-              <th className="px-3 py-2.5 font-medium">Outreach</th>
-              <th className="px-3 py-2.5 font-medium">Why</th>
-              <th className="px-3 py-2.5 font-medium">Fit</th>
+              {readOnly ? (
+                <>
+                  <th className="px-3 py-2.5 font-medium">Description</th>
+                  <th className="px-3 py-2.5 font-medium">Country</th>
+                </>
+              ) : (
+                <>
+                  <th className="px-3 py-2.5 font-medium">Email</th>
+                  <th className="px-3 py-2.5 font-medium">Phone</th>
+                  <th className="px-3 py-2.5 font-medium">Stage</th>
+                  <th className="px-3 py-2.5 font-medium">Outreach</th>
+                  <th className="px-3 py-2.5 font-medium">Why</th>
+                  <th className="px-3 py-2.5 font-medium">Fit</th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={readOnly ? 9 : 10} className="px-3 py-8 text-center text-sm text-neutral-500">
+                <td colSpan={readOnly ? 5 : 10} className="px-3 py-8 text-center text-sm text-neutral-500">
                   No leads in this table.
                 </td>
               </tr>
@@ -168,12 +188,12 @@ export function ContactsTable({
                         className="flex min-w-0 items-center gap-2.5 text-left font-medium text-neutral-900 hover:underline"
                         onClick={() => onOpenProfile({ contact, company })}
                       >
-                        <ContactAvatar name={contact.full_name} linkedinUrl={contact.linkedin_url} email={contact.email} className="size-8" />
+                        <ContactAvatar name={contact.full_name} linkedinUrl={contact.linkedin_url} email={contact.email} photoUrl={contact.photo_url} className="size-8" />
                         <span className="truncate">{contact.full_name || "—"}</span>
                       </button>
                     ) : (
                       <span className="flex min-w-0 items-center gap-2.5 font-medium text-neutral-900">
-                        <ContactAvatar name={contact.full_name} linkedinUrl={contact.linkedin_url} email={contact.email} className="size-8" />
+                        <ContactAvatar name={contact.full_name} linkedinUrl={contact.linkedin_url} email={contact.email} photoUrl={contact.photo_url} className="size-8" />
                         <span className="truncate">{contact.full_name || "—"}</span>
                       </span>
                     )}
@@ -187,6 +207,26 @@ export function ContactsTable({
                       <span className="truncate">{company.name}</span>
                     </span>
                   </td>
+                  {readOnly ? (
+                    <>
+                      <td className="max-w-[320px] px-3 py-3 align-middle text-[13px] leading-snug text-neutral-600">
+                        {company.description ? (
+                          <span className="line-clamp-2" title={company.description}>
+                            {company.description}
+                          </span>
+                        ) : maskEmails ? (
+                          // Still being read from the company's site while the search continues.
+                          <span className="block h-3 w-40 animate-pulse rounded bg-neutral-100" aria-label="Loading description" />
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3 align-middle text-neutral-600">
+                        {contact.country || company.country || "—"}
+                      </td>
+                    </>
+                  ) : (
+                    <>
                   <td className="max-w-[200px] truncate px-3 py-3 align-middle text-neutral-600">
                     {maskEmails ? (
                       <span className="inline-block select-none blur-[5px]" aria-hidden>
@@ -233,6 +273,8 @@ export function ContactsTable({
                   <td className="px-3 py-3 align-middle tabular-nums text-neutral-600">
                     {company.icp_fit_score ?? "—"}
                   </td>
+                    </>
+                  )}
                 </tr>
               );
             })}

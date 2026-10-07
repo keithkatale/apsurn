@@ -14,6 +14,22 @@ export function plainToHtml(text: string): string {
     .join("");
 }
 
+/**
+ * Plain text → the HTML that is actually sent. Each paragraph is a block and
+ * a blank line between paragraphs is an explicit empty block, so Gmail and
+ * other clients show the same spacing as the editor (bare <div>s collapse it).
+ */
+export function plainToEmailHtml(text: string): string {
+  const value = text.trim();
+  if (!value) return "";
+  if (looksLikeHtml(value)) return value;
+  return value
+    .replace(/\r\n?/g, "\n")
+    .split(/\n{2,}/)
+    .map((paragraph) => `<div>${paragraph.replace(/\n/g, "<br>")}</div>`)
+    .join("<div><br></div>");
+}
+
 export function htmlToPlain(html: string): string {
   return html
     .replace(BLOCK_CLOSE, "\n")

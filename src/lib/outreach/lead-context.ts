@@ -40,7 +40,7 @@ export async function loadLeadDossier(db: SupabaseClient, contactId: string): Pr
     .maybeSingle();
   if (!contact) return { text: "", hasSpecifics: false };
 
-  const [{ data: company }, { data: signals }] = await Promise.all([
+  const [{ data: company }, { data: signals }, { data: profile }] = await Promise.all([
     db
       .from("prospect_companies")
       .select("name, domain, industry, employee_range, location, qualify_reason, evidence, website_url")
@@ -52,6 +52,8 @@ export async function loadLeadDossier(db: SupabaseClient, contactId: string): Pr
       .eq("prospect_company_id", contact.prospect_company_id)
       .order("event_date", { ascending: false, nullsFirst: false })
       .limit(4),
+    // Separate read: these columns arrive with migration 0034 and must not break the dossier before it is applied.
+    db.from("prospect_companies").select("description, country").eq("id", contact.prospect_company_id).maybeSingle(),
   ]);
 
   const lines: string[] = [];
@@ -65,6 +67,9 @@ export async function loadLeadDossier(db: SupabaseClient, contactId: string): Pr
     const facts = [company.industry, company.employee_range && `${company.employee_range} people`, company.location].filter(Boolean).join(" · ");
     lines.push(`Company: ${company.name} (${company.domain})${facts ? ` — ${facts}` : ""}`);
   }
+  const about = (profile as { description?: string | null; country?: string | null } | null) ?? null;
+  if (about?.description) lines.push(`What the company says it does: ${clip(about.description, 280)}`);
+  if (about?.country) lines.push(`Based in: ${about.country}`);
   const reason = contact.qualify_reason || company?.qualify_reason;
   if (reason) lines.push(`Why they were picked as a lead: ${clip(String(reason), 400)}`);
   const companyEvidence = evidenceLines(company?.evidence, 3);

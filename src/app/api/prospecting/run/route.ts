@@ -10,10 +10,14 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+const SETUP_WALLCLOCK_MS = 100_000;
+
 const requestSchema = z.object({
   version: z.literal(1).default(1),
   listName: z.string().trim().min(1).max(120).optional(),
   limit: z.coerce.number().int().min(1).max(30).default(15),
+  /** Setup's first look: stop at the target or after a short search, with whatever was found. */
+  setup: z.boolean().optional(),
   criteria: z.object({
     industries: z.array(z.string().trim().min(1).max(100)).max(10).default([]),
     companySizeRange: z.string().trim().max(80).optional(),
@@ -123,7 +127,7 @@ export async function POST(request: NextRequest) {
       try {
         // targetCount and the time budget let the panel show real progress
         // and a real time remaining, instead of an indeterminate spinner.
-        send({ type: "meta", runId, listId, targetCount, wallclockMs: interactiveWallclockMs() });
+        send({ type: "meta", runId, listId, targetCount, wallclockMs: parsed.data.setup ? SETUP_WALLCLOCK_MS : interactiveWallclockMs() });
         await progress("discovering", { started_at: new Date().toISOString(), target_count: targetCount });
         await progress("enriching");
 
@@ -141,6 +145,7 @@ export async function POST(request: NextRequest) {
           onEvent,
           abortSignal: request.signal,
           chargeCredits: billing.active,
+          ...(parsed.data.setup ? { wallclockMs: SETUP_WALLCLOCK_MS } : {}),
         });
 
         if (result.cancelled) {

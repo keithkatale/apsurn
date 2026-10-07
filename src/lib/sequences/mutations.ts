@@ -200,7 +200,9 @@ export async function enrollContacts(
   db: SupabaseClient,
   userId: string,
   sequenceId: string,
-  contactIds: string[]
+  contactIds: string[],
+  /** Pass `draftInBackground: false` when the person is about to watch each email being written (the campaigns tab). */
+  options: { draftInBackground?: boolean } = {},
 ): Promise<MutationResult<{ enrolled: number; skipped: number; missingEmail: number }>> {
   const { data: sequence } = await db.from("sequences").select("id").eq("id", sequenceId).eq("user_id", userId).maybeSingle();
   if (!sequence) return { ok: false, error: "Sequence not found", status: 404 };
@@ -244,7 +246,7 @@ export async function enrollContacts(
   }
 
   // Each new lead gets an email written for them from what we know about them, not the step's shared text.
-  if (toInsert.length > 0) {
+  if (toInsert.length > 0 && options.draftInBackground !== false) {
     try {
       enqueueInternalJob(DRAFT_EMAILS_JOB_PATH, { userId, sequenceId, contactIds: toInsert }, () => draftOpenersForLeads(db, userId, sequenceId, toInsert));
     } catch (error) {
@@ -304,6 +306,6 @@ export async function enrollAllContactsIntoUserSequences(
   ]);
   if (!sequences?.length || contactIds.length === 0) return { enrolled: 0 };
 
-  const results = await Promise.all(sequences.map((sequence) => enrollContacts(db, userId, sequence.id, contactIds)));
+  const results = await Promise.all(sequences.map((sequence) => enrollContacts(db, userId, sequence.id, contactIds, { draftInBackground: false })));
   return { enrolled: results.reduce((sum, result) => sum + (result.ok ? result.data.enrolled : 0), 0) };
 }

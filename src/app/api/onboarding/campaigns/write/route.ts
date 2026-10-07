@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
 
   const contactIds = await listOwnedContactIdsForWorkspace(db, userId);
   if (contactIds.length > 0 && created.length > 0) {
-    await Promise.all(created.map((sequenceId) => enrollContacts(db, userId, sequenceId, contactIds)));
+    await Promise.all(created.map((sequenceId) => enrollContacts(db, userId, sequenceId, contactIds, { draftInBackground: false })));
   }
 
   return NextResponse.json({ created: created.length, sequenceIds: created });

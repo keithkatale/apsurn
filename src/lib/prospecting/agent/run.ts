@@ -40,6 +40,7 @@ import { persistLead, type SaveLeadResult } from "./persist";
 import { searchYcLeads, ycLeadsConfigured, type YcLeadCompany } from "../yc-leads";
 import type { CandidateCompany, CandidateContact, ContactStatus, ExtractedPerson, ProspectCriteria, RunStatus } from "../types";
 import type { AgentRunContext } from "./context";
+import { flushProfileTasks } from "../profile";
 
 export type AgentStreamEvent =
   | { type: "token"; text: string }
@@ -380,7 +381,16 @@ function taskEventForwarder(db: SupabaseClient, taskId: string, runId: string) {
   };
 }
 
-export async function runDirectoryAgent(opts: {
+export async function runDirectoryAgent(opts: Parameters<typeof runDirectoryAgentInner>[0]): Promise<AgentRunResult> {
+  try {
+    return await runDirectoryAgentInner(opts);
+  } finally {
+    // Company descriptions are fetched alongside the search; settle them before the run reports done.
+    await flushProfileTasks(opts.runId);
+  }
+}
+
+async function runDirectoryAgentInner(opts: {
   db: SupabaseClient;
   runId: string;
   listId: string;

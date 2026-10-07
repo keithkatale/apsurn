@@ -27,6 +27,8 @@ export interface ContactRow {
   email_status: string;
   phone: string | null;
   linkedin_url: string | null;
+  photo_url?: string | null;
+  country?: string | null;
   contact_origin: string;
   confidence: number | null;
   evidence: Array<{ url: string; observedAt: string }>;
@@ -45,6 +47,8 @@ export interface ProspectRow {
   domain: string;
   industry: string | null;
   location: string | null;
+  description?: string | null;
+  country?: string | null;
   icp_fit_score: number | null;
   data_confidence: number | null;
   status: string;

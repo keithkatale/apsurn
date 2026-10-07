@@ -63,6 +63,8 @@ export function SequenceCanvas({
   onSubjectChange,
   onBodyChange,
   drafting,
+  streaming = false,
+  writingStatus = null,
   onRegenerateOpener,
   sending,
   sendMessage,
@@ -84,6 +86,9 @@ export function SequenceCanvas({
   onSubjectChange: (v: string) => void;
   onBodyChange: (html: string) => void;
   drafting: boolean;
+  /** The email is arriving token by token: show it as plain typing text, not the editor. */
+  streaming?: boolean;
+  writingStatus?: string | null;
   onRegenerateOpener: () => void;
   sending: boolean;
   sendMessage: string | null;
@@ -154,10 +159,16 @@ export function SequenceCanvas({
   return (
     <div className="sequence-canvas flex h-full min-h-0 flex-col overflow-y-auto overflow-x-hidden overscroll-contain">
       <div className="flex w-full flex-1 flex-col gap-0 px-4 py-4">
+        {writingStatus ? (
+          <p className="mb-3 flex items-center gap-2 text-[12px] font-medium text-[#4379EE]" role="status">
+            <Sparkles className="size-3.5 animate-pulse" aria-hidden />
+            {writingStatus}
+          </p>
+        ) : null}
         <article className="w-full shrink-0 rounded-lg border border-[#EEEEEE] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
           <div className="flex items-center justify-between gap-2 border-b border-neutral-100 px-4 py-2.5">
             <StepBadge index={0} delayDays={0} />
-            {lead && !drafting && (
+            {lead && !drafting && !streaming && (
               <button
                 type="button"
                 onClick={onRegenerateOpener}
@@ -201,6 +212,11 @@ export function SequenceCanvas({
                 <div className="min-w-0 flex-1">
                   <EmailFieldSkeleton />
                 </div>
+              ) : streaming ? (
+                <p className="min-w-0 flex-1 text-[14px] leading-relaxed text-neutral-800">
+                  {subject}
+                  {!body ? <span className="ml-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-pulse bg-neutral-700" aria-hidden /> : null}
+                </p>
               ) : (
                 <MergeFieldText
                   value={subject}
@@ -225,6 +241,11 @@ export function SequenceCanvas({
             <div className="py-2">
               {drafting ? (
                 <EmailFieldSkeleton lines={6} />
+              ) : streaming ? (
+                <div className="min-h-[8rem] whitespace-pre-wrap text-[14px] leading-relaxed text-neutral-800">
+                  {body}
+                  <span className="ml-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-pulse bg-neutral-700" aria-hidden />
+                </div>
               ) : (
                 <MergeFieldText
                   value={/<\/?[a-z][\s\S]*>/i.test(body) ? htmlToPlain(body) : body}
@@ -263,7 +284,7 @@ export function SequenceCanvas({
                 className="send-attention-pulse shrink-0 whitespace-nowrap"
                 disabled={
                   billingActive &&
-                  (sending || drafting || !subject.trim() || !htmlToPlain(body) || !lead?.email)
+                  (sending || drafting || streaming || !subject.trim() || !htmlToPlain(body) || !lead?.email)
                 }
                 onClick={() => {
                   if (!billingActive) {
@@ -274,7 +295,9 @@ export function SequenceCanvas({
                 }}
               >
                 {sending ? (
-                  "Sending…"
+                  <span className="inline-flex items-center justify-center" role="status" aria-label="Sending">
+                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                  </span>
                 ) : !billingActive ? (
                   "Unlock 50 credits"
                 ) : (
