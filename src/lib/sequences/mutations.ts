@@ -2,6 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateCampaignIconSvg } from "@/lib/campaigns/icon";
 import { defaultCopy } from "@/lib/onboarding/generate-campaign-copy";
 import type { CampaignDefinition } from "@/lib/onboarding/campaign-templates";
+import { DRAFT_EMAILS_JOB_PATH } from "@/lib/outreach/draft-job";
+import { draftOpenersForLeads } from "@/lib/outreach/lead-draft";
+import { enqueueInternalJob } from "@/lib/jobs/enqueue";
 import { listOwnedContactIdsForWorkspace, listOwnedContactsByIds } from "@/lib/outreach/owned-contact";
 
 export interface SequenceStepInput {
@@ -238,6 +241,15 @@ export async function enrollContacts(
     );
     if (error && error.code !== "23505") return { ok: false, error: error.message, status: 500 };
     if (!error) enrolled += ids.length;
+  }
+
+  // Each new lead gets an email written for them from what we know about them, not the step's shared text.
+  if (toInsert.length > 0) {
+    try {
+      enqueueInternalJob(DRAFT_EMAILS_JOB_PATH, { userId, sequenceId, contactIds: toInsert }, () => draftOpenersForLeads(db, userId, sequenceId, toInsert));
+    } catch (error) {
+      console.error("[enroll] could not queue personalized drafts", error instanceof Error ? error.message : error);
+    }
   }
 
   return { ok: true, data: { enrolled, skipped: contactIds.length - enrolled, missingEmail } };

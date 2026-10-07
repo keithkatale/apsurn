@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { DodoPayments } from "dodopayments-checkout";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
@@ -35,7 +36,7 @@ export function TrialStartModal({
     };
   }, [open]);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
   async function startCredits() {
     setBusy(true);
@@ -66,9 +67,9 @@ export function TrialStartModal({
     }
   }
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4 dark:bg-black/70"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4 dark:bg-black/70"
       role="dialog"
       aria-modal
       aria-labelledby="unlock-credits-title"
@@ -109,7 +110,8 @@ export function TrialStartModal({
         </ThreeDButton>
         {error && <p className="mt-3 text-center text-[13px] text-red-600">{error}</p>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

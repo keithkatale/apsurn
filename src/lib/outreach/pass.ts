@@ -5,7 +5,8 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ConnectedInbox } from "@/lib/inbox/gmail";
-import { draftOpener, renderTemplate } from "./draft";
+import { renderTemplate } from "./draft";
+import { ensureLeadDraft, LeadDraftError } from "./lead-draft";
 import { ensureSendableEmail } from "./email-check";
 import { checkSendGuards, withinSendingWindow } from "./guards";
 import { sendViaInbox } from "./send";
@@ -184,58 +185,26 @@ export async function runOutreachSendPass(opts: {
       title: contact.title ?? "",
     };
 
-    let subject = step.subject_template
-      ? renderTemplate(step.subject_template, vars)
-      : "";
-    let body = renderTemplate(step.body_template, vars);
-
-    // Prefer a per-contact draft for this step when present.
-    const { data: savedDraft } = await db
-      .from("outreach_drafts")
-      .select("subject, body")
-      .eq("user_id", sequence.user_id)
-      .eq("contact_id", contact.id)
-      .eq("sequence_id", sequence.id)
-      .eq("sequence_step_id", step.id)
-      .maybeSingle();
-    if (savedDraft?.subject?.trim() && savedDraft?.body?.trim()) {
-      subject = renderTemplate(savedDraft.subject, vars);
-      body = renderTemplate(savedDraft.body, vars);
-    }
-
-    const wantsAi =
-      nextIndex === 0 &&
-      (Boolean(contact.qualify_reason) ||
-        !step.body_template.trim() ||
-        step.body_template.trim().toLowerCase() === "{{ai}}");
-
-    if (wantsAi || !body.trim()) {
-      const { data: blueprint } = await db
-        .from("company_blueprints")
-        .select("product_summary")
-        .eq("company_id", sequence.company_id)
-        .maybeSingle();
-
-      try {
-        const draft = await draftOpener({
-          contactName: contact.full_name,
-          contactTitle: contact.title,
-          contactEmail: contact.email!,
-          companyName: company?.name ?? company?.domain ?? "their company",
-          companyDomain: company?.domain ?? "",
-          qualifyReason: contact.qualify_reason,
-          productSummary: blueprint?.product_summary ?? null,
-          senderName: inbox!.email_address,
-          userId: sequence.user_id,
-          contactId: contact.id,
-        });
-        subject = subject || draft.subject;
-        body = draft.body;
-      } catch (error) {
-        console.error("[outreach] draft failed", row.id, error);
-        result.failed += 1;
-        continue;
+    // Every email is written for this one lead. The step's own text is never sent as a shared template:
+    // use the lead's saved draft, or write it now from what we know about them.
+    let subject: string;
+    let body: string;
+    try {
+      const draft = await ensureLeadDraft(db, { userId: sequence.user_id, contactId: contact.id, sequenceId: sequence.id, stepId: step.id });
+      subject = renderTemplate(draft.subject, vars);
+      body = renderTemplate(draft.body, vars);
+    } catch (error) {
+      console.error("[outreach] personalized draft failed", row.id, error);
+      result.failed += 1;
+      if (error instanceof LeadDraftError && error.code === "credits_exhausted") {
+        result.holding = "out of credits";
+        break;
       }
+      continue;
+    }
+    if (!body.trim()) {
+      result.failed += 1;
+      continue;
     }
 
     if (!subject.trim()) subject = `Quick question for ${vars.first_name || "you"}`;

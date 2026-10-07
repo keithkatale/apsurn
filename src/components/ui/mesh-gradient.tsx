@@ -3,6 +3,12 @@
 import * as React from "react";
 import { cn } from "@/lib/cn";
 
+/**
+ * Only the props the installed @paper-design/shaders-react MeshGradient understands are forwarded
+ * (colors, distortion, swirl, speed, scale, rotation). The older shape/softness/proportion/swirlIterations
+ * props are still accepted so existing callers compile, but they are ignored: forwarding them made React
+ * warn that it did not recognise them on a DOM element.
+ */
 export interface MeshGradientProps {
   colors?: string[];
   color1?: string;
@@ -34,11 +40,6 @@ export const MeshGradient = React.memo(function MeshGradient({
   speed = 1,
   distortion = 1,
   swirl = 0.57,
-  swirlIterations = 7.4,
-  softness = 1,
-  proportion = 0,
-  shape = "edge",
-  shapeScale = 0.59,
   scale = 1.45,
   rotation = 120,
   className,
@@ -110,13 +111,8 @@ export const MeshGradient = React.memo(function MeshGradient({
         width={size.width}
         height={size.height}
         colors={colors}
-        proportion={proportion}
-        softness={softness}
         distortion={distortion}
         swirl={swirl}
-        swirlIterations={swirlIterations}
-        shape={shape}
-        shapeScale={shapeScale}
         speed={speed}
         scale={scale}
         rotation={rotation}

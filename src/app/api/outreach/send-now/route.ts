@@ -6,6 +6,7 @@ import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
 import type { ConnectedInbox } from "@/lib/inbox/gmail";
 import { ensureSendableEmail } from "@/lib/outreach/email-check";
 import { checkSendGuards } from "@/lib/outreach/guards";
+import { ensureLeadDraft, LeadDraftError } from "@/lib/outreach/lead-draft";
 import { sendViaInbox } from "@/lib/outreach/send";
 import { getOwnedContact } from "@/lib/outreach/owned-contact";
 import { resolveMergeFields } from "@/lib/outreach/merge-fields";
@@ -18,8 +19,9 @@ export const maxDuration = 60;
 const bodySchema = z.object({
   contactId: z.string().uuid(),
   campaignId: z.string().uuid().optional(),
-  subject: z.string().trim().min(1).max(200),
-  body: z.string().trim().min(1).max(20000),
+  // Omit both to send this lead's own personalized email for the campaign (written from what we know about them).
+  subject: z.string().trim().min(1).max(200).optional(),
+  body: z.string().trim().min(1).max(20000).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -96,8 +98,24 @@ export async function POST(request: NextRequest) {
       companyName: contact.company.name,
       companyDomain: contact.company.domain,
     };
-    const subject = resolveMergeFields(parsed.data.subject, leadSource);
-    const body = resolveMergeFields(parsed.data.body, leadSource);
+    let rawSubject = parsed.data.subject;
+    let rawBody = parsed.data.body;
+    if (!rawSubject || !rawBody) {
+      if (!parsed.data.campaignId) return NextResponse.json({ error: "Write a subject and body first." }, { status: 400 });
+      try {
+        const draft = await ensureLeadDraft(db, { userId, contactId: contact.id, sequenceId: parsed.data.campaignId, stepIndex: 0 });
+        rawSubject = draft.subject;
+        rawBody = draft.body;
+      } catch (error) {
+        if (error instanceof LeadDraftError) {
+          const status = error.code === "credits_exhausted" ? 402 : error.code === "draft_failed" ? 500 : 404;
+          return NextResponse.json({ error: error.code === "draft_failed" ? "Could not write this email" : error.message, code: error.code }, { status });
+        }
+        throw error;
+      }
+    }
+    const subject = resolveMergeFields(rawSubject, leadSource);
+    const body = resolveMergeFields(rawBody, leadSource);
 
     let enrollmentId: string | null = null;
     let stepId: string | null = null;

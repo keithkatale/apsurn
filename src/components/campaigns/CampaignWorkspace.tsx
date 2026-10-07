@@ -19,7 +19,7 @@ import { htmlToPlain } from "@/lib/outreach/email-html";
 import { tokenizeLeadMentions } from "@/lib/outreach/merge-fields";
 import type { PlanKey } from "@/lib/billing/plans";
 import { notifyCreditsChanged } from "@/components/billing/CreditsBalance";
-import { redirectGuestToAccount } from "@/lib/auth/require-account-client";
+import { goToAccount } from "@/lib/auth/require-account-client";
 import { readSse } from "@/lib/http/read-sse";
 
 export type CompanyProfile = {
@@ -116,6 +116,10 @@ export function CampaignWorkspace({
   const router = useRouter();
   const nav = useCampaignNav();
   const [leadId, setLeadId] = useState<string | null>(null);
+  const leadIdRef = useRef<string | null>(null);
+  leadIdRef.current = leadId;
+  /** The lead whose own email is currently in the editor. Edits are saved to that lead only. */
+  const editorOwnerRef = useRef<string | null>(null);
   const [scan, setScan] = useState<ScanState | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [subject, setSubject] = useState("");
@@ -294,7 +298,8 @@ export function CampaignWorkspace({
     }
     setLeadId((current) => {
       if (current && campaignLeads.some((person) => person.id === current)) return current;
-      return null;
+      // Every email is one lead's own: open the first lead so the editor always shows a real person's email.
+      return campaignLeads[0]?.id ?? null;
     });
   }, [campaign, leadIdsKey, campaignLeads]);
 
@@ -333,12 +338,9 @@ export function CampaignWorkspace({
             step.id === targetStepId ? { ...step, subject: next.subject, body: next.body } : step,
           ),
         }));
-        void fetch(`/api/campaigns/${sequenceId}/steps/${targetStepId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ subjectTemplate: next.subject, bodyTemplate: next.body }),
-        });
-      } else {
+        // Shown for the selected lead only: one lead's email must never overwrite the campaign step for everyone.
+      } else if (leadIdRef.current === contactId) {
+        editorOwnerRef.current = contactId;
         setSubject(next.subject);
         setBody(next.body);
         setSendMessage(null);
@@ -360,47 +362,45 @@ export function CampaignWorkspace({
     }
   }
 
-  const loadedTemplate = useRef<{ id: string; subject: string; body: string } | null>(null);
-
+  // Show the selected lead's own email: their saved draft, or one written now from what we know about them.
   useEffect(() => {
-    if (!campaign || !openerStepId) {
-      loadedTemplate.current = null;
+    if (!campaign || !openerStepId || !lead) {
+      editorOwnerRef.current = null;
       setSubject("");
       setBody("");
       return;
     }
-    const opener = (stepsByCampaign[campaign.id] ?? campaign.steps).find((step) => step.id === openerStepId);
-    const nextSubject = opener?.subject ?? "";
-    const nextBody = opener?.body ?? "";
-    loadedTemplate.current = { id: `${campaign.id}:${openerStepId}`, subject: nextSubject, body: nextBody };
-    setSubject(nextSubject);
-    setBody(nextBody);
-    // Load the campaign template when the campaign or opener step changes.
+    const cached = draftsRef.current[draftKey(lead.id, campaign.id, openerStepId)];
+    if (cached) {
+      editorOwnerRef.current = lead.id;
+      setSubject(cached.subject);
+      setBody(cached.body);
+      return;
+    }
+    editorOwnerRef.current = null;
+    setSubject("");
+    setBody("");
+    void generateDraft(lead.id, campaign.id, false, openerStepId);
+    // generateDraft is recreated every render; the lead and step are what trigger a load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaign?.id, openerStepId]);
+  }, [lead?.id, campaign?.id, openerStepId]);
 
+  // Edits are saved to the selected lead's own email, never to a campaign-wide template.
   useEffect(() => {
-    if (!campaign || !openerStepId) return;
-    const key = `${campaign.id}:${openerStepId}`;
-    const loaded = loadedTemplate.current;
-    if (!loaded || loaded.id !== key) return;
-    if (subject === loaded.subject && body === loaded.body) return;
+    if (!campaign || !openerStepId || !lead || editorOwnerRef.current !== lead.id) return;
+    const key = draftKey(lead.id, campaign.id, openerStepId);
+    const saved = draftsRef.current[key];
+    if (!saved || (subject === saved.subject && body === saved.body)) return;
     const timeout = window.setTimeout(() => {
-      loadedTemplate.current = { id: key, subject, body };
-      setStepsByCampaign((prev) => ({
-        ...prev,
-        [campaign.id]: (prev[campaign.id] ?? []).map((step) =>
-          step.id === openerStepId ? { ...step, subject, body } : step,
-        ),
-      }));
-      void fetch(`/api/campaigns/${campaign.id}/steps/${openerStepId}`, {
+      setDrafts((prev) => ({ ...prev, [key]: { subject, body } }));
+      void fetch("/api/outreach/draft", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subjectTemplate: subject, bodyTemplate: body }),
+        body: JSON.stringify({ contactId: lead.id, campaignId: campaign.id, stepId: openerStepId, subject, body }),
       });
-    }, 500);
+    }, 600);
     return () => window.clearTimeout(timeout);
-  }, [subject, body, campaign, openerStepId]);
+  }, [subject, body, campaign, openerStepId, lead]);
 
   async function generateFromBlueprint() {
     if (!hasBlueprint) {
@@ -468,26 +468,31 @@ export function CampaignWorkspace({
         step.id === stepId ? { ...step, subject: nextSubject, body: nextBody } : step,
       ),
     }));
-    void fetch(`/api/campaigns/${campaign.id}/steps/${stepId}`, {
+    // A follow-up edit belongs to the selected lead's own email, not the step shared by the whole campaign.
+    if (!lead) return;
+    void fetch("/api/outreach/draft", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subjectTemplate: nextSubject, bodyTemplate: nextBody }),
+      body: JSON.stringify({ contactId: lead.id, campaignId: campaign.id, stepId, subject: nextSubject, body: nextBody }),
     });
   }
 
-  const openerTemplateReady = Boolean(subject.trim() && htmlToPlain(body));
+  // Every lead gets their own email written on demand, so only an address is needed to send.
+  const openerTemplateReady = true;
   const readyToSendCount = useMemo(() => {
     if (!openerTemplateReady) return 0;
     return campaignLeads.filter((person) => person.email).length;
   }, [campaignLeads, openerTemplateReady]);
 
   function askForAccount() {
-    const next = `${window.location.pathname}${window.location.search}`;
-    window.location.assign(`/signup?next=${encodeURIComponent(next)}`);
+    goToAccount();
   }
 
-  async function openCredits() {
-    if (guestAccount || (await redirectGuestToAccount())) return;
+  function openCredits() {
+    if (guestAccount) {
+      goToAccount();
+      return;
+    }
     setTrialOpen(true);
   }
 
@@ -567,13 +572,6 @@ export function CampaignWorkspace({
       return;
     }
 
-    const templateSubject = subject.trim();
-    const templateBody = body.trim();
-    if (!templateSubject || !htmlToPlain(templateBody)) {
-      setSendAllMessage("Write the campaign email first — it is sent to each lead with their details filled in.");
-      return;
-    }
-
     const queue = campaignLeads.flatMap((person) => (person.email ? [{ person }] : []));
 
     if (queue.length === 0) {
@@ -590,12 +588,8 @@ export function CampaignWorkspace({
         const res = await fetch("/api/outreach/send-now", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contactId: item.person.id,
-            campaignId: campaign.id,
-            subject: templateSubject,
-            body: templateBody,
-          }),
+          // No subject/body: the server sends each lead their own email, written from what we know about them.
+          body: JSON.stringify({ contactId: item.person.id, campaignId: campaign.id }),
         });
         const data = (await res.json().catch(() => null)) as { error?: string; code?: string } | null;
         if (data?.code === "account_required") {

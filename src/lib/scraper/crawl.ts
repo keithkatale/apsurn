@@ -48,7 +48,13 @@ export async function robotsAllows(root: URL, path: string) {
   return true;
 }
 
-async function fetchHtml(url: URL, root: URL, redirects = 0): Promise<string | null> {
+/** example.com and www.example.com are the same site; most sites redirect one to the other. */
+export function sameSite(a: string, b: string): boolean {
+  const strip = (host: string) => host.toLowerCase().replace(/^www\./, "");
+  return strip(a) === strip(b);
+}
+
+async function fetchHtml(url: URL, root: URL, redirects = 0, landed?: { url: URL }): Promise<string | null> {
   if (redirects > 3 || !(await robotsAllows(root, url.pathname))) return null;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
@@ -58,12 +64,13 @@ async function fetchHtml(url: URL, root: URL, redirects = 0): Promise<string | n
       const location = res.headers.get("location");
       if (!location) return null;
       const next = await assertSafePublicUrl(new URL(location, url).toString());
-      if (next.hostname !== root.hostname) return null;
-      return fetchHtml(next, root, redirects + 1);
+      if (!sameSite(next.hostname, root.hostname)) return null;
+      return fetchHtml(next, root, redirects + 1, landed);
     }
     if (!res.ok || !(res.headers.get("content-type") ?? "").includes("html")) return null;
     if (Number(res.headers.get("content-length") ?? 0) > MAX_BYTES) return null;
     const html = await res.text();
+    if (landed) landed.url = url;
     return html.length <= MAX_BYTES ? html : null;
   } catch { return null; } finally { clearTimeout(timer); }
 }
@@ -87,7 +94,7 @@ function links(html: string, root: URL) {
   $("a[href]").each((_, element) => {
     try {
       const url = new URL($(element).attr("href") ?? "", root);
-      if (url.hostname !== root.hostname || !['http:', 'https:'].includes(url.protocol)) return;
+      if (!sameSite(url.hostname, root.hostname) || !['http:', 'https:'].includes(url.protocol)) return;
       url.hash = "";
       const rank = HINTS.findIndex((hint) => url.pathname.toLowerCase().includes(hint));
       if (rank >= 0 && !found.has(url.toString())) found.set(url.toString(), rank);
@@ -116,13 +123,21 @@ export async function crawlSite(
       }
     : null;
 
+  // The home page may redirect between example.com and www.example.com. Remember where it landed so
+  // links and later requests use the host the site actually serves from.
+  const landed = { url: root };
   const getHtml = async (url: URL): Promise<string | null> =>
-    (renderedHtml ? await renderedHtml(url) : null) ?? (await fetchHtml(url, root));
+    (renderedHtml ? await renderedHtml(url) : null) ?? (await fetchHtml(url, root, 0, url === root ? landed : undefined));
 
   const home = await getHtml(root);
-  if (!home) throw new Error(`Could not safely fetch ${root.toString()}`);
-  const pages = [extractPage(home, root.toString())];
-  for (const url of links(home, root)) {
+  if (!home) {
+    throw new Error(
+      `Could not read ${root.toString()}. The site may be blocking automated visits, be down, or redirect somewhere we can't follow. Check the address opens in a browser, or try again.`,
+    );
+  }
+  const siteRoot = landed.url;
+  const pages = [extractPage(home, siteRoot.toString())];
+  for (const url of links(home, siteRoot)) {
     const html = await getHtml(url);
     if (html) {
       const page = extractPage(html, url.toString());

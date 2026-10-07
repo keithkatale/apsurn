@@ -184,7 +184,7 @@ export function SequenceCanvas({
             <div className="border-b border-neutral-100 bg-[#F8F9FC] px-5 py-3.5">
               <p className="text-[13px] font-semibold text-neutral-900">Message for everyone in this campaign</p>
               <p className="mt-0.5 text-[12px] text-neutral-500">
-                Write it once. Name, title, and company fill in for each lead when it sends.
+                Every lead gets their own email, written from what we know about them. Edits here change only this lead&apos;s email.
               </p>
             </div>
           )}
@@ -231,7 +231,7 @@ export function SequenceCanvas({
                   onChange={onBodyChange}
                   lead={lead}
                   multiline
-                  placeholder="Write the email. Insert a field above so each lead gets their own version."
+                  placeholder="This lead's email. Edit it here; other leads are not affected."
                 />
               )}
             </div>
@@ -367,7 +367,7 @@ export function SequenceCanvas({
                           onChange={(next) => onSaveStepDraft(step.id, stepSubject, next)}
                           lead={lead}
                           multiline
-                          placeholder="Write the follow-up. Fields fill in for each lead."
+                          placeholder="This lead's follow-up. Edit it here; other leads are not affected."
                         />
                       </div>
                     </>

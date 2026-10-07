@@ -22,6 +22,9 @@ export interface DraftContext {
   contactId?: string;
   /** Bump to get a different take on regenerate. */
   variant?: number;
+  /** Everything known about this lead (see lead-context.ts). The email must be built from it. */
+  leadDossier?: string;
+  leadHasSpecifics?: boolean;
 }
 
 export interface OutreachDraft {
@@ -95,6 +98,10 @@ export async function draftOpener(ctx: DraftContext): Promise<OutreachDraft> {
 
 You write the FIRST cold email to one specific person, as a thoughtful peer, not a pitch deck.
 Return ONLY JSON: {"subject":"...","body":"..."}.
+WRITE FOR THIS ONE PERSON
+- Nobody else will receive this exact email. Build it from the LEAD DOSSIER: their role, their company, what is publicly known about them, and the signal that made them a lead. Open with something true about THEM, not about the sender.
+- The campaign pain and the business context are background for you, not copy. Never paste or lightly rephrase a sentence from them (no taglines, no "we partner with…", no positioning statements, no generic messaging lines).
+- If the dossier has little beyond a name and role, keep the email short and honest about why you are writing to someone in that role at that kind of company. Do not pad it with generic claims, and never invent a detail about them.
 Rules:
 - Subject: 2 to 5 words, specific and human, lowercase is fine, no clickbait, no prospect name.
 - Body: plain text, short paragraphs, no signature block, no links unless essential.
@@ -105,12 +112,15 @@ Rules:
 
 ${grounded.text}
 
+LEAD DOSSIER (everything known about this recipient; the only source for claims about them)
+${ctx.leadDossier || "(nothing beyond the name, role and company below)"}
+
 Sender: ${ctx.senderName ?? "the sender"}
 Recipient: ${ctx.contactName ?? "there"}${ctx.contactTitle ? ` (${ctx.contactTitle})` : ""} at ${ctx.companyName} (${ctx.companyDomain})
 Email: ${ctx.contactEmail}
 Why they fit: ${ctx.qualifyReason ?? "(none, so stay relevant through their role and the campaign pain)"}
 Campaign: ${ctx.campaignName ?? "(none)"}
-Pain this campaign speaks to: ${ctx.campaignPain ?? "(none)"}
+Pain this campaign speaks to (background only, never copy it): ${ctx.campaignPain ?? "(none)"}
 ${grounded.business ? "" : `Our product (context only): ${ctx.productSummary ?? "(unspecified)"}`}`;
 
   try {
@@ -146,6 +156,8 @@ export interface FollowupContext {
   userId?: string;
   contactId?: string;
   variant?: number;
+  leadDossier?: string;
+  leadHasSpecifics?: boolean;
 }
 
 /**
@@ -171,7 +183,15 @@ Rules:
 - Short and low pressure. Plain text, no signature block, no links unless essential.
 - If this is the last email in the sequence, make it a polite breakup.
 
+WRITE FOR THIS ONE PERSON
+- Nobody else will receive this exact email. Build it from the LEAD DOSSIER: their role, their company, what is publicly known about them, and the signal that made them a lead. Open with something true about THEM, not about the sender.
+- The campaign pain and the business context are background for you, not copy. Never paste or lightly rephrase a sentence from them (no taglines, no "we partner with…", no positioning statements, no generic messaging lines).
+- If the dossier has little beyond a name and role, keep the email short and honest about why you are writing to someone in that role at that kind of company. Do not pad it with generic claims, and never invent a detail about them.
+
 ${grounded.text}
+
+LEAD DOSSIER (everything known about this recipient; the only source for claims about them)
+${ctx.leadDossier || "(nothing beyond the name, role and company below)"}
 
 Sender: ${ctx.senderName ?? "the sender"}
 Recipient: ${ctx.contactName ?? "there"}${ctx.contactTitle ? ` (${ctx.contactTitle})` : ""} at ${ctx.companyName ?? "their company"}${ctx.companyDomain ? ` (${ctx.companyDomain})` : ""}
