@@ -46,7 +46,8 @@ export function DashboardSidebar() {
   const pathname = usePathname();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
-  const activePath = pendingHref ?? pathname;
+  // A task opened from Home still counts as Home.
+  const activePath = pendingHref ?? (pathname.startsWith("/dashboard/tasks/") ? "/dashboard" : pathname);
   // Copilot lives on the merged Home tab now — show the thread list there.
   const inCopilot = activePath === "/dashboard";
   const inCampaigns = activePath.startsWith("/dashboard/campaigns");

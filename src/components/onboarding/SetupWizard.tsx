@@ -685,7 +685,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
       {view === 1 && !started && (
         <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-5 text-center">
           <div>
-            <h1 className="text-2xl font-semibold text-neutral-900">Enter your business domain.</h1>
+            <h1 className="font-heading text-[clamp(1.75rem,4vw,2.5rem)] font-semibold leading-tight text-neutral-900">Enter your business domain.</h1>
             <p className="mt-1 text-sm text-neutral-600">Enter your domain. We&apos;ll read the site and draft the ICP.</p>
           </div>
           <form onSubmit={analyze} className="w-full max-w-md">

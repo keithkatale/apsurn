@@ -22,6 +22,7 @@
  * choosing its own tools could.
  */
 
+import { DEFAULT_SIGNAL_TRIGGERS, icpSearchPaused } from "../mode";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -462,10 +463,12 @@ async function runDirectoryAgentInner(opts: {
   // A run with triggers is a signal scout: companies with a recent, evidenced
   // reason to buy, not just an ICP match. Dynamic import keeps the signals
   // module (which imports this file's persist/shared deps) out of the cycle.
-  if (criteria.triggers?.length) {
-    if (!isEmailFinderConfigured()) {
-      throw new Error("The contact database is not configured (ICYPEAS_API_KEY is unset), so signal-based prospecting can't find decision makers.");
-    }
+  // With ICP search paused, every run is a signal run: a run that names no signal looks for the default public ones.
+  if (!criteria.triggers?.length && icpSearchPaused()) {
+    ctx.criteria = { ...criteria, triggers: DEFAULT_SIGNAL_TRIGGERS.map((trigger) => ({ ...trigger })) };
+  }
+  if (ctx.criteria.triggers?.length) {
+    // Decision makers come from the company's own website first; the contact database (Icypeas) is only a fallback.
     const { runSignalScout } = await import("../signals/run");
     return runSignalScout({ ctx, targetCount, emit, checkStopped });
   }

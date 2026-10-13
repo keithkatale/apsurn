@@ -86,8 +86,14 @@ export async function POST(request: NextRequest) {
     const emailCheck = await ensureSendableEmail(db, contact.id, contact.email, contact.email_status);
     if (!emailCheck.ok) {
       return NextResponse.json(
-        { error: "This email address doesn't accept mail — it failed verification.", code: "invalid_email" },
-        { status: 400 },
+        {
+          error:
+            emailCheck.status === "invalid"
+              ? "This email address couldn't be confirmed as a real mailbox, so it wasn't sent to protect your sender reputation."
+              : "We couldn't verify this email address right now. Try again in a minute.",
+          code: emailCheck.status === "invalid" ? "invalid_email" : "verification_unavailable",
+        },
+        { status: emailCheck.status === "invalid" ? 400 : 503 },
       );
     }
 

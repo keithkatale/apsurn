@@ -7,7 +7,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { spendCredits } from "@/lib/billing/credits";
 import { getBillingStatus } from "@/lib/billing/entitlements";
-import { CREDIT_COSTS } from "@/lib/billing/plans";
+import { CREDIT_COSTS, SETUP_FREE_LEAD_CAP } from "@/lib/billing/plans";
 import { buildFollowupPrompt, buildOpenerPrompt, runDraft, streamDraft, type OutreachDraft } from "./draft";
 import { loadLeadDossier } from "./lead-context";
 import { tokenizeLeadMentions } from "./merge-fields";
@@ -166,16 +166,47 @@ async function prepareLeadDraft(db: SupabaseClient, input: EnsureLeadDraftInput)
   };
 }
 
-export async function ensureLeadDraft(db: SupabaseClient, input: EnsureLeadDraftInput): Promise<EnsuredLeadDraft> {
-  const prepared = await prepareLeadDraft(db, input);
-  if (prepared.cached) return prepared.cached;
-  let draft: OutreachDraft;
+/**
+ * Emails being written right now, by lead and step. A second request for the same email (the editor opening while a
+ * background job is still writing it, or a page reopened mid-write) waits for the first instead of writing and
+ * charging for it again.
+ */
+const inFlightDrafts = new Map<string, Promise<EnsuredLeadDraft>>();
+
+function draftKey(input: EnsureLeadDraftInput): string {
+  return `${input.userId}:${input.contactId}:${input.sequenceId}:${input.stepId ?? `i${input.stepIndex ?? 0}`}`;
+}
+
+async function shared(input: EnsureLeadDraftInput, work: () => Promise<EnsuredLeadDraft>): Promise<EnsuredLeadDraft> {
+  if (input.regenerate) return work();
+  const key = draftKey(input);
+  const running = inFlightDrafts.get(key);
+  if (running) return { ...(await running), cached: true };
+  const promise = work();
+  inFlightDrafts.set(key, promise);
   try {
-    draft = await runDraft(prepared.prompt, prepared.failure);
-  } catch (error) {
-    throw new LeadDraftError(error instanceof Error ? error.message : "Could not write this email", "draft_failed");
+    return await promise;
+  } finally {
+    inFlightDrafts.delete(key);
   }
-  return prepared.finish(draft, { charge: true });
+}
+
+export async function ensureLeadDraft(
+  db: SupabaseClient,
+  input: EnsureLeadDraftInput,
+  options: { charge: boolean } = { charge: true },
+): Promise<EnsuredLeadDraft> {
+  return shared(input, async () => {
+    const prepared = await prepareLeadDraft(db, input);
+    if (prepared.cached) return prepared.cached;
+    let draft: OutreachDraft;
+    try {
+      draft = await runDraft(prepared.prompt, prepared.failure);
+    } catch (error) {
+      throw new LeadDraftError(error instanceof Error ? error.message : "Could not write this email", "draft_failed");
+    }
+    return prepared.finish(draft, options);
+  });
 }
 
 /**
@@ -189,20 +220,33 @@ export async function streamLeadDraft(
   handlers: { onSubject: (delta: string) => void; onBody: (delta: string) => void },
   options: { charge: boolean },
 ): Promise<EnsuredLeadDraft> {
-  const prepared = await prepareLeadDraft(db, input);
-  if (prepared.cached) return prepared.cached;
-  let draft: OutreachDraft;
-  try {
-    draft = await streamDraft(prepared.prompt, handlers, prepared.failure);
-  } catch (error) {
-    throw new LeadDraftError(error instanceof Error ? error.message : "Could not write this email", "draft_failed");
+  const alreadyRunning = !input.regenerate && inFlightDrafts.has(draftKey(input));
+  const result = await shared(input, async () => {
+    const prepared = await prepareLeadDraft(db, input);
+    if (prepared.cached) return prepared.cached;
+    let draft: OutreachDraft;
+    try {
+      draft = await streamDraft(prepared.prompt, handlers, prepared.failure);
+    } catch (error) {
+      throw new LeadDraftError(error instanceof Error ? error.message : "Could not write this email", "draft_failed");
+    }
+    return prepared.finish(draft, options);
+  });
+  // Joined an email another request was writing: hand over the finished text so the editor still shows it.
+  if (alreadyRunning) {
+    handlers.onSubject(result.subject);
+    handlers.onBody(result.body);
   }
-  return prepared.finish(draft, options);
+  return result;
 }
 
 const DRAFT_CONCURRENCY = 3;
 
-/** Write the opening email for every newly enrolled lead, a few at a time. Stops quietly if credits run out; the send pass fills any gaps. */
+/**
+ * Write the opening email for each lead, a few at a time, saved as drafts so they are waiting when the person opens the
+ * campaign. Accounts without a card get their first few emails free (the setup allowance); the rest wait for a card.
+ * Out of credits stops the run quietly; the editor and the send pass fill any gaps.
+ */
 export async function draftOpenersForLeads(
   db: SupabaseClient,
   userId: string,
@@ -211,16 +255,30 @@ export async function draftOpenersForLeads(
 ): Promise<{ drafted: number; failed: number }> {
   let drafted = 0;
   let failed = 0;
-  let outOfCredits = false;
+  let stopped = false;
+
+  const billing = await getBillingStatus(userId);
+  let freeLeft = Number.POSITIVE_INFINITY;
+  if (!billing.active) {
+    const { count } = await db.from("outreach_drafts").select("id", { count: "exact", head: true }).eq("user_id", userId);
+    freeLeft = Math.max(0, SETUP_FREE_LEAD_CAP - (count ?? 0));
+  }
+
   const queue = [...contactIds];
   const worker = async () => {
-    while (queue.length > 0 && !outOfCredits) {
+    while (queue.length > 0 && !stopped) {
+      if (freeLeft <= 0) {
+        stopped = true;
+        break;
+      }
       const contactId = queue.shift() as string;
+      const charge = billing.active;
+      if (!billing.active) freeLeft -= 1;
       try {
-        const result = await ensureLeadDraft(db, { userId, contactId, sequenceId, stepIndex: 0 });
+        const result = await ensureLeadDraft(db, { userId, contactId, sequenceId, stepIndex: 0 }, { charge });
         if (!result.cached) drafted += 1;
       } catch (error) {
-        if (error instanceof LeadDraftError && error.code === "credits_exhausted") outOfCredits = true;
+        if (error instanceof LeadDraftError && error.code === "credits_exhausted") stopped = true;
         else failed += 1;
         console.error("[draft-openers] failed", contactId, error instanceof Error ? error.message : error);
       }

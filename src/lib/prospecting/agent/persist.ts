@@ -48,19 +48,12 @@ export async function persistLead(
     return { saved: false, contactCount: 0, reason: "already in this account" };
   }
 
-  // An email only counts as a reachable address once the verifier has
-  // actually confirmed it ("verified" or "accept_all" — the same bar
-  // outreach uses to trust an address without re-checking at send time, see
-  // ensureSendableEmail). A "risky" pattern guess or a verifier-rejected
-  // address is dropped here rather than saved and later bouncing as
-  // "Address not found" in outreach. A contact with a phone number is still
-  // kept even without a verified email — the phone channel was never
-  // subject to email verification. Email generation runs verification live
-  // (resolveEmail / saveYcLeadsFirst), so by the time a contact reaches
-  // this filter its status already reflects a real check, not a guess.
-  const candidateContacts = contacts.filter(
-    (c) => Boolean(c.fullName) && ((Boolean(c.email) && (c.emailStatus === "verified" || c.emailStatus === "accept_all")) || Boolean(c.phone))
-  );
+  // An email enters the database only if the verifier confirmed it as a real mailbox ("verified"), so nothing
+  // unconfirmed can later be mailed and bounce. A contact with a phone number is still kept without an email (the
+  // phone channel was never subject to email verification), but its unconfirmed email is dropped, not stored.
+  const candidateContacts = contacts
+    .map((c) => (c.email && c.emailStatus !== "verified" ? { ...c, email: null } : c))
+    .filter((c) => Boolean(c.fullName) && (Boolean(c.email) || Boolean(c.phone)));
   // Drop contacts whose email/phone is on the global suppression list.
   const actionable: CandidateContact[] = [];
   for (const c of candidateContacts) {

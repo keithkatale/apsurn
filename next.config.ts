@@ -9,6 +9,19 @@ const nextConfig: NextConfig = {
   // in the location Vercel expects.
   ...(process.env.NEXT_STANDALONE_BUILD === "1" ? { output: "standalone" as const } : {}),
   turbopack: {},
+  async headers() {
+    const baseline = [
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(self)" },
+      { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+    ];
+    return [
+      // Everything except the demo player may not be framed by other sites (clickjacking).
+      { source: "/((?!demo/embed).*)", headers: [...baseline, { key: "X-Frame-Options", value: "SAMEORIGIN" }] },
+      { source: "/demo/embed", headers: baseline },
+    ];
+  },
   // Playwright must stay external (native browser binaries; never bundle).
   serverExternalPackages: ["playwright", "playwright-core"],
   // PostHog's own endpoints send no CORS headers and redirect preflights, so a browser on any origin other than

@@ -99,7 +99,7 @@ export function buildRunCompletedMessage(outcome: RunOutcome, plan?: { goal: str
   const parts = [
     "[Automatic update — the user did not write this message.] The prospecting run you started has finished.",
     formatRunOutcome(outcome),
-    "Now analyze it for the user: how well these companies and contacts fit the approved blueprint, which are the strongest and why, what is weak or missing (no email, thin signals, fewer than requested), and what you recommend next. Use real names and numbers from above; call list_contacts or list_prospect_companies only if you need more detail. Be concise and end with one concrete next step.",
+    "Analyze it for the user: how well these companies and contacts fit the approved blueprint, which are the strongest and why, what is weak or missing (no email, thin signals, fewer than requested), and what you recommend next. Use real names and numbers from above; call list_contacts or list_prospect_companies only if you need more detail. Be concise and end with one concrete next step.",
   ];
   if (plan && pendingSteps(plan.steps).length > 0) {
     parts.push(
@@ -118,6 +118,6 @@ export function buildPlanMessage(kind: "approved" | "continue", goal: string, st
     lead,
     `Goal: ${goal}`,
     `Steps:\n${formatPlanSteps(steps)}`,
-    "Work through the unfinished steps in order, one at a time, like a normal chat turn: call the tools or delegate_to_agent for the step, look at the result, then call complete_plan_step with the step number and a one-paragraph summary using real names and numbers. A step that starts a prospecting run is not finished until you have waited for it (the researcher uses await_run) and looked at what it saved. Do not ask the user to approve again. Stop and ask only before an irreversible action (sending email, activating a sequence). When every step is complete, write a short wrap-up for the user.",
+    "Work through the unfinished steps in order, one at a time, like a normal chat turn: call the tools for the step yourself, look at the result, then call complete_plan_step with the step number and a one-paragraph summary using real names and numbers. Do not ask the user to approve again. Stop and ask only before an irreversible action (sending email, activating a sequence). When every step is complete, write a short wrap-up for the user.",
   ].join("\n\n");
 }

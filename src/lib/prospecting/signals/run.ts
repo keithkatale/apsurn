@@ -9,6 +9,7 @@ import type { AgentRunContext } from "../agent/context";
 import type { AgentRunResult, AgentStreamEvent } from "../agent/run";
 import { persistLead, type SaveLeadResult } from "../agent/persist";
 import type { TriggerSpec } from "../types";
+import { collectAcceleratorSignals, collectLaunchSignals } from "./community";
 import { collectHiringSignals } from "./hiring";
 import { collectNewsSignals } from "./news";
 import { collectSocialSignals } from "./social";
@@ -27,14 +28,18 @@ const TRIGGER_NAME: Record<TriggerSpec["type"], string> = {
   funding_news: "funding or news",
   social_pain: "social pain-post",
   tech_website: "tech",
+  launch: "launch",
+  accelerator: "accelerator",
 };
 const TRIGGER_NARRATION: Record<TriggerSpec["type"], string> = {
   hiring: "Searching job boards for companies hiring for the roles that signal a need…",
   funding_news: "Searching recent news for funding rounds, launches, expansions and key hires, and checking each against its source article…",
   social_pain: "Searching LinkedIn for people describing this problem right now, then matching each to their company…",
   tech_website: "Checking company websites for tech changes…",
+  launch: "Reading Launch YC, Show HN, Product Hunt and BetaList for companies that just launched, and judging which need what you sell…",
+  accelerator: "Reading the newest Y Combinator batches for companies just admitted, and judging which need what you sell…",
 };
-export const SUPPORTED_TRIGGERS: ReadonlyArray<TriggerSpec["type"]> = ["hiring", "funding_news", "social_pain"];
+export const SUPPORTED_TRIGGERS: ReadonlyArray<TriggerSpec["type"]> = ["hiring", "funding_news", "social_pain", "launch", "accelerator"];
 
 /** Drops signals this user has already been told about; a company with nothing new left is dropped. Tolerates the table not existing yet. */
 export async function dropReportedSignals(db: SupabaseClient, userId: string, leads: ScoredLead[]): Promise<ScoredLead[]> {
@@ -55,7 +60,7 @@ export async function dropReportedSignals(db: SupabaseClient, userId: string, le
     .filter((lead) => lead.signals.length > 0);
 }
 
-async function recordSignals(db: SupabaseClient, userId: string, runId: string, lead: ScoredLead) {
+export async function recordSignals(db: SupabaseClient, userId: string, runId: string, lead: ScoredLead) {
   const { error } = await db.from("prospect_signals").upsert(
     lead.signals.map((signal) => ({
       user_id: userId,
@@ -103,7 +108,18 @@ export async function runSignalScout(opts: {
   for (const spec of supported) {
     const stopped = await checkStopped();
     if (stopped) return result(stopped, stopped === "cancelled");
-    const collect = spec.type === "hiring" ? collectHiringSignals : spec.type === "funding_news" ? collectNewsSignals : spec.type === "social_pain" ? collectSocialSignals : null;
+    const collect =
+      spec.type === "hiring"
+        ? collectHiringSignals
+        : spec.type === "funding_news"
+          ? collectNewsSignals
+          : spec.type === "social_pain"
+            ? collectSocialSignals
+            : spec.type === "launch"
+              ? collectLaunchSignals
+              : spec.type === "accelerator"
+                ? collectAcceleratorSignals
+                : null;
     if (!collect) continue;
     emit({ type: "token", text: TRIGGER_NARRATION[spec.type] });
     try {

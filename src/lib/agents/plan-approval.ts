@@ -12,7 +12,7 @@ export type ApprovalResult =
   | { ok: false; httpStatus: number; error: string; code?: string };
 
 /** Approve a planned task (or resume one paused on its budget). The Copilot then carries the plan out in its conversation. Shared by the card button and the chat tool. */
-export async function approveAgentTask(userId: string, taskId: string, requestedBudget?: number): Promise<ApprovalResult> {
+export async function approveAgentTask(userId: string, taskId: string, requestedBudget?: number, options: { wake?: boolean } = {}): Promise<ApprovalResult> {
   const db = createAdminClient();
   const task = await loadOwnedTask(db, userId, taskId);
   if (!task) return { ok: false, httpStatus: 404, error: "Task not found" };
@@ -46,7 +46,7 @@ export async function approveAgentTask(userId: string, taskId: string, requested
   const resuming = task.status === "paused";
   const budget = Math.max(task.spent_credits, requestedBudget ?? task.budget_credits);
   await setTaskStatus(db, task.id, "running", { budget_credits: budget, error: null, started_at: task.started_at ?? new Date().toISOString() });
-  if (task.conversation_id) {
+  if (task.conversation_id && options.wake !== false) {
     await enqueueCopilotWakeup(db, {
       conversationId: task.conversation_id,
       userId,

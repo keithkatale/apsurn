@@ -57,7 +57,7 @@ export async function reserveProspectingRun(
 
   const { data: list, error: listError } = await db
     .from("prospect_lists")
-    .insert({ user_id: input.userId, company_id: input.companyId, name: input.listName, criteria: input.criteria, status: "queued", requested_count: input.limit })
+    .insert({ user_id: input.userId, company_id: input.companyId, name: input.listName, criteria: { ...input.criteria, source: "ai" }, status: "queued", requested_count: input.limit })
     .select()
     .single();
   if (listError || !list) return { ok: false, error: listError?.message ?? "Failed to create list", status: 500 };

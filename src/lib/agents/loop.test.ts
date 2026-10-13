@@ -82,7 +82,7 @@ test("runs read-only calls concurrently, returns outputs in call order, and repo
   );
 });
 
-test("mutating calls run sequentially and the loop reports exhaustion", async () => {
+test("read-only calls run first together, then writes one by one, and the loop reports exhaustion", async () => {
   const order: string[] = [];
   const result = await runAgentLoop({
     ai: fakeClient([{ calls: [{ name: "create_a", arguments: "{}" }, { name: "list_b", arguments: "{}" }] }]),
@@ -99,7 +99,7 @@ test("mutating calls run sequentially and the loop reports exhaustion", async ()
       return {};
     },
   });
-  assert.deepEqual(order, ["start:create_a", "end:create_a", "start:list_b", "end:list_b"]);
+  assert.deepEqual(order, ["start:list_b", "end:list_b", "start:create_a", "end:create_a"]);
   assert.equal(result.exhausted, true);
 });
 
@@ -118,4 +118,44 @@ test("stops before calling the model when cancelled", async () => {
   });
   assert.equal(result.cancelled, true);
   assert.equal(calls, 0);
+});
+
+test("a tool that never answers is failed after its timeout instead of hanging the turn", async () => {
+  const input: never[] = [];
+  const result = await runAgentLoop({
+    ai: fakeClient([{ calls: [{ name: "slow_tool", arguments: "{}" }] }, { text: "done" }]) as never,
+    model: "m",
+    instructions: "",
+    tools: [],
+    input,
+    maxRounds: 3,
+    toolTimeoutMs: 50,
+    isParallelSafe: () => false,
+    runTool: () => new Promise(() => undefined),
+  });
+  const slow = result.toolResults[0];
+  assert.match(String((slow.result as { error?: string }).error), /did not finish within/);
+  assert.equal(result.finalText, "done");
+});
+
+test("pressing stop abandons a running tool", async () => {
+  let stop = false;
+  const input: never[] = [];
+  const pending = runAgentLoop({
+    ai: fakeClient([{ calls: [{ name: "slow_tool", arguments: "{}" }] }, { text: "x" }]) as never,
+    model: "m",
+    instructions: "",
+    tools: [],
+    input,
+    maxRounds: 3,
+    isCancelled: () => stop,
+    isParallelSafe: () => false,
+    runTool: () => new Promise(() => undefined),
+  });
+  setTimeout(() => {
+    stop = true;
+  }, 100);
+  const result = await pending;
+  assert.equal((result.toolResults[0].result as { error?: string }).error, "Stopped.");
+  assert.equal(result.cancelled, true);
 });

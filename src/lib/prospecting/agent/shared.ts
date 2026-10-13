@@ -11,7 +11,7 @@ import type { SiteSnapshot } from "@/lib/scraper/crawl";
 import type { FetchedPage } from "@/lib/scraper/fetch-page";
 import { extractPeople } from "../contact-extract";
 import { emailCandidates, learnEmailPattern, type Pattern } from "../email-pattern";
-import { verifyEmail } from "../email-verifier";
+import { verifyCandidates, verifyEmail } from "../email-verifier";
 import { findEmail } from "../icypeas";
 import type { CandidateContact, ContactStatus, ExtractedPerson, ProspectCriteria } from "../types";
 import { isExcludedHost } from "./directories";
@@ -217,90 +217,43 @@ export interface ResolvedEmail {
   checks: Record<string, unknown>;
 }
 
-/** Resolve/verify an email: observed value first, then pattern candidates. */
+/**
+ * Resolve an email and confirm it before the lead exists. Only an address the verifier confirms as a real mailbox
+ * comes back with an email; anything unconfirmed (pattern guess, catch-all, verifier unavailable) comes back with
+ * email null so the lead is not saved with an address that could bounce.
+ */
 export async function resolveEmail(
   person: ExtractedPerson,
   domain: string,
   pattern: Pattern | null
 ): Promise<ResolvedEmail> {
+  const none: ResolvedEmail = { email: null, origin: "inferred", status: "risky", checks: {} };
+
   if (person.email) {
     const v = await verifyEmail(person.email);
-    if (v.status === "verified" || v.status === "accept_all") {
-      return { email: person.email, origin: "public", status: v.status, checks: v.checks };
-    }
-    if (v.checks?.reason === "verifier_not_configured") {
-      // Trust an on-page email when we have no verifier at all.
-      return { email: person.email, origin: "public", status: "accept_all", checks: v.checks };
-    }
+    if (v.status === "verified") return { email: person.email, origin: "public", status: "verified", checks: v.checks };
   }
 
-  // A discovery provider, when one is configured, is tried before guessing.
-  // It returns an address someone actually observed, where the loop below
-  // only produces hypotheses — and each hypothesis costs a verifier round
-  // trip to disprove. Misses cost nothing, so there is no reason to guess
-  // first. Null covers every failure mode, including "genuinely not found".
+  // A discovery provider is tried before guessing: it returns an address someone actually observed, where the loop
+  // below only produces hypotheses, each costing a verification to disprove.
   const found = await findEmail(person.fullName, domain);
   if (found) {
-    if (found.status === "verified" || found.status === "accept_all") {
-      return {
-        email: found.email,
-        origin: "public",
-        status: found.status,
-        checks: { source: found.provider, certainty: found.certainty },
-      };
+    if (found.status === "verified") {
+      return { email: found.email, origin: "public", status: "verified", checks: { source: found.provider, certainty: found.certainty } };
     }
-    // Returned with low confidence: let our own verifier settle it rather
-    // than trusting or discarding the provider's grade. If the verifier
-    // can't confirm it either, it is still a real address a paid database
-    // named for this person — a stronger fallback than a locally-generated
-    // pattern guess, so it is kept as the best guess so far rather than
-    // discarded outright.
     const v = await verifyEmail(found.email);
-    if (v.status === "verified" || v.status === "accept_all") {
-      return {
-        email: found.email,
-        origin: "public",
-        status: v.status,
-        checks: { ...v.checks, source: found.provider, certainty: found.certainty },
-      };
-    }
-    if (v.status !== "invalid") {
-      return {
-        email: found.email,
-        origin: "public",
-        status: "risky",
-        checks: { ...v.checks, source: found.provider, certainty: found.certainty },
-      };
+    if (v.status === "verified") {
+      return { email: found.email, origin: "public", status: "verified", checks: { ...v.checks, source: found.provider, certainty: found.certainty } };
     }
   }
 
-  // Nothing verified outright. An unproven pattern guess is still worth
-  // keeping — marked "risky" so outreach treats it cautiously (e.g. low
-  // volume, no bulk sending) — rather than dropping a real decision maker
-  // just because their exact address couldn't be confirmed. A candidate the
-  // verifier actively disproved ("invalid") is excluded; anything else is a
-  // legitimate fallback.
-  //
-  // Deliberately sequential, not concurrent: the verifier rate-limits at 1
-  // request/second/domain, and every candidate here is at the same domain.
-  // Firing them in parallel would trip that limiter and turn what should
-  // verify cleanly into a false "risky" — the opposite of what raising
-  // concurrency elsewhere (different companies, different domains, see
-  // agent/run.ts) is safe to do.
-  let bestGuess: string | null = null;
-  for (const candidate of emailCandidates(person.fullName, domain, pattern)) {
-    if (candidate === person.email) continue;
-    const v = await verifyEmail(candidate);
-    if (v.status === "verified" || v.status === "accept_all") {
-      return { email: candidate, origin: "inferred", status: v.status, checks: v.checks };
-    }
-    if (v.checks?.reason === "verifier_not_configured") {
-      // Without a verifier, keep the top pattern guess as a soft-trusted lead.
-      return { email: candidate, origin: "inferred", status: "accept_all", checks: v.checks };
-    }
-    if (v.status !== "invalid" && !bestGuess) bestGuess = candidate;
+  // Every plausible format for this name, checked together in one bulk verification; the best-ranked confirmed one wins.
+  const guesses = emailCandidates(person.fullName, domain, pattern).filter((candidate) => candidate !== person.email);
+  if (guesses.length > 0) {
+    const { verified } = await verifyCandidates(guesses);
+    if (verified) return { email: verified, origin: "inferred", status: "verified", checks: { source: "pattern_guess" } };
   }
-  return { email: bestGuess, origin: "inferred", status: "risky", checks: {} };
+  return none;
 }
 
 export { learnEmailPattern };

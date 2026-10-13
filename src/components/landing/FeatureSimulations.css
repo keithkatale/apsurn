@@ -38,8 +38,8 @@
 }
 
 .feature-sim .sim-live.is-run {
-  background: #1a2436;
-  color: #8fb4ff;
+  background: #1f1d2b;
+  color: #f3a577;
 }
 
 .feature-sim .sim-live.is-done {
@@ -66,7 +66,7 @@
   height: 0.9em;
   margin-left: 1px;
   vertical-align: text-bottom;
-  background: #4379ee;
+  background: #e8713a;
   animation: sim-blink 0.9s steps(1) infinite;
 }
 
@@ -168,8 +168,8 @@
 .feature-sim .sim-avatar {
   display: grid;
   place-items: center;
-  background: #1a2740;
-  color: #9ec0ff;
+  background: #2a1a18;
+  color: #f3a577;
   font-size: 12px;
   font-weight: 700;
 }
@@ -282,7 +282,7 @@
   margin-top: 12px;
   border: 0;
   border-radius: 10px;
-  background: #4379ee;
+  background: #e8713a;
   color: #ffffff;
   padding: 8px 14px;
   font-size: 13px;
@@ -302,13 +302,13 @@
   flex-direction: row;
   align-items: flex-start;
   gap: 10px;
-  background: #162033;
+  background: #1f1d2b;
 }
 
 .feature-sim .sim-reply span {
   font-size: 11px;
   font-weight: 600;
-  color: #8fb4ff;
+  color: #f3a577;
 }
 
 .feature-sim .sim-reply p {

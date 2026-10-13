@@ -1,5 +1,7 @@
 "use client";
 
+import { usePathname } from "next/navigation";
+import { idFromPath, pushPath } from "@/lib/nav/url-state";
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
@@ -34,7 +36,9 @@ const CampaignNavContext = createContext<CampaignNav | null>(null);
 
 export function CampaignsNavProvider({ children }: { children: ReactNode }) {
   const [campaigns, setCampaigns] = useState<CampaignNavItem[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  // The address bar is the source of truth: /dashboard/campaigns is the gallery, /dashboard/campaigns/<id> a campaign.
+  const activeId = idFromPath(usePathname(), "/dashboard/campaigns");
+  const setActiveId = useCallback((id: string | null) => pushPath(id ? `/dashboard/campaigns/${id}` : "/dashboard/campaigns"), []);
   const actions = useRef<CampaignActions>({
     create: () => {},
     rename: () => {},

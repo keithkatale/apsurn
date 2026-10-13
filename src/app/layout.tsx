@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import Script from "next/script";
-import { Geist, Manrope } from "next/font/google";
+import { Fraunces, Geist, Manrope, Poppins } from "next/font/google";
 import { PostHogProvider } from "@/components/analytics/PostHogProvider";
 import { SupportChat } from "@/components/support/SupportChat";
 import { NavigationLoaderHost } from "@/components/loaders/navigation-loader-host";
 import { ThemeProvider } from "@/components/theme/theme-provider";
-import { PUBLIC_CONFIG_GLOBAL, readPublicSupabaseConfig } from "@/lib/supabase/public-config";
 import { materialSymbolsStylesheet } from "@/lib/campaigns/icon";
 import { THEME_BOOTSTRAP_SCRIPT } from "@/lib/theme";
 import "./globals.css";
@@ -20,11 +19,23 @@ const manrope = Manrope({
   variable: "--font-manrope",
 });
 
-// Cloud Run supplies NEXT_PUBLIC_* at container start, not at `next build`.
-// The landing page (and this config script) must render per request so those
-// values reach the browser. A static prerender bakes in whatever the image
-// build had — usually nothing.
-export const dynamic = "force-dynamic";
+// Apsurn GTM brand faces, used inside the app (dashboard and setup): Fraunces for display type, Poppins for the interface.
+// preload is off so marketing pages that never use them don't download them.
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  axes: ["SOFT", "opsz"],
+  variable: "--font-fraunces",
+  display: "swap",
+  preload: false,
+});
+
+const poppins = Poppins({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-poppins",
+  display: "swap",
+  preload: false,
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://apsurn.com"),
@@ -67,20 +78,13 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Read at render time so container hosts (Cloud Run) can supply these as
-  // ordinary runtime env vars, instead of requiring them at `next build`.
-  const publicConfig = readPublicSupabaseConfig();
-
   return (
-    <html lang="en" suppressHydrationWarning className={`${geist.variable} ${manrope.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${geist.variable} ${manrope.variable} ${fraunces.variable} ${poppins.variable}`}>
       <head>
-        <script
-          // Must run before any client component tries to build a Supabase
-          // client, so it is inlined in <head> rather than via next/script.
-          dangerouslySetInnerHTML={{
-            __html: `window.${PUBLIC_CONFIG_GLOBAL}=${JSON.stringify(publicConfig)};`,
-          }}
-        />
+        {/* Supabase public config, served at request time by app/runtime-config.js so pages can be built statically.
+            A plain blocking script: it must run before any client component creates a Supabase client. */}
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script src="/runtime-config.js" />
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
         <script
           id="datafast-queue"

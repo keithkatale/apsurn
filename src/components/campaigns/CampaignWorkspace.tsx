@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, Search, Upload } from "lucide-react";
+import { Check, ChevronLeft, Loader2, Search, Upload } from "lucide-react";
+import { CampaignsGallery } from "@/components/campaigns/CampaignsGallery";
 import { CampaignIcon } from "@/components/campaigns/CampaignIcon";
 import { CsvImportProgress, rememberProgressLog } from "@/components/campaigns/CsvImportProgress";
 import { NewCampaignDialog, type CsvProgressUpdate } from "@/components/campaigns/NewCampaignDialog";
@@ -104,7 +105,6 @@ export function CampaignWorkspace({
   senderName,
   hasBlueprint,
   inboxEmail,
-  initialCampaignId,
 }: {
   profile: CompanyProfile;
   campaigns: CampaignWorkspaceItem[];
@@ -113,7 +113,6 @@ export function CampaignWorkspace({
   senderName: string;
   hasBlueprint: boolean;
   inboxEmail: string | null;
-  initialCampaignId?: string;
 }) {
   const router = useRouter();
   const nav = useCampaignNav();
@@ -165,12 +164,10 @@ export function CampaignWorkspace({
       })),
     );
   }, [items, nav.sync]);
+  // The address bar picks the campaign; an id that no longer exists falls back to the gallery.
   useEffect(() => {
-    const ids = new Set(items.map((item) => item.id));
-    if (nav.activeId && ids.has(nav.activeId)) return;
-    const fallback = items.find((item) => item.id === initialCampaignId)?.id ?? items[0]?.id ?? null;
-    if (fallback !== nav.activeId) nav.select(fallback);
-  }, [items, initialCampaignId, nav.activeId, nav.select]);
+    if (nav.activeId && !items.some((item) => item.id === nav.activeId)) nav.select(null);
+  }, [items, nav.activeId, nav.select]);
   useEffect(() => {
     setLeadMap((current) => ({ ...current, ...leadsById }));
   }, [leadsById]);
@@ -206,7 +203,7 @@ export function CampaignWorkspace({
   const campaignId =
     nav.activeId && items.some((item) => item.id === nav.activeId)
       ? nav.activeId
-      : (items.find((item) => item.id === initialCampaignId)?.id ?? items[0]?.id ?? "");
+      : "";
   const campaign = items.find((item) => item.id === campaignId) ?? null;
   const availableLeadCount = Object.keys(leadMap).length;
   const campaignLeads = useMemo(() => {
@@ -796,7 +793,7 @@ export function CampaignWorkspace({
     if (!res.ok) return;
     const remaining = items.filter((item) => item.id !== id);
     setItems(remaining);
-    if (campaignId === id) nav.select(remaining[0]?.id ?? null);
+    if (campaignId === id) nav.select(null);
     router.refresh();
   }
 
@@ -995,10 +992,26 @@ export function CampaignWorkspace({
               Create new campaign
             </ThreeDButton>
           </div>
+        ) : !campaign ? (
+          <CampaignsGallery
+            campaigns={items}
+            leads={leadMap}
+            onOpen={(id) => nav.select(id)}
+            onCreate={() => setNewCampaignOpen(true)}
+            creating={generating}
+          />
         ) : (
           <>
             <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#EEEEEE] px-3 py-2.5 sm:px-4">
               <div className="flex min-w-0 items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => nav.select(null)}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[12px] font-medium text-neutral-600 hover:bg-neutral-100"
+                >
+                  <ChevronLeft className="size-3.5" />
+                  Campaigns
+                </button>
                 {campaign && (
                   <CampaignIcon campaign={campaign} storedSvg={campaign.iconSvg} selected className="size-9" />
                 )}

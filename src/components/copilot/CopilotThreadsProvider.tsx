@@ -1,6 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { idFromPath, pushPath } from "@/lib/nav/url-state";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ConversationSummary } from "@/components/copilot/CopilotSidebar";
 
 type CopilotThreads = {
@@ -19,7 +21,9 @@ const CopilotThreadsContext = createContext<CopilotThreads | null>(null);
 export function CopilotThreadsProvider({ children }: { children: ReactNode }) {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  // /dashboard is a fresh task; /dashboard/tasks/<id> is an existing one.
+  const activeId = idFromPath(usePathname(), "/dashboard/tasks");
+  const setActiveId = useCallback((id: string | null) => pushPath(id ? `/dashboard/tasks/${id}` : "/dashboard"), []);
 
   const refresh = useCallback(async () => {
     try {
@@ -32,7 +36,11 @@ export function CopilotThreadsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // The nav lists tasks on every dashboard page, so load them once when the dashboard opens.
+  const fetched = useRef(false);
   useEffect(() => {
+    if (fetched.current) return;
+    fetched.current = true;
     void refresh();
   }, [refresh]);
 
@@ -54,14 +62,14 @@ export function CopilotThreadsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const remove = useCallback(async (id: string) => {
-    setActiveId((current) => (current === id ? null : current));
+    if (activeId === id) setActiveId(null);
     setConversations((prev) => prev.filter((c) => c.id !== id));
     await fetch(`/api/copilot/chat?id=${id}`, { method: "DELETE" });
-  }, []);
+  }, [activeId, setActiveId]);
 
   const value = useMemo(
     () => ({ conversations, loading, activeId, select: setActiveId, refresh, rename, remove }),
-    [conversations, loading, activeId, refresh, rename, remove],
+    [conversations, loading, activeId, setActiveId, refresh, rename, remove],
   );
 
   return <CopilotThreadsContext.Provider value={value}>{children}</CopilotThreadsContext.Provider>;

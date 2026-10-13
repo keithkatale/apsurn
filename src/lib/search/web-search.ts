@@ -26,6 +26,7 @@
  * This path needs no credential beyond the Vertex one the app already uses.
  */
 
+import { googleSearch } from "./google-search";
 import { createVertexAiClientRaw, getVertexModel } from "@/lib/ai/vertex";
 import { safeAiErrorMessage } from "@/lib/ai/errors";
 
@@ -153,6 +154,16 @@ export async function webSearchResults(
   if (!naturalQuery) return [];
 
   const domains = options.domains ?? [];
+
+  // Real Google results first; the model-grounded Vertex path below is only a fallback.
+  if (process.env.APIFY_TOKEN?.trim()) {
+    try {
+      const real = await googleSearch(naturalQuery, { limit, domains });
+      if (real.length > 0) return real.map((row) => ({ url: row.url, title: row.title, snippet: row.snippet }));
+    } catch (error) {
+      console.warn("[web-search] Google search failed, trying Vertex:", error instanceof Error ? error.message : error);
+    }
+  }
   // Asking for many *individual* pages, with an explicit count, is what makes
   // grounding cite a page of distinct on-topic sources rather than a handful
   // of round-up articles about the topic. Measured on a platform-scoped

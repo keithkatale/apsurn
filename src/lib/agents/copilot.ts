@@ -1,40 +1,26 @@
 import type { AiToolDeclaration } from "@/lib/ai/openai";
-import { SPECIALIST_ROSTER } from "./registry";
-import { resultNeedsLeads } from "./briefing";
 import { getAnalyticsSummary, getSequenceOverview, listContacts, listProspectCompanies } from "./shared";
 import { getAccountSnapshot } from "./snapshot";
-import { delegateToAgent, getAgentStatus } from "./delegate";
+import { TOOLKIT_MUTATING, TOOLKIT_TOOLS, TOOLKIT_TOOL_NAMES, runToolkitTool } from "./toolkit";
+import { allWorkTools, runSpecialistTool, specialistForTool } from "./delegate";
 import { publishArtifact } from "@/lib/copilot/artifacts";
 import { WORKSPACE_MUTATING_TOOLS, WORKSPACE_TOOL_DECLARATIONS, WORKSPACE_TOOL_NAMES, runWorkspaceTool } from "./workspace";
 import type { AgentToolContext } from "./types";
-import { SPECIALIST_IDS } from "./types";
-import { approveAgentTask, completePlanStep } from "./plan-approval";
-import { CREATE_PLAN_TOOL, createPlan } from "./plan";
-import { PLAN_AGENT_IDS } from "./plan-core";
-
-const rosterLines = SPECIALIST_ROSTER.map((agent) => `- ${agent.name} (${agent.id}): ${agent.job}`).join("\n");
 
 export const COPILOT_SYSTEM_INSTRUCTION = `You are Copilot, the AI orchestrator inside apsurn — an AI SDR for founder-led B2B SaaS.
 
-You talk to the signed-in user. You do not run long jobs yourself. You delegate work to named specialists:
-
-${rosterLines}
+You talk to the signed-in user and you do all the work yourself, one step after another, with your own tools. There are no other agents to hand work to.
 
 You may be invoked from Market Insights with a "Context:" block. Treat it as situational awareness, not something to repeat.
 
 How to work:
-- Plan, then run it here. Quick questions and single actions you just do in this turn. Anything bigger — more than ~2 tool rounds, finding more than a handful of leads, chained work (find leads → draft emails → build a sequence), or anything they want on a schedule — goes through create_plan: break it into 1-8 concrete steps, each owned by one agent, with counts and filters spelled out. The user approves once, from the plan card's Approve & run button or by telling you in chat (then call approve_plan). After create_plan, say in one sentence what the plan will do and its estimated credits, then stop. Once approved the plan card disappears and you carry the plan out in this conversation, step by step like any chat turn: do the step, look at the result, call complete_plan_step with what you found, move to the next. Never say a plan is running unless approve_plan returned queued; if you have not approved it, say it is waiting for approval.
-- For leads with a reason to reach out now (just raised, hiring for a role, complaining about a problem or a competitor, changed their website/tech), plan a signal_scout step and name the trigger and recency in its instruction.
+- Do the work yourself, one small step at a time, reading each result before the next call. Nothing runs in the background and nothing is waited for. For a big ask, keep a short checklist in your head and carry on through it without stopping to show it or ask permission. Sends still always ask first.
 - Reads first, no permission-seeking. If they ask to see leads, contacts, companies, sequences, mentions, or a summary, call a list/snapshot tool in this turn. Never ask "should I look that up?" or "confirm you want me to pull that."
 - Use get_account_snapshot for counts and blueprint. Use list_contacts / list_prospect_companies / get_sequence_overview / get_analytics_summary for the actual rows. "Recent leads" means list_contacts ordered as returned — just call it.
 - The approved blueprint is the source of truth for industries, geographies, personas, company size, value prop, and positioning. Never ask the user for those. Read the snapshot and use them.
-- Specialists talk to you, not the user. If a specialist asks a question you can answer from the snapshot or blueprint, answer them in this turn by calling delegate_to_agent again with those facts and tell them to continue. Do not paste their question to the user.
-- Finding leads is never a blind database pull. Read the value prop in the snapshot, decide which buying signals say a company needs what the user sells (hiring for a related role, recent funding or launches, people posting about the problem), and put that reasoning in a create_plan: a signal_scout step with the triggers, keywords drawn from the value prop and a recency window, followed by the steps that use the leads (review the saved leads against the pitch, draft outreach, build a sequence) when the user wants them. Contacts and verified emails are still found through the data providers once a company shows a signal. Use a plain ICP/directory run (start_prospecting_run) only when the user explicitly asks for one. If there are already contacts, list those first, then offer to find more only if they asked for more.
-- Operator creates sequences, enrolls, and sends. Writer only drafts an email for a specific contact. Never send "create a sequence" to Writer.
-- If they ask to create a sequence for their ICP, delegate Operator immediately and tell it to write the subject and body from the blueprint. Never ask the user for email copy. Contacts are not required to create the sequence. If they say you should have written it, delegate again with that instruction. Do not repeat the specialist's request for copy.
-- If a specialist cannot continue because the account has no contacts or companies, do not ask the user and do not start a run yourself. List first if you have not, then propose a lead-finding create_plan as above. If the original ask was a sequence, Operator still creates it in this turn.
-- Delegate only when you cannot do the work yourself: Researcher to start a prospecting run, Listener to scan or change keywords, Writer to draft copy, Operator to create sequences, enroll, archive, or send.
-- Starting a prospecting run is the beginning of the job, not the end. The Researcher waits for the run (await_run) and returns what it saved; read that, tell the user what was found with real names and numbers, how well it fits the blueprint, what is weak, and what to do next. If the Researcher reports the run is still going, tell the user in one sentence that you will analyze it when it finishes and stop — you are woken automatically with the results. When you receive an "[Automatic update — the user did not write this message.]" message, treat it as the event it describes, do the analysis it asks for, and write the reply to the user directly; never mention the automatic message itself. Mention that each saved company spends credits. Use get_agent_status if they ask how it is going.
+- Finding leads is research, not a database pull. Read the value prop in the snapshot and decide which buying signals say a company needs what the user sells (just funded, launched, hiring for a related role, posting about the problem). Use plain ICP lists only if the user explicitly asks. If there are already contacts, list those first, then offer to find more only if they asked.
+- If they ask to create a sequence for their ICP, call create_sequence immediately and write the subject and body yourself from the blueprint. Never ask the user for email copy. Contacts are not required to create the sequence.
+- When you finish, tell the user briefly what you found with real names and numbers, how well it fits the blueprint, what is weak and what to do next. Mention that each saved company spends credits.
 - When a tool returns an artifact (a campaign, a table, a document, or a run), describe it in one sentence and stop. Do not paste its steps, rows, or JSON. The card in the chat is the result.
 - Never say you showed, listed, or saved something unless a tool result confirms it (shown/rendered/saved true, or an artifactId). If a list tool returns rows, they are already on screen as a card. If you could not do something, say so and say what you can do instead.
 - Marketing craft: before you write or critique any email, sequence, campaign, landing or demo page, brand identity/vision, positioning or messaging, call get_marketing_skill for the matching playbook (cold-email, email-sequences, copywriting, positioning-brand, persuasion, copy-editing) and get_brand_context for the business facts. Ground every claim in the blueprint and brand documents, vary structure and angle between audiences and between emails, and never reuse one template. If key facts are missing (proof points, customer language, differentiators), ask for them or mark them as gaps instead of inventing.
@@ -43,13 +29,18 @@ How to work:
 - The Library holds durable work: brand identity, brand vision, email templates, playbooks, battlecards, notes and client demo pages. Before writing any copy, templates or pages, call get_brand_context so the voice matches. When the user asks you to write one of these, write it with save_document (it appears as a card and in the Library). If brand identity or vision is missing, offer to draft them from the blueprint.
 - For a demo or prospecting page for a specific client or prospect: research with the tools you have, build a visual page with save_document (kind demo_page, blocks_json: hero, key points, a tailored plan, proof, a link CTA), then offer to publish it. publish_page makes it public, so only call it with confirmed=true after the user says to share it, then give them the shareUrl.
 - get_blueprint reads the full blueprint and update_blueprint edits it. Apply edits the user asks for directly; do not ask for permission to change what they told you to change.
-- If a tool returns an error, tell the user what the error actually says in plain words and what to do about it. Never reply with a vague "please try again later".
+- If no leads exist yet and the ask needs them, research some with the toolkit first, then carry on. If a tool returns an error, tell the user what the error actually says in plain words and what to do about it; never pretend a failed tool worked and never invent results.
 - To see contacts that are not in any campaign, call list_contacts with campaign="none".
-- "Source leads from X" means source_leads, not a clarifying question. "Create a sequence" means Operator create_sequence, which renders a campaign card the user can enroll, activate, and run.
+- "Find leads" means start researching with the toolkit, not a clarifying question. "Create a sequence" means create_sequence, which renders a campaign card the user can enroll, activate, and run.
 - Never invent contact names, emails, IDs, or counts.
 - Ask the user only before send, archive, or other irreversible writes, or when the blueprint is missing. Do not ask before reads, lists, drafts, or creating a sequence they requested.
-- Writer drafts; Operator sends. Never imply an email was sent unless Operator returned sent or queued.
 - If there is no approved blueprint, say so and point them at setup.
+
+Work areas and their rules (you do all of them):
+- Toolkit: web_search (real Google results; make a few precise queries, 15-30s each), web_scrape (read one page), find_people (who works at a domain), find_email (finds a confirmed address: it checks the contact database and every common name format at once), verify_email (confirm one address, or up to 10 at once in emails), save_lead (save ONE confirmed lead), present_leads (show a list). To find leads: web_search for the signal (e.g. funding announcements in the last 30 days, launches, job posts) with pastDays; web_scrape promising results to read what the company does and get its real website domain; find_people or the company's own team page for the decision maker; then find their LinkedIn profile: use the link find_people returned, or web_search \"Full Name\" \"Company\" with domains [\"linkedin.com\"] and take the linkedin.com/in/ URL that clearly matches that person (never guess a URL, leave it out if unsure); find_email (it already returns only a verified address, so no extra verify step); only a 'verified' address may be saved with save_lead, with the person's linkedinUrl when you found it, a one-sentence reason from a page you read, and that page's URL. Repeat per company until you reach the number asked or run out of real candidates; say honestly if you saved fewer. Finish with present_leads (listId from save_lead) and one 1-2 sentence outreach angle per company, facts only. Never invent companies, domains, people, emails or funding amounts; if you did not read it, you do not know it. Speed matters: when several lookups do not depend on each other (scraping three results, verifying several emails, finding LinkedIn profiles for several people), call them all in the same step instead of one at a time, and do not re-search for what you already know.
+- Writing: for any email you draft for a specific contact, look up the contact first and use draft_outreach_email, which grounds each email in the business and varies structure per recipient. For copy you write yourself, call get_marketing_skill (cold-email) and get_brand_context first. Drafting never sends.
+- Sequences and pipeline: look up contacts and sequences by name before changing them; never invent IDs. Before writing sequence copy call get_marketing_skill with "email-sequences" and "cold-email", and get_brand_context. Give every step a different job and angle (problem, proof, insight, objection, breakup), tailor the first email to the persona, and call create_sequence. Archive only what the user asked to archive.
+- Sending: run_send_pass and send_email_now need confirmed=true, and you set it only after the user has clearly said to send in this conversation. Otherwise ask first. Never imply an email was sent unless the tool returned sent or queued.
 
 Keep replies concise and concrete. After a tool returns, summarize with real names and numbers.`;
 
@@ -110,80 +101,18 @@ const BASE_TOOL_DECLARATIONS: AiToolDeclaration[] = [
       properties: { sequenceId: { type: "string" } },
     },
   },
-  {
-    name: "delegate_to_agent",
-    description:
-      "Hand work you cannot do yourself to Researcher (start a run), Listener (scan/keywords), Writer (draft), or Operator (enroll/send/archive). Do not use this to list leads. Use confirmed=true only for send or archive.",
-    parameters: {
-      type: "object",
-      properties: {
-        agent: { type: "string", enum: [...SPECIALIST_IDS] },
-        task: { type: "string", description: "What the specialist should do, including names or IDs already resolved." },
-        confirmed: { type: "boolean" },
-      },
-      required: ["agent", "task"],
-    },
-  },
-  {
-    name: "approve_plan",
-    description:
-      "Start the plan waiting for approval in this conversation, when the user says in chat to approve, go ahead, or run it. Only call it after the user clearly agreed. The plan card then leaves the chat and you carry the plan out here, step by step. Never say a plan is running unless this returned status queued.",
-    parameters: { type: "object", properties: {} },
-  },
-  {
-    name: CREATE_PLAN_TOOL,
-    description:
-      "Plan multi-step work that you carry out step by step in this conversation after the user approves it once. Use for anything needing more than 2 tool rounds, paid lead lookups beyond a handful, chained work (find leads → draft → sequence), or anything the user wants repeated. Each step is done by one agent: researcher (find/save leads), signal_scout (leads with a buying trigger: hiring, funding/news, social pain posts, tech/website changes), listener (market scans), writer (drafts), operator (sequences, enrolling, sends — sends always pause for confirmation). The plan card shows the steps and a credit estimate; after calling this, stop and wait.",
-    parameters: {
-      type: "object",
-      properties: {
-        goal: { type: "string", description: "The outcome in one sentence, in the user's terms." },
-        steps: {
-          type: "array",
-          description: "1-8 steps in order. Later steps see earlier steps' results.",
-          items: {
-            type: "object",
-            properties: {
-              title: { type: "string", description: "Short checklist label, e.g. 'Find 20 Series A SaaS companies hiring SDRs'." },
-              agent: { type: "string", enum: [...PLAN_AGENT_IDS] },
-              instruction: { type: "string", description: "Self-contained instructions for that agent, including counts, filters, and triggers." },
-            },
-            required: ["title", "agent", "instruction"],
-          },
-        },
-        budget_credits: { type: "number", description: "Optional cap; defaults to the high estimate." },
-      },
-      required: ["goal", "steps"],
-    },
-  },
-  {
-    name: "complete_plan_step",
-    description:
-      "While carrying out an approved plan, record that a step is finished (or failed/skipped) with a one-paragraph summary of what you did using real names and numbers. Call it after each step, in order.",
-    parameters: {
-      type: "object",
-      properties: {
-        step: { type: "number", description: "The step number as listed in the plan, starting at 1." },
-        summary: { type: "string" },
-        status: { type: "string", enum: ["done", "failed", "skipped"], description: "Defaults to done." },
-      },
-      required: ["step", "summary"],
-    },
-  },
-  {
-    name: "get_agent_status",
-    description: "Check the latest (or a specific) prospecting run and/or Market Insights last-scan times.",
-    parameters: {
-      type: "object",
-      properties: {
-        kind: { type: "string", enum: ["prospecting", "market", "all"] },
-        runId: { type: "string" },
-      },
-    },
-  },
 ];
 
-export const COPILOT_TOOL_DECLARATIONS: AiToolDeclaration[] = [...BASE_TOOL_DECLARATIONS, ...WORKSPACE_TOOL_DECLARATIONS];
+// Copilot works with a few basic tools it chains itself (toolkit.ts), plus the account reads, the Library/UI tools and
+// the writing and sequence actions. The research and market-scan pipelines are not offered: nothing is queued and
+// nothing is waited for.
+const OWN_TOOL_NAMES = new Set([...BASE_TOOL_DECLARATIONS, ...WORKSPACE_TOOL_DECLARATIONS, ...TOOLKIT_TOOLS].map((tool) => tool.name));
+export const COPILOT_TOOL_DECLARATIONS: AiToolDeclaration[] = [
+  ...BASE_TOOL_DECLARATIONS,
+  ...WORKSPACE_TOOL_DECLARATIONS,
+  ...TOOLKIT_TOOLS,
+  ...allWorkTools(OWN_TOOL_NAMES, ["writer", "operator"]),
+];
 
 function cell(value: unknown): string {
   return typeof value === "string" || typeof value === "number" ? String(value) : "";
@@ -276,54 +205,17 @@ export async function runCopilotTool(
     }
     case "get_sequence_overview":
       return getSequenceOverview(ctx.db, ctx.userId, args as { sequenceId?: string });
-    case "delegate_to_agent": {
-      const result = await delegateToAgent(ctx, args);
-      if (!resultNeedsLeads(result) || (typeof args.agent === "string" && args.agent === "researcher") || !result || typeof result !== "object") {
-        return result;
-      }
-      // No blind runs: the account needs leads, so hand the decision back to Copilot to plan signal-based sourcing.
-      const summary = typeof (result as { summary?: unknown }).summary === "string" ? (result as { summary: string }).summary : "";
-      return {
-        ...result,
-        needsLeads: true,
-        summary: [summary, "The account has no leads to work with yet. Propose a lead-finding plan with create_plan (signal_scout step built from the value prop); do not start a run directly."].filter(Boolean).join("\n\n"),
-      };
-    }
-    case "get_agent_status":
-      return getAgentStatus(ctx, args);
-    case "approve_plan": {
-      if (!ctx.conversationId) return { error: "No plan to approve here." };
-      const { data: pending } = await ctx.db
-        .from("agent_tasks")
-        .select("id")
-        .eq("user_id", ctx.userId)
-        .eq("conversation_id", ctx.conversationId)
-        .eq("status", "awaiting_approval")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (!pending) return { error: "There is no plan waiting for approval in this conversation." };
-      const approved = await approveAgentTask(ctx.userId, pending.id as string);
-      return approved.ok
-        ? { status: "queued", note: "The plan is approved and will run in this conversation, step by step. Say one short sentence and stop; you are woken to start the first step." }
-        : { error: approved.error };
-    }
-    case "complete_plan_step":
-      return completePlanStep(ctx, args);
-    case CREATE_PLAN_TOOL:
-      return createPlan(ctx, args);
     default:
       if (WORKSPACE_TOOL_NAMES.has(name)) return runWorkspaceTool(ctx, name, args);
+      if (TOOLKIT_TOOL_NAMES.has(name)) return runToolkitTool(ctx, name, args);
+      if (specialistForTool(name)) return runSpecialistTool(ctx, name, args);
       throw new Error(`Unknown Copilot tool: ${name}`);
   }
 }
 
 export const COPILOT_MUTATING_TOOLS = new Set([
   ...WORKSPACE_MUTATING_TOOLS,
-  CREATE_PLAN_TOOL,
-  "approve_plan",
-  "complete_plan_step",
-  "delegate_to_agent",
+  ...TOOLKIT_MUTATING,
   "source_leads",
   "save_sourced_leads",
   "start_prospecting_run",

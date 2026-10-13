@@ -1,18 +1,6 @@
-const WINDOW_MS = 10 * 60 * 1000;
-const MAX_REQUESTS = 20;
-const hits = new Map<string, number[]>();
+import { rateLimit } from "@/lib/rate-limit";
 
-/** Small per-instance limiter so the public support endpoint can't be used as a free AI proxy. */
+/** Public support endpoint: 20 messages per 10 minutes per address, so it can't be used as a free AI proxy. */
 export function allowSupportRequest(key: string, now = Date.now()): boolean {
-  const recent = (hits.get(key) ?? []).filter((t) => now - t < WINDOW_MS);
-  if (recent.length >= MAX_REQUESTS) {
-    hits.set(key, recent);
-    return false;
-  }
-  recent.push(now);
-  hits.set(key, recent);
-  if (hits.size > 5000) {
-    for (const [k, times] of hits) if (times.every((t) => now - t >= WINDOW_MS)) hits.delete(k);
-  }
-  return true;
+  return rateLimit(`support:${key}`, 20, 10 * 60 * 1000, now);
 }

@@ -80,6 +80,19 @@ export async function POST(request: Request) {
             },
           }
         : {}),
+      // Prefill from the account, but keep every contact and billing field editable.
+      // Without these flags, a prefilled name/email locks on the checkout page.
+      feature_flags: {
+        allow_customer_editing_name: true,
+        allow_customer_editing_email: true,
+        allow_customer_editing_street: true,
+        allow_customer_editing_city: true,
+        allow_customer_editing_state: true,
+        allow_customer_editing_zipcode: true,
+        allow_customer_editing_country: true,
+        allow_customer_editing_tax_id: true,
+        allow_customer_editing_business_name: true,
+      },
       customer: {
         email: user.email,
         name: user.user_metadata?.full_name || user.user_metadata?.name || undefined,

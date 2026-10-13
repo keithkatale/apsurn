@@ -1,3 +1,4 @@
+import { parseTriggers } from "@/lib/prospecting/signals/triggers";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -26,6 +27,8 @@ const requestSchema = z.object({
     minimumConfidence: z.number().min(0).max(1).default(0.5),
     requiredContactChannels: z.array(z.enum(["email", "phone", "profile"])).default(["email"]),
     preferYcLeads: z.boolean().optional(),
+    /** Signals to look for (launch, accelerator, hiring, ...). Parsed and clamped by parseTriggers. */
+    triggers: z.array(z.unknown()).max(8).optional(),
   }),
 });
 
@@ -69,6 +72,9 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
   if (!company) return NextResponse.json({ error: "Build and approve your company blueprint first" }, { status: 400 });
 
+  const triggers = parseTriggers(parsed.data.criteria.triggers);
+  const requestedCriteria: ProspectCriteria = { ...parsed.data.criteria, triggers: triggers.length ? triggers : undefined };
+
   const listName =
     parsed.data.listName ??
     `Prospecting run — ${new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
@@ -78,12 +84,12 @@ export async function POST(request: NextRequest) {
     companyId: company.id,
     listName,
     limit,
-    criteria: parsed.data.criteria,
+    criteria: requestedCriteria,
   });
   if (!reserved.ok) return NextResponse.json({ error: reserved.error }, { status: reserved.status });
 
   const { listId, runId } = reserved;
-  const criteria: ProspectCriteria = parsed.data.criteria;
+  const criteria: ProspectCriteria = requestedCriteria;
   const targetCount = limit;
   const { data: blueprint } = await db
     .from("company_blueprints")

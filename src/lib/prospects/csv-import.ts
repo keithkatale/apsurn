@@ -213,6 +213,7 @@ async function companyIdsByDomain(
   userId: string,
   companyId: string,
   grouped: Map<string, PreparedLead[]>,
+  listId: string | null,
 ): Promise<{ ids: Map<string, string>; companiesSaved: number }> {
   const domains = [...grouped.keys()];
   const ids = new Map<string, string>();
@@ -225,6 +226,10 @@ async function companyIdsByDomain(
       .is("archived_at", null);
     if (error) throw new Error(error.message);
     for (const row of data ?? []) ids.set(row.domain, row.id);
+  }
+  // Companies the account already had but that sit in no list join this one; companies in another list stay there.
+  if (listId && ids.size > 0) {
+    await db.from("prospect_companies").update({ list_id: listId }).in("id", [...ids.values()]).is("list_id", null);
   }
 
   const missing = domains.filter((domain) => !ids.has(domain));
@@ -243,6 +248,7 @@ async function companyIdsByDomain(
         employee_range: representative?.employeeRange ?? null,
         location: representative?.location ?? null,
         source: "csv_import",
+        ...(listId ? { list_id: listId } : {}),
         status: "new",
       };
     });
@@ -276,7 +282,8 @@ export async function importCsv(
   userId: string,
   companyId: string,
   csvText: string,
-  emit: (event: ImportProgress) => void
+  emit: (event: ImportProgress) => void,
+  listOptions?: { name: string; kind: "upload" | "campaign" },
 ): Promise<{ companiesSaved: number; contactsSaved: number; skipped: number; contactIds: string[]; leads: ImportedLead[] }> {
   const { headers, rows } = parseCsv(csvText);
   if (rows.length === 0) throw new Error("That file has no data rows");
@@ -351,7 +358,26 @@ export async function importCsv(
     skipped,
   });
 
-  const { ids: companyIds, companiesSaved } = await companyIdsByDomain(db, userId, companyId, grouped);
+  let listId: string | null = null;
+  if (listOptions) {
+    const { data: list, error: listError } = await db
+      .from("prospect_lists")
+      .insert({
+        user_id: userId,
+        company_id: companyId,
+        name: listOptions.name.replace(/\.csv$/i, "").slice(0, 120) || "Uploaded list",
+        criteria: { source: listOptions.kind },
+        status: "completed",
+        requested_count: prepared.length,
+        found_count: prepared.length,
+        completed_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+    if (listError) console.warn("[csv-import] could not create the list:", listError.message);
+    listId = list?.id ?? null;
+  }
+  const { ids: companyIds, companiesSaved } = await companyIdsByDomain(db, userId, companyId, grouped, listId);
   const blocked = await suppressedEmails(prepared.flatMap((row) => (row.email ? [row.email] : [])));
   const seen = new Set<string>();
   const drafts: Array<{ row: PreparedLead; prospectId: string; key: string }> = [];

@@ -56,7 +56,7 @@ export async function findKnownContact(db: SupabaseClient, domain: string, title
     .select("person_id, display_value, status, last_verified_at, last_observed_at")
     .eq("company_id", company.id)
     .eq("kind", "email")
-    .in("status", ["verified", "accept_all"])
+    .in("status", ["verified"])
     .gte("last_observed_at", since)
     .limit(25);
   if (!points?.length) return null;

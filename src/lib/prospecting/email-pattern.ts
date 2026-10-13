@@ -1,6 +1,6 @@
 import type { ExtractedPerson } from "./types";
 
-export type Pattern = "first.last" | "first" | "flast" | "firstlast" | "f.last" | "last";
+export type Pattern = "first.last" | "first" | "flast" | "firstlast" | "f.last" | "last" | "first_last" | "first-last" | "last.first" | "lastfirst" | "firstl" | "lastf" | "first.l";
 
 function names(fullName: string) {
   const parts = fullName.toLowerCase().normalize("NFKD").replace(/\p{M}/gu, "").replace(/[^a-z\s-]/g, "").split(/\s+/).filter(Boolean);
@@ -13,10 +13,18 @@ function localFor(pattern: Pattern, first: string, last: string) {
   if (pattern === "flast") return `${first[0]}${last}`;
   if (pattern === "f.last") return `${first[0]}.${last}`;
   if (pattern === "last") return last;
+  if (pattern === "first_last") return `${first}_${last}`;
+  if (pattern === "first-last") return `${first}-${last}`;
+  if (pattern === "last.first") return `${last}.${first}`;
+  if (pattern === "lastfirst") return `${last}${first}`;
+  if (pattern === "firstl") return `${first}${last[0]}`;
+  if (pattern === "lastf") return `${last}${first[0]}`;
+  if (pattern === "first.l") return `${first}.${last[0]}`;
   return `${first}${last}`;
 }
 
-const COMMON_PATTERNS: Pattern[] = ["first.last", "first", "flast", "firstlast", "f.last", "last"];
+// Most to least common in company email. A name is tried in all of these at once, never one at a time.
+const COMMON_PATTERNS: Pattern[] = ["first.last", "first", "flast", "firstlast", "f.last", "last", "first_last", "firstl", "first-last", "last.first", "lastf", "lastfirst", "first.l"];
 
 export function learnEmailPattern(people: ExtractedPerson[], domain: string): Pattern | null {
   const counts = new Map<Pattern, number>();

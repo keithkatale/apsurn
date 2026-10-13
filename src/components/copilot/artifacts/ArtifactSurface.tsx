@@ -5,7 +5,7 @@ import type { CopilotArtifact } from "@/lib/agents/types";
 import { LeadTableArtifact } from "./LeadTableArtifact";
 import { DocumentArtifact } from "./DocumentArtifact";
 import { PlanRunner } from "./PlanRunner";
-import { RunArtifact } from "./RunArtifact";
+import { RunLeadsArtifact } from "./RunLeadsArtifact";
 import { SequenceArtifact } from "./SequenceArtifact";
 import { UiArtifact } from "./UiArtifact";
 
@@ -27,6 +27,8 @@ export function ArtifactSurface({
   /** The agent started working in the background (e.g. a plan was approved); the chat should follow along. */
   onAgentWork?: () => void;
 }) {
+  // Run progress lives in the chain of thought; the user only sees the results.
+  if (artifact.kind === "run") return null;
   if (artifact.kind === "plan") return <PlanRunner artifact={artifact} onAgentWork={onAgentWork} />;
 
   return (
@@ -55,9 +57,11 @@ export function ArtifactSurface({
       {artifact.kind === "sequence" ? (
         <SequenceArtifact artifact={artifact} expanded={expanded} onChange={onChange} />
       ) : artifact.kind === "lead_table" ? (
-        <LeadTableArtifact artifact={artifact} onChange={onChange} />
-      ) : artifact.kind === "run" ? (
-        <RunArtifact artifact={artifact} expanded={expanded} onChange={onChange} />
+        artifact.payload.presentation === "run" ? (
+          <RunLeadsArtifact artifact={artifact} />
+        ) : (
+          <LeadTableArtifact artifact={artifact} onChange={onChange} />
+        )
       ) : artifact.kind === "ui" ? (
         <UiArtifact artifact={artifact} onPrompt={onPrompt} />
       ) : artifact.kind === "document" ? (

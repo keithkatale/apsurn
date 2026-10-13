@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { listSource, type ProspectListInfo } from "./lists";
 import { describeOutreach, type OutreachState } from "./outreach";
 
 interface RawContact {
@@ -89,5 +90,21 @@ export async function loadProspectCompanies(db: SupabaseClient, companyId: strin
         campaign_name: active?.campaignName ?? null,
       };
     }),
+  }));
+}
+
+/** The user's lists, newest first, with where each one came from. Empty lists are included. */
+export async function loadProspectLists(db: SupabaseClient, companyId: string): Promise<ProspectListInfo[]> {
+  const { data, error } = await db
+    .from("prospect_lists")
+    .select("id, name, criteria, created_at")
+    .eq("company_id", companyId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => ({
+    id: row.id as string,
+    name: String(row.name ?? "List"),
+    source: listSource({ name: row.name as string, criteria: row.criteria }),
+    created_at: String(row.created_at ?? ""),
   }));
 }

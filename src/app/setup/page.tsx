@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { OrbitLines } from "@/components/brand/OrbitLines";
 import { SetupWizard } from "@/components/onboarding/SetupWizard";
 
 export const metadata = {
@@ -9,16 +10,8 @@ export const metadata = {
 
 export default function SetupPage() {
   return (
-    <div className="relative h-dvh overflow-hidden bg-[#111111] text-[#f0f0f0]">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div
-          className="absolute inset-x-0 bottom-0 h-[34%] bg-[radial-gradient(rgba(255,255,255,0.55)_0.85px,transparent_0.85px)] [background-size:18px_18px] sm:[background-size:20px_20px]"
-          style={{
-            maskImage: "linear-gradient(to bottom, transparent 0%, black 38%)",
-            WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 38%)",
-          }}
-        />
-      </div>
+    <div className="relative isolate h-dvh overflow-hidden bg-[#111111] text-[#f0f0f0]">
+      <OrbitLines />
       <div className="relative z-10 flex h-full flex-col">
         <nav className="shrink-0">
           <div className="flex w-full items-center justify-between px-6 pt-4 sm:px-10 sm:pt-5 lg:px-12">

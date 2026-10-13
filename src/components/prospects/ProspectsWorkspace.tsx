@@ -1,25 +1,31 @@
 "use client";
 
+import { usePathname } from "next/navigation";
+import { idFromPath, pushPath } from "@/lib/nav/url-state";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PanelLeftOpen, Search, X } from "lucide-react";
+import { ChevronLeft, Loader2, MailCheck, PanelLeftOpen, Search, X } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { BulkActionBar } from "@/components/prospects/BulkActionBar";
 import { ContactProfilePanel } from "@/components/prospects/ContactProfilePanel";
 import { ContactsTable, type FlatRow } from "@/components/prospects/ContactsTable";
+import { ProspectListsGrid } from "@/components/prospects/ProspectListsGrid";
 import { NewProspectingRun } from "@/components/prospects/NewProspectingRun";
 import { ProspectChatPanel } from "@/components/prospects/ProspectChatPanel";
 import type { ProspectSearchCriteria } from "@/components/prospects/ProspectComposeModal";
-import { ProspectPlanPanel } from "@/components/prospects/ProspectPlanPanel";
+import { SignalSearchPanel } from "@/components/prospects/SignalSearchPanel";
 import { WeeklyScheduleForm } from "@/components/prospects/WeeklyScheduleForm";
-import { matchesOutreachTab, OUTREACH_OPTIONS, type OutreachState, type ProspectRow } from "@/components/prospects/types";
+import type { ProspectRow } from "@/components/prospects/types";
+import { LIST_SOURCE_LABEL, type ProspectListInfo } from "@/lib/prospects/lists";
 
 type LeftPanelMode = "idle" | "form" | "structured-run" | "chat";
 
 export function ProspectsWorkspace({
   initialCompanies,
+  initialLists = [],
   openFind = false,
 }: {
   initialCompanies: ProspectRow[];
+  initialLists?: ProspectListInfo[];
   openFind?: boolean;
 }) {
   const [companies, setCompanies] = useState<ProspectRow[]>(initialCompanies);
@@ -30,7 +36,12 @@ export function ProspectsWorkspace({
   const [profileIds, setProfileIds] = useState<{ contactId: string; companyId: string } | null>(null);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [tableTab, setTableTab] = useState<string>("all");
+  const [lists, setLists] = useState<ProspectListInfo[]>(initialLists);
+  // The address bar picks the view: /dashboard/prospects is the grid, /dashboard/prospects/all the general list,
+  // /dashboard/prospects/<id> one list. An unknown id shows the grid.
+  const pathId = idFromPath(usePathname(), "/dashboard/prospects");
+  const openList = pathId === "all" || (pathId && lists.some((list) => list.id === pathId)) ? pathId : null;
+  const setOpenList = useCallback((id: string | null) => pushPath(id ? `/dashboard/prospects/${id}` : "/dashboard/prospects"), []);
 
   const refetch = useCallback(async () => {
     try {
@@ -38,6 +49,7 @@ export function ProspectsWorkspace({
       if (!res.ok) return;
       const data = await res.json();
       if (Array.isArray(data.companies)) setCompanies(data.companies as ProspectRow[]);
+      if (Array.isArray(data.lists)) setLists(data.lists as ProspectListInfo[]);
     } catch {
       // best-effort; the next event will retry
     }
@@ -55,38 +67,61 @@ export function ProspectsWorkspace({
     [query]
   );
 
-  // Every prospecting run saves a company straight in — there is no manual
-  // approval step to wait for any more, so "new" (rows saved before this
-  // change, or by anything else that still writes that default) is treated
-  // exactly like "qualified". Only an explicit past "rejected" stays hidden,
-  // since that was a deliberate action, not a pending one.
-  const lists = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const company of active) {
-      if (company.list_id && !seen.has(company.list_id)) seen.set(company.list_id, company.list_name || "List");
-    }
-    return [...seen.entries()].map(([id, label]) => ({ id: `list:${id}`, label }));
-  }, [active]);
-
-  const tableTabs = useMemo(
-    () => [{ id: "all", label: "All leads" }, ...OUTREACH_OPTIONS.map((option) => ({ id: option.id, label: option.label })), ...lists],
-    [lists],
+  // A saved company stays visible unless it was explicitly rejected; that was a deliberate action.
+  const qualified = useMemo(
+    () =>
+      active
+        .filter((p) => p.status !== "rejected" && matchesQuery(p) && (!openList || openList === "all" || p.list_id === openList))
+        .filter((p) => p.contacts.length > 0),
+    [active, matchesQuery, openList],
   );
+  const gridProspects = useMemo(() => active.filter((p) => p.status !== "rejected" && p.contacts.length > 0), [active]);
+  const currentList = lists.find((list) => list.id === openList) ?? null;
 
-  const qualified = useMemo(() => {
-    const listId = tableTab.startsWith("list:") ? tableTab.slice(5) : null;
-    const outreachTab = OUTREACH_OPTIONS.some((option) => option.id === tableTab) ? (tableTab as OutreachState) : null;
-    return active
-      .filter((p) => p.status !== "rejected" && matchesQuery(p) && (!listId || p.list_id === listId))
-      .map((p) => ({
-        ...p,
-        contacts: p.contacts.filter((c) => {
-          if (outreachTab && !matchesOutreachTab(c, outreachTab)) return false;
-          return true;
-        }),
-      }))
-      .filter((p) => p.contacts.length > 0);
-  }, [active, matchesQuery, tableTab]);
+  async function createList(name: string) {
+    const res = await fetch("/api/prospect-lists", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.list) {
+      setLists((prev) => [data.list as ProspectListInfo, ...prev]);
+      setOpenList(data.list.id as string);
+    }
+  }
+
+  const [verifying, setVerifying] = useState(false);
+  const [verifyNote, setVerifyNote] = useState<string | null>(null);
+  async function verifyAll() {
+    setVerifying(true);
+    setVerifyNote(null);
+    try {
+      const res = await fetch("/api/contacts/verify", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Verification failed");
+      setVerifyNote(
+        data.checked === 0 && data.unanswered === 0
+          ? "Every email is already verified."
+          : `${data.verified} verified, ${data.invalid + data.risky} held back${data.unanswered ? `, ${data.unanswered} unanswered` : ""}.`,
+      );
+      await refetch();
+    } catch (error) {
+      setVerifyNote(error instanceof Error ? error.message : "Verification failed");
+    } finally {
+      setVerifying(false);
+    }
+  }
+
+  async function moveCompanyTo(companyId: string, listId: string) {
+    setCompanies((prev) => prev.map((p) => (p.id === companyId ? { ...p, list_id: listId } : p)));
+    await fetch("/api/prospect-lists/move", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ listId, companyIds: [companyId] }),
+    });
+    await refetch();
+  }
 
   const allContacts = useMemo(() => qualified.flatMap((p) => p.contacts), [qualified]);
 
@@ -126,7 +161,7 @@ export function ProspectsWorkspace({
           </button>
 
           {leftMode === "form" ? (
-            <ProspectPlanPanel
+            <SignalSearchPanel
               onApprove={(criteria) => {
                 setActiveCriteria(criteria);
                 setLeftMode("structured-run");
@@ -167,41 +202,21 @@ export function ProspectsWorkspace({
                 </button>
               )}
             </div>
-            {active.length > 0 ? (
-              <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
-                {tableTabs.map((tab) => {
-                  const activeTab = tableTab === tab.id;
-                  const tone =
-                    tab.id === "in_campaign"
-                      ? activeTab
-                        ? "bg-[#E8F1FC] text-[#4379EE]"
-                        : "text-[#4379EE] hover:bg-[#E8F1FC]"
-                      : tab.id === "contacted"
-                        ? activeTab
-                          ? "bg-emerald-50 text-emerald-700"
-                          : "text-emerald-700 hover:bg-emerald-50"
-                        : tab.id === "not_contacted"
-                          ? activeTab
-                            ? "bg-amber-50 text-amber-800"
-                            : "text-amber-800 hover:bg-amber-50"
-                          : tab.id === "not_in_campaign"
-                            ? activeTab
-                              ? "bg-neutral-200 text-neutral-800"
-                              : "text-neutral-600 hover:bg-neutral-100"
-                            : activeTab
-                              ? "bg-neutral-900 text-white"
-                              : "text-neutral-600 hover:bg-neutral-100";
-                  return (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setTableTab(tab.id)}
-                      className={`shrink-0 rounded-full px-3 py-1 text-[12px] font-medium ${tone}`}
-                    >
-                      {tab.label}
-                    </button>
-                  );
-                })}
+            {openList ? (
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenList(null);
+                    setSelected(new Set());
+                  }}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium text-neutral-600 hover:bg-neutral-100"
+                >
+                  <ChevronLeft className="size-3.5" />
+                  Lists
+                </button>
+                <p className="min-w-0 truncate text-[14px] font-semibold text-neutral-900">{currentList?.name ?? "All prospects"}</p>
+                {currentList ? <span className="shrink-0 text-[12px] text-neutral-400">{LIST_SOURCE_LABEL[currentList.source]}</span> : null}
               </div>
             ) : null}
             <div className="flex flex-wrap items-center justify-end gap-2 sm:ml-auto">
@@ -214,6 +229,17 @@ export function ProspectsWorkspace({
                 />
               ) : (
                 <>
+                  {verifyNote ? <span className="text-[12px] text-neutral-500">{verifyNote}</span> : null}
+                  <button
+                    type="button"
+                    onClick={() => void verifyAll()}
+                    disabled={verifying}
+                    title="Check every email before it is ever sent to"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 px-3 py-1.5 text-[12px] font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-60"
+                  >
+                    {verifying ? <Loader2 className="size-3.5 animate-spin" /> : <MailCheck className="size-3.5" />}
+                    {verifying ? "Verifying…" : "Verify emails"}
+                  </button>
                   <WeeklyScheduleForm />
                   <ThreeDButton type="button" variant="solid" size="sm" onClick={openPanel}>
                     <PanelLeftOpen className="size-4" />
@@ -224,27 +250,26 @@ export function ProspectsWorkspace({
             </div>
           </div>
 
-          {active.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-neutral-300 bg-white p-10 text-center">
-              <p className="font-medium text-neutral-900">No prospects have been generated yet</p>
-              <p className="mt-1 text-sm text-neutral-500">
-                Click &ldquo;Find prospects&rdquo; above to build your first list of companies and contacts.
-              </p>
-            </div>
+          {!openList ? (
+            <ProspectListsGrid lists={lists} prospects={gridProspects} onOpen={setOpenList} onCreate={createList} />
           ) : (
             <div className="flex flex-col gap-3">
               {qualified.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-neutral-300 bg-white p-8 text-center">
-                  <p className="text-sm text-neutral-500">No prospects match your search or filters.</p>
+                  <p className="text-sm text-neutral-500">
+                    {active.length === 0 ? "No prospects have been generated yet. Click “Find prospects” to build your first list." : "Nothing in this list yet. Open All prospects and pick a list for a contact in the List column."}
+                  </p>
                 </div>
-              ) : null}
-
-              <ContactsTable
-                prospects={qualified}
-                selected={selected}
-                onSelectedChange={setSelected}
-                onOpenProfile={(row) => setProfileIds({ contactId: row.contact.id, companyId: row.company.id })}
-              />
+              ) : (
+                <ContactsTable
+                  prospects={qualified}
+                  selected={selected}
+                  onSelectedChange={setSelected}
+                  lists={lists}
+                  onMoveToList={moveCompanyTo}
+                  onOpenProfile={(row) => setProfileIds({ contactId: row.contact.id, companyId: row.company.id })}
+                />
+              )}
             </div>
           )}
         </div>

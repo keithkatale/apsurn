@@ -168,10 +168,10 @@ export function HeroFeaturesSection() {
           <div className="relative flex min-h-[26rem] flex-1 flex-col overflow-hidden rounded-[28px] sm:rounded-[32px]">
             <MeshGradient
               className="absolute inset-0"
-              color1="#8eb8ff"
-              color2="#4379EE"
-              color3="#1d4ed8"
-              color4="#0a1a4a"
+              color1="#e8713a"
+              color2="#e87690"
+              color3="#e68be6"
+              color4="#f3c9e3"
               speed={0.55}
               distortion={0.85}
               swirl={0.5}
@@ -179,10 +179,10 @@ export function HeroFeaturesSection() {
               rotation={110}
             />
             <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 py-8 text-center sm:px-10 sm:py-10">
-              <h1 className="max-w-[920px] font-heading text-[clamp(32px,8vw,60px)] font-semibold leading-[1.08] tracking-[-0.045em] text-white">
+              <h1 className="max-w-[920px] font-heading text-[clamp(32px,8vw,60px)] font-semibold leading-[1.08] tracking-[-0.045em] text-[#1f1d2b]">
                 Outbound and GTM for B2B SaaS startups
               </h1>
-              <p className="mt-4 max-w-[560px] text-[17px] font-medium text-white/90 sm:text-[20px]">
+              <p className="mt-4 max-w-[560px] text-[17px] font-medium text-[#1f1d2b] sm:text-[20px]">
                 Paste your website. apsurn finds who should buy.
               </p>
               <form onSubmit={submit} className="mt-8 w-full max-w-[560px] text-left">
@@ -220,7 +220,7 @@ export function HeroFeaturesSection() {
                     </div>
                   </div>
                 </div>
-                {error ? <p className="mt-2 px-1 text-center text-[13px] text-white">{error}</p> : null}
+                {error ? <p className="mt-2 px-1 text-center text-[13px] font-medium text-[#1f1d2b]">{error}</p> : null}
               </form>
               <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                 {CHIPS.map((chip) => (
@@ -233,7 +233,7 @@ export function HeroFeaturesSection() {
                   </Link>
                 ))}
               </div>
-              <p className="mt-8 text-[14px] text-white/75 sm:mt-10">
+              <p className="mt-8 text-[14px] text-[#1f1d2b]/80 sm:mt-10">
                 No sales team needed. No list buying. Cancel anytime.
               </p>
             </div>

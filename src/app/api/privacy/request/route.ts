@@ -3,9 +3,13 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendResendEmail } from "@/lib/email/resend";
 import { privacyRequestEmail } from "@/lib/email/templates";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 const schema = z.object({ email: z.string().trim().email().max(320), requestType: z.enum(["access", "correct", "delete", "suppress"]), details: z.string().trim().max(1000).optional() });
 export async function POST(request: NextRequest) {
+  if (!rateLimit(`privacy:${clientIp(request)}`, 10, 60 * 60 * 1000)) {
+    return NextResponse.json({ error: "Too many recent requests" }, { status: 429 });
+  }
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid privacy request" }, { status: 400 });
   const db = createAdminClient();

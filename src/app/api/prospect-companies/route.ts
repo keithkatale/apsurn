@@ -3,7 +3,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
 import { archiveProspectCompanies, setProspectCompanyStatus } from "@/lib/prospecting/mutations";
-import { loadProspectCompanies } from "@/lib/prospects/load";
+import { loadProspectCompanies, loadProspectLists } from "@/lib/prospects/load";
 
 const requestSchema = z.union([
   z.object({
@@ -30,11 +30,11 @@ export async function GET() {
 
   const db = createAdminClient();
   const { data: company } = await db.from("companies").select("id").eq("user_id", userId).maybeSingle();
-  if (!company) return NextResponse.json({ companies: [] });
+  if (!company) return NextResponse.json({ companies: [], lists: [] });
 
   try {
-    const companies = await loadProspectCompanies(db, company.id);
-    return NextResponse.json({ companies });
+    const [companies, lists] = await Promise.all([loadProspectCompanies(db, company.id), loadProspectLists(db, company.id)]);
+    return NextResponse.json({ companies, lists });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load prospects" }, { status: 500 });
   }

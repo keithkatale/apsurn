@@ -56,7 +56,14 @@ export async function POST(request: NextRequest) {
 
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (payload: Record<string, unknown>) => controller.enqueue(sse(payload));
+      // If the person navigates away mid-write, sending fails but the email must still finish and be saved.
+      const send = (payload: Record<string, unknown>) => {
+        try {
+          controller.enqueue(sse(payload));
+        } catch {
+          /* client disconnected */
+        }
+      };
       try {
         const draft = await streamLeadDraft(
           db,
@@ -76,7 +83,11 @@ export async function POST(request: NextRequest) {
         const code = error instanceof LeadDraftError ? error.code : "draft_failed";
         send({ type: "error", code, error: code === "draft_failed" ? "Could not write this email" : error instanceof Error ? error.message : "Could not write this email" });
       } finally {
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          /* already closed */
+        }
       }
     },
   });

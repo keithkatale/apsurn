@@ -612,27 +612,49 @@ export async function findEmail(fullName: string, domain: string): Promise<Found
   return null;
 }
 
+interface VerifyItem {
+  status?: string;
+  order?: number;
+  results?: { emails?: Array<{ email?: string; certainty?: string; mxProvider?: string }> };
+  userData?: { externalId?: string };
+}
+
 interface VerifyPollResponse {
-  items?: Array<{
-    status?: string;
-    results?: { emails?: Array<{ email?: string; certainty?: string; mxProvider?: string }> };
-  }>;
+  items?: VerifyItem[];
+}
+
+const PENDING_STATUSES = new Set(["NONE", "SCHEDULED", "IN_PROGRESS"]);
+
+export interface IcypeasVerdict {
+  status: ContactStatus;
+  checks: Record<string, unknown>;
 }
 
 /**
- * Verifies a specific email address via Icypeas' own `/email-verification` —
- * the same provider already paid for and trusted for discovery, now used as
- * the deliverability check too, rather than standing up separate
- * infrastructure. Confirmed live against addresses this app already knows
- * the status of: a known-good address returns `FOUND` with a certainty grade
- * (mapped through the same mapCertainty scale as findEmail); a known
- * catch-all domain returns `NOT_FOUND` — correct, since no single mailbox on
- * a catch-all domain can be confirmed by a yes-to-everything server.
- *
- * Returns null on any failure (unconfigured, timeout, network error) so
- * callers fall back exactly as they do for every other Icypeas miss.
+ * One verification result as a verdict. Only a mailbox Icypeas actually found with a "sure" grade counts as
+ * verified. NOT_FOUND (mailbox missing, or a catch-all server that hides it) is treated as invalid: a mailbox that
+ * can't be confirmed is never sent to. Anything weaker than "sure" stays risky.
  */
-export async function verifyEmailViaIcypeas(email: string): Promise<{ status: ContactStatus; checks: Record<string, unknown> } | null> {
+function verdictFor(item: VerifyItem | undefined, email: string): IcypeasVerdict {
+  const status = (item?.status ?? "").toUpperCase();
+  // A finished search reads FOUND and later DEBITED once the credit is charged; either way a returned mailbox means found.
+  if ((item?.results?.emails?.length ?? 0) > 0) {
+    const match = item?.results?.emails?.find((entry) => entry.email?.toLowerCase() === email.toLowerCase()) ?? item?.results?.emails?.[0];
+    const certainty = (match?.certainty ?? "").toLowerCase();
+    const sure = certainty === "ultra_sure" || certainty === "sure";
+    return {
+      status: sure ? "verified" : "risky",
+      checks: { provider: "icypeas", certainty: match?.certainty ?? null, mxProvider: match?.mxProvider ?? null },
+    };
+  }
+  return { status: "invalid", checks: { provider: "icypeas", result: status || "NOT_FOUND", reason: "mailbox_not_confirmed" } };
+}
+
+/**
+ * Verifies one address through Icypeas' `/email-verification` (live: ~3s). Null when unconfigured or when the
+ * result doesn't arrive in time, so the caller can fall back or fail closed.
+ */
+export async function verifyEmailViaIcypeas(email: string): Promise<IcypeasVerdict | null> {
   const apiKey = process.env.ICYPEAS_API_KEY?.trim();
   if (!apiKey || !email) return null;
 
@@ -648,22 +670,73 @@ export async function verifyEmailViaIcypeas(email: string): Promise<{ status: Co
 
     const polled = await post<VerifyPollResponse>("/bulk-single-searchs/read", { id: searchId }, apiKey);
     const item = polled?.items?.[0];
-    const status = (item?.status ?? "").toUpperCase();
-    // "NONE" is the queued/not-yet-processed state (what the start call
-    // itself returns before any polling) — only FOUND/NOT_FOUND are terminal.
-    if (!item || status === "NONE" || status === "SCHEDULED" || status === "IN_PROGRESS") continue;
-
-    if (status !== "FOUND") {
-      return { status: "risky", checks: { provider: "icypeas", result: status || "not_found" } };
-    }
-    const match =
-      item.results?.emails?.find((entry) => entry.email?.toLowerCase() === email.toLowerCase()) ?? item.results?.emails?.[0];
-    return {
-      status: mapCertainty(match?.certainty ?? null),
-      checks: { provider: "icypeas", certainty: match?.certainty ?? null, mxProvider: match?.mxProvider ?? null },
-    };
+    if (!item || PENDING_STATUSES.has((item.status ?? "").toUpperCase())) continue;
+    return verdictFor(item, email);
   }
-
-  // Still running past the poll budget — not a verdict, just slow.
   return null;
+}
+
+const BULK_CHUNK = 1000;
+const BULK_WALLCLOCK_MS = 120_000;
+
+/**
+ * Verifies many addresses with Icypeas' bulk search (`task: "email-verification"`, up to 5000 rows per bulk; 1000
+ * here). Results come back keyed by the address. Addresses missing from the map were not answered in time and
+ * should be treated as unverified, never as good.
+ */
+export async function verifyEmailsBulk(emails: string[]): Promise<Map<string, IcypeasVerdict>> {
+  const verdicts = new Map<string, IcypeasVerdict>();
+  const apiKey = process.env.ICYPEAS_API_KEY?.trim();
+  const unique = [...new Set(emails.map((email) => email.trim().toLowerCase()).filter(Boolean))];
+  if (!apiKey || unique.length === 0) return verdicts;
+
+  for (let from = 0; from < unique.length; from += BULK_CHUNK) {
+    const batch = unique.slice(from, from + BULK_CHUNK);
+    const started = await post<{ success?: boolean; file?: string }>(
+      "/bulk-search",
+      {
+        name: `apsurn verify ${new Date().toISOString()}`,
+        task: "email-verification",
+        data: batch.map((email) => [email]),
+        custom: { externalIds: batch },
+      },
+      apiKey,
+    );
+    const file = started?.file;
+    if (!file) continue;
+
+    const deadline = Date.now() + BULK_WALLCLOCK_MS;
+    let answered = new Map<string, IcypeasVerdict>();
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+      const items: VerifyItem[] = [];
+      let sorts: unknown = undefined;
+      // Results are paged 100 at a time.
+      for (let page = 0; page < Math.ceil(batch.length / 100) + 1; page++) {
+        const polled = await post<{ items?: VerifyItem[]; sorts?: unknown }>(
+          "/bulk-single-searchs/read",
+          { mode: "bulk", file, limit: 100, ...(sorts ? { next: true, sorts } : {}) },
+          apiKey,
+        );
+        const got = polled?.items ?? [];
+        items.push(...got);
+        sorts = polled?.sorts;
+        if (got.length < 100 || !sorts) break;
+      }
+      answered = new Map();
+      let pending = 0;
+      for (const item of items) {
+        const email = (item.userData?.externalId || batch[item.order ?? -1] || "").toLowerCase();
+        if (!email) continue;
+        if (PENDING_STATUSES.has((item.status ?? "").toUpperCase())) {
+          pending += 1;
+          continue;
+        }
+        answered.set(email, verdictFor(item, email));
+      }
+      if (items.length >= batch.length && pending === 0) break;
+    }
+    for (const [email, verdict] of answered) verdicts.set(email, verdict);
+  }
+  return verdicts;
 }

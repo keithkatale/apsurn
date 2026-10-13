@@ -121,12 +121,21 @@ function requestBody(params: CreateParams, stream: boolean) {
   const system = [params.instructions, wantsJson ? "Respond with a single valid JSON value and nothing else: no prose, no markdown fences." : ""]
     .filter(Boolean)
     .join("\n\n");
+  // Prompt caching: the instructions, the tool list and the conversation so far are identical from one round of a
+  // turn to the next, so marking them lets Anthropic reuse them instead of re-reading everything every round
+  // (faster first token, cheaper). The server only applies it above its minimum size, so short prompts are unaffected.
+  const cache = { cache_control: { type: "ephemeral" } };
+  const messages: Array<{ role: string; content: Array<Record<string, unknown>> }> = convertInput(params.input);
+  const lastMessage = messages[messages.length - 1];
+  if (lastMessage?.content.length) lastMessage.content[lastMessage.content.length - 1] = { ...lastMessage.content[lastMessage.content.length - 1], ...cache };
+  const tools = toolsOf(params.tools);
+  if (tools?.length) tools[tools.length - 1] = { ...tools[tools.length - 1], ...cache };
   return {
     model: params.model,
     max_tokens: params.max_output_tokens && params.max_output_tokens > 0 ? params.max_output_tokens : DEFAULT_MAX_TOKENS,
-    messages: convertInput(params.input),
-    ...(system ? { system } : {}),
-    ...(toolsOf(params.tools) ? { tools: toolsOf(params.tools) } : {}),
+    messages,
+    ...(system ? { system: [{ type: "text", text: system, ...cache }] } : {}),
+    ...(tools ? { tools } : {}),
     ...(stream ? { stream: true } : {}),
   };
 }

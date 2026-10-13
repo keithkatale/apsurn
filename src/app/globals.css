@@ -31,8 +31,8 @@ html.dark {
   --copilot-sidebar-border: #2c2c2c;
   --copilot-card: #212121;
   --copilot-card-border: #2c2c2c;
-  --copilot-accent: #4379ee;
-  --copilot-accent-dim: #8eb0ff;
+  --copilot-accent: #e8713a;
+  --copilot-accent-dim: #f08a56;
   --copilot-dropdown-bg: #212121;
   --copilot-dropdown-hover: #2e2e2e;
   --copilot-nav-active-bg: #343434;
@@ -70,7 +70,7 @@ html.dark .input {
 }
 
 html.dark .input:focus {
-  outline-color: #4379ee;
+  outline-color: #e8713a;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -111,12 +111,12 @@ html.dark .input:focus {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #4379ee;
+  background: #e8713a;
   transition: width 0.45s ease;
 }
 
 .market-scan-bar-fill.is-live {
-  background-image: linear-gradient(90deg, #a9c1fb 0%, #4379ee 45%, #a9c1fb 100%);
+  background-image: linear-gradient(90deg, #f3a577 0%, #e8713a 45%, #f3a577 100%);
   background-size: 180% 100%;
   animation: market-scan-sheen 1.4s linear infinite;
 }
@@ -179,7 +179,7 @@ html.dark .input:focus {
 }
 
 .market-scan-logs li:last-of-type::before {
-  background: #4379ee;
+  background: #e8713a;
 }
 
 .compact-scan h2 {
@@ -224,8 +224,8 @@ html.dark .input:focus {
   --copilot-sidebar-border: #e2e8f0;
   --copilot-card: #ffffff;
   --copilot-card-border: #e2e8f0;
-  --copilot-accent: #4379ee;
-  --copilot-accent-dim: #4379ee;
+  --copilot-accent: #e8713a;
+  --copilot-accent-dim: #e8713a;
   --copilot-dropdown-bg: #ffffff;
   --copilot-dropdown-hover: #eaeef5;
   --copilot-nav-active-bg: #eaeef5;
@@ -719,12 +719,12 @@ html.dark .copilot-run-bar {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #4379ee;
+  background: #e8713a;
   transition: width 0.45s ease;
 }
 
 .copilot-run-bar-fill.is-live {
-  background-image: linear-gradient(90deg, #a9c1fb 0%, #4379ee 45%, #a9c1fb 100%);
+  background-image: linear-gradient(90deg, #f3a577 0%, #e8713a 45%, #f3a577 100%);
   background-size: 180% 100%;
   animation: market-scan-sheen 1.4s linear infinite;
 }
@@ -750,11 +750,11 @@ html.dark .copilot-run-bar {
 }
 
 html:not(.dark) .copilot-lead {
-  background: #e8f1fc;
+  background: #fbe6da;
 }
 
 html.dark .copilot-lead {
-  background: rgba(67, 121, 238, 0.12);
+  background: rgba(232, 113, 58, 0.12);
 }
 
 .copilot-lead-name {
@@ -765,7 +765,7 @@ html.dark .copilot-lead {
 }
 
 html:not(.dark) .copilot-lead-name {
-  color: #4379ee;
+  color: #e8713a;
 }
 
 .copilot-artifact-surface {
@@ -868,8 +868,8 @@ html:not(.dark) .copilot-lead-name {
     from var(--prompt-angle) at 50% 50%,
     #ff5b3a 0deg,
     #ff4fa3 60deg,
-    #9b6bff 120deg,
-    #215af0 180deg,
+    #e68be6 120deg,
+    #e68be6 180deg,
     #2dd4bf 240deg,
     #ffb020 300deg,
     #ff5b3a 360deg
@@ -888,7 +888,7 @@ html:not(.dark) .copilot-lead-name {
 
 .prompt-glow:focus-within {
   --prompt-elev:
-    0 0 0 1px color-mix(in oklab, #9b6bff 28%, transparent),
+    0 0 0 1px color-mix(in oklab, #e68be6 28%, transparent),
     0 0 22px color-mix(in oklab, #ff4fa3 18%, transparent),
     0 10px 28px color-mix(in oklab, var(--copilot-foreground) 10%, transparent);
 }
@@ -901,8 +901,8 @@ html:not(.dark) .copilot-lead-name {
 .prompt-glow.is-busy {
   padding: 2px;
   --prompt-elev:
-    0 0 0 1px color-mix(in oklab, #215af0 40%, transparent),
-    0 0 28px color-mix(in oklab, #215af0 22%, transparent),
+    0 0 0 1px color-mix(in oklab, #e68be6 40%, transparent),
+    0 0 28px color-mix(in oklab, #e68be6 22%, transparent),
     0 10px 28px color-mix(in oklab, var(--copilot-foreground) 10%, transparent);
 }
 
@@ -948,13 +948,13 @@ html:not(.dark) .copilot-lead-name {
     box-shadow:
       0 1px 1px rgba(20, 50, 150, 0.35),
       0 3px 6px rgba(20, 50, 150, 0.28),
-      0 0 0 0 rgba(67, 121, 238, 0.55);
+      0 0 0 0 rgba(232, 113, 58, 0.55);
   }
   50% {
     box-shadow:
       0 1px 1px rgba(20, 50, 150, 0.35),
       0 3px 8px rgba(20, 50, 150, 0.35),
-      0 0 0 12px rgba(67, 121, 238, 0);
+      0 0 0 12px rgba(232, 113, 58, 0);
   }
 }
 
@@ -1036,20 +1036,20 @@ html.dark .email-compose-body.is-empty:before {
 }
 
 .merge-chip-filled {
-  background-color: #e8f1fc;
-  color: #4379ee;
+  background-color: #fbe6da;
+  color: #e8713a;
 }
 
 html.dark .merge-chip-filled {
   background-color: #222222;
-  color: #7aa0f2;
+  color: #f08a56;
 }
 
 /* Lead merge-field chips — soft blue tint, no border; white label in dark mode */
 .merge-field-chip--filled {
   border: none;
-  background-color: rgba(67, 121, 238, 0.14);
-  color: #2f5fc4;
+  background-color: rgba(232, 113, 58, 0.14);
+  color: #b1522b;
 }
 
 .merge-field-chip--empty {
@@ -1168,7 +1168,7 @@ html.dark {
 }
 
 html.dark ::selection {
-  background: #4379ee;
+  background: #e8713a;
   color: #fff;
 }
 
@@ -1223,11 +1223,11 @@ html.dark .hover\:bg-\[\#E8F1FC\]:hover {
 }
 
 .compare-apsurn {
-  background-color: #e8f1fc;
+  background-color: #fbe6da;
 }
 
 .compare-apsurn-label {
-  color: #3567d6;
+  color: #d4642f;
 }
 
 html.dark .landing-page .compare-apsurn {
@@ -1299,12 +1299,12 @@ html.dark .placeholder\:text-\[\#605F5F\]::placeholder {
 
 html.dark .text-\[\#4379EE\],
 html.dark .hover\:text-\[\#3567D6\]:hover {
-  color: #7aa0f2;
+  color: #f08a56;
 }
 
 html.dark .text-blue-700,
 html.dark .text-blue-950 {
-  color: #7aa0f2;
+  color: #f08a56;
 }
 
 html.dark .text-blue-900 {
@@ -1333,7 +1333,7 @@ html.dark .hover\:border-\[\#4379EE\]:hover {
 }
 
 html.dark .hover\:border-\[\#4379EE\]:hover {
-  border-color: #4379ee;
+  border-color: #e8713a;
 }
 
 html.dark .border-neutral-100,
@@ -1400,7 +1400,7 @@ html.dark [data-slot="3d-button"][data-variant="muted"] {
 }
 
 html.dark [data-slot="3d-button"]:focus-visible {
-  outline-color: #7aa0f2;
+  outline-color: #f08a56;
 }
 
 html.dark .market-scan h2,
@@ -1423,7 +1423,7 @@ html.dark .market-scan-logs li::before {
 }
 
 html.dark input[type="checkbox"] {
-  accent-color: #4379ee;
+  accent-color: #e8713a;
   background-color: #1a1a1a;
 }
 
@@ -1438,7 +1438,7 @@ html.dark .bg-black {
 .landing-hero-cta,
 html.dark .landing-hero-cta,
 html.dark .landing-hero-cta:hover {
-  background-color: #4379ee;
+  background-color: #e8713a;
   color: #ffffff;
   box-shadow: none;
 }
@@ -1527,14 +1527,14 @@ html.dark .landing-hero-shell .hero-chip:hover {
 
 .hero-send,
 html.dark .landing-hero-shell .hero-send {
-  background-color: #e8f1fc;
-  color: #3567d6;
+  background-color: #fbe6da;
+  color: #d4642f;
 }
 
 .hero-send:hover,
 html.dark .landing-hero-shell .hero-send:hover {
   background-color: #d7e6fb;
-  color: #3567d6;
+  color: #d4642f;
 }
 
 .hero-plan-icon {
@@ -1569,7 +1569,7 @@ html.dark .landing-hero-link {
 }
 
 .landing-cta-frame {
-  background: linear-gradient(to bottom, #ffffff 45%, #cfe2fc);
+  background: linear-gradient(to bottom, #ffffff 45%, #f6cdb9);
 }
 
 html.dark .landing-page.bg-white,
@@ -1587,15 +1587,15 @@ html.dark .landing-page .hover\:bg-neutral-900:hover {
 }
 
 html.dark .landing-page .text-\[\#1650B0\] {
-  color: #9bb6f5;
+  color: #f3a577;
 }
 
 html.dark .landing-page .bg-\[\#F4F8FF\] {
-  background-color: #1a2744;
+  background-color: #2a1a18;
 }
 
 html.dark .landing-page .border-\[\#4096FF\] {
-  border-color: #4379ee;
+  border-color: #e8713a;
 }
 
 html.dark .landing-page .border-\[\#F4F4F4\] {
@@ -1652,7 +1652,7 @@ html.dark .landing-outline-btn:hover {
 }
 
 html.dark .landing-cta-frame {
-  background: linear-gradient(to bottom, #111111 0%, #152033 100%);
+  background: linear-gradient(to bottom, #111111 0%, #1f1d2b 100%);
   box-shadow: 0 16px 50px rgba(0, 0, 0, 0.35);
 }
 
@@ -1726,12 +1726,12 @@ html.dark .landing-cta-frame .bg-\[radial-gradient\(\#000000_0\.85px\,transparen
 }
 
 .auth-subtitle a {
-  color: #4379ee;
+  color: #e8713a;
   font-weight: 600;
 }
 
 .auth-subtitle a:hover {
-  color: #3567d6;
+  color: #d4642f;
 }
 
 .auth-label {
@@ -1753,7 +1753,7 @@ html.dark .landing-cta-frame .bg-\[radial-gradient\(\#000000_0\.85px\,transparen
 }
 
 .auth-input:focus {
-  box-shadow: 0 0 0 2px #4379ee;
+  box-shadow: 0 0 0 2px #e8713a;
   border-color: transparent;
 }
 
@@ -1869,7 +1869,7 @@ html.dark .auth-eye {
 
 html.dark .auth-subtitle a,
 html.dark .auth-subtitle a:hover {
-  color: #8fb4ff;
+  color: #f3a577;
 }
 
 html.dark .auth-input {
@@ -2029,4 +2029,421 @@ html.dark .text-emerald-900 {
 }
 html.dark .border-amber-200 {
   border-color: #5c4a1c;
+}
+
+/* ====================================================================== */
+/* Apsurn GTM brand theme for the signed-in app (dashboard + setup).      */
+/* Source: the Apsurn design-system artifact (tokens.json + README).      */
+/* Pure black ground; one ember > rose > orchid gradient; Fraunces for    */
+/* display type and Poppins for the interface; no shadows, blur or glow.  */
+/* Scoped to html.app-brand so the marketing site keeps its own look.     */
+/* ====================================================================== */
+
+html.app-brand {
+  --ap-ground: #000000;
+  --ap-paper: #ffffff;
+  --ap-mist: #c9c5d3;
+  --ap-ink: #1f1d2b;
+  --ap-ink-muted: #55526a;
+  --ap-ember: #e8713a;
+  --ap-ember-deep: #b1522b;
+  --ap-rose: #e87690;
+  --ap-orchid: #e68be6;
+  --ap-orchid-deep: #c45fc4;
+  --ap-blush: #f3c9e3;
+  --ap-gradient: linear-gradient(90deg, var(--ap-ember), var(--ap-rose), var(--ap-orchid));
+  /* Quiet surfaces derived from `ink`, for cards on the black ground. */
+  --ap-card: #14121b;
+  --ap-card-2: #1f1d2b;
+  --ap-card-3: #2a2738;
+  --ap-line: #25222f;
+
+  --font-sans: var(--font-poppins), "Helvetica Neue", Arial, sans-serif;
+  --font-heading: var(--font-fraunces), "Cooper BT", Georgia, serif;
+}
+
+html.app-brand body {
+  font-family: var(--font-sans);
+}
+
+html.app-brand .font-heading {
+  font-variation-settings: "SOFT" 100, "opsz" 144;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+/* Display helpers, also usable directly in markup. */
+.ap-display {
+  font-family: var(--font-heading);
+  font-variation-settings: "SOFT" 100, "opsz" 144;
+}
+
+.ap-gradient-text {
+  background: linear-gradient(90deg, #e8713a, #e87690, #e68be6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---- Shape: brand radii (tiles and panels 20px, nested cards 28px, buttons pill) ---- */
+html.app-brand .rounded-md {
+  border-radius: 12px;
+}
+html.app-brand .rounded-lg {
+  border-radius: 16px;
+}
+html.app-brand .rounded-xl {
+  border-radius: 20px;
+}
+html.app-brand .rounded-2xl {
+  border-radius: 28px;
+}
+html.app-brand .input {
+  border-radius: 12px;
+}
+
+/* ---- Effects: no shadows, no blur, no glow ---- */
+html.app-brand [class*="shadow-"],
+html.app-brand [data-slot="3d-button"] {
+  box-shadow: none !important;
+}
+html.app-brand [class*="backdrop-blur"] {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* ---- Accent: blue becomes the brand gradient (fills) and ember (text, borders, focus) ---- */
+html.app-brand .bg-\[\#4379EE\],
+html.app-brand .hover\:bg-\[\#3567D6\]:hover,
+html.app-brand .active\:bg-\[\#2A55B5\]:active,
+html.app-brand [data-slot="3d-button"][data-variant="solid"] {
+  background-color: var(--ap-ember);
+  background-image: var(--ap-gradient);
+  color: var(--ap-ink);
+}
+html.app-brand .bg-\[\#4379EE\]:hover,
+html.app-brand [data-slot="3d-button"][data-variant="solid"]:hover {
+  filter: brightness(1.06);
+}
+html.app-brand .bg-\[\#4379EE\]:focus-visible,
+html.app-brand [data-slot="3d-button"]:focus-visible {
+  outline: 3px solid var(--ap-ink);
+  outline-offset: 2px;
+}
+
+html.app-brand .bg-\[\#E8F1FC\],
+html.app-brand .hover\:bg-\[\#E8F1FC\]:hover,
+html.app-brand .bg-blue-50,
+html.app-brand .bg-blue-50\/60 {
+  background-color: rgba(232, 113, 58, 0.16);
+}
+html.app-brand .text-\[\#4379EE\],
+html.app-brand .hover\:text-\[\#4379EE\]:hover,
+html.app-brand .text-\[\#3567D6\],
+html.app-brand .hover\:text-\[\#3567D6\]:hover,
+html.app-brand .text-blue-700,
+html.app-brand .text-blue-900,
+html.app-brand .text-blue-950 {
+  color: var(--ap-ember-deep);
+}
+html.app-brand .border-\[\#4379EE\],
+html.app-brand .hover\:border-\[\#4379EE\]:hover,
+html.app-brand .focus\:border-\[\#4379EE\]:focus,
+html.app-brand .border-\[\#4379EE\]\/40,
+html.app-brand .border-\[\#4379EE\]\/50 {
+  border-color: var(--ap-ember);
+}
+html.app-brand .border-\[\#CFE2FC\] {
+  border-color: rgba(232, 113, 58, 0.4);
+}
+html.app-brand .ring-\[\#4379EE\],
+html.app-brand .focus\:ring-\[\#4379EE\]:focus,
+html.app-brand .focus-visible\:ring-\[\#4379EE\]:focus-visible,
+html.app-brand .focus\:ring-1:focus {
+  --tw-ring-color: var(--ap-ember);
+}
+html.app-brand .accent-\[\#4379EE\] {
+  accent-color: var(--ap-ember);
+}
+html.app-brand .via-\[\#A8C8FF\] {
+  --tw-gradient-stops: var(--tw-gradient-from), var(--ap-rose), var(--tw-gradient-to);
+}
+
+/* Progress bars and the scan sheen */
+html.app-brand .market-scan-bar-fill {
+  background: var(--ap-gradient);
+}
+html.app-brand .market-scan-bar-fill.is-live {
+  background-image: linear-gradient(90deg, #e8713a 0%, #e87690 25%, #e68be6 50%, #e87690 75%, #e8713a 100%);
+  background-size: 180% 100%;
+}
+html.app-brand .market-scan-logs li:last-of-type::before {
+  background: var(--ap-ember);
+}
+
+/* ---- Dark: pure black ground, ink-tinted cards, brand ink for text on fills ---- */
+html.dark.app-brand {
+  --background: #000000;
+  --foreground: #ffffff;
+  --surface: #000000;
+  --elevated: #1f1d2b;
+  --border: #25222f;
+  --muted: #9b97ab;
+
+  --copilot-foreground: #ffffff;
+  --copilot-muted: #9b97ab;
+  --copilot-sidebar: #000000;
+  --copilot-sidebar-border: #25222f;
+  --copilot-card: #14121b;
+  --copilot-card-border: #25222f;
+  --copilot-accent: #e8713a;
+  --copilot-accent-dim: #f08a56;
+  --copilot-dropdown-bg: #1f1d2b;
+  --copilot-dropdown-hover: #2a2738;
+  --copilot-nav-active-bg: #1f1d2b;
+  --copilot-prompt-box: #14121b;
+}
+
+html.dark.app-brand,
+html.dark.app-brand body,
+html.dark.app-brand [data-dashboard],
+html.dark.app-brand [data-dashboard] .bg-neutral-50,
+html.dark.app-brand .bg-\[\#111111\],
+html.dark.app-brand .bg-\[\#151515\] {
+  background-color: #000000;
+}
+
+/* Left nav: the same black as the page, separated by spacing, not lines. */
+html.dark.app-brand [data-dashboard] [data-dashboard-sidebar] {
+  background-color: #000000;
+}
+html.dark.app-brand [data-dashboard-sidebar] .bg-neutral-100 {
+  background-color: var(--ap-card-2);
+}
+html.dark.app-brand [data-dashboard-sidebar] .hover\:bg-neutral-100:hover {
+  background-color: #17151f;
+}
+html.dark.app-brand [data-dashboard-sidebar] .hover\:bg-neutral-200\/80:hover {
+  background-color: var(--ap-card-3);
+}
+html.dark.app-brand [data-dashboard-sidebar] .bg-neutral-200 {
+  background-color: #000000;
+}
+
+/* Cards and panels */
+html.dark.app-brand .bg-white,
+html.dark.app-brand .hover\:bg-white:hover,
+html.dark.app-brand [data-dashboard] main .bg-white {
+  background-color: var(--ap-card);
+}
+html.dark.app-brand .bg-neutral-50,
+html.dark.app-brand .hover\:bg-neutral-50:hover,
+html.dark.app-brand .hover\:bg-neutral-50\/80:hover {
+  background-color: #0b0a10;
+}
+html.dark.app-brand .bg-neutral-100,
+html.dark.app-brand .hover\:bg-neutral-100:hover,
+html.dark.app-brand .hover\:bg-neutral-100\/60:hover,
+html.dark.app-brand [data-dashboard] main .bg-neutral-100 {
+  background-color: var(--ap-card-2);
+}
+html.dark.app-brand .bg-neutral-200,
+html.dark.app-brand .bg-neutral-200\/80,
+html.dark.app-brand .hover\:bg-neutral-200\/80:hover {
+  background-color: var(--ap-card-3);
+}
+html.dark.app-brand [data-dashboard] main .copilot-page-shell.bg-white,
+html.dark.app-brand [data-dashboard] main .copilot-page-shell.bg-neutral-50 {
+  background-color: #000000;
+}
+
+/* Hairlines */
+html.dark.app-brand .border-neutral-100,
+html.dark.app-brand .border-neutral-200,
+html.dark.app-brand .border-\[\#EEEEEE\],
+html.dark.app-brand .border-\[\#E6E6E6\] {
+  border-color: var(--ap-line);
+}
+html.dark.app-brand .divide-neutral-100 > :not([hidden]) ~ :not([hidden]),
+html.dark.app-brand .divide-neutral-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--ap-line);
+}
+
+/* Type */
+html.dark.app-brand .text-black,
+html.dark.app-brand .text-neutral-950,
+html.dark.app-brand .text-neutral-900,
+html.dark.app-brand .text-neutral-800 {
+  color: #ffffff;
+}
+html.dark.app-brand .text-neutral-700 {
+  color: #e6e3ee;
+}
+html.dark.app-brand .text-neutral-600 {
+  color: var(--ap-mist);
+}
+html.dark.app-brand .text-neutral-500 {
+  color: #a19db2;
+}
+html.dark.app-brand .text-neutral-400 {
+  color: #7d7990;
+}
+html.dark.app-brand .text-\[\#4379EE\],
+html.dark.app-brand .hover\:text-\[\#4379EE\]:hover,
+html.dark.app-brand .text-\[\#3567D6\],
+html.dark.app-brand .hover\:text-\[\#3567D6\]:hover,
+html.dark.app-brand .text-blue-700,
+html.dark.app-brand .text-blue-900,
+html.dark.app-brand .text-blue-950 {
+  color: var(--ap-ember);
+}
+html.dark.app-brand .text-amber-800,
+html.dark.app-brand .text-amber-900 {
+  color: #f6b26b;
+}
+
+/* Soft status fills keep ink-tinted darks instead of pastel blocks */
+html.dark.app-brand .bg-blue-50,
+html.dark.app-brand .bg-blue-50\/60,
+html.dark.app-brand .bg-\[\#E8F1FC\],
+html.dark.app-brand .hover\:bg-\[\#E8F1FC\]:hover {
+  background-color: rgba(232, 113, 58, 0.16);
+}
+
+/* Copilot: user messages sit on `ink` */
+html.dark.app-brand .copilot-user-bubble {
+  background: var(--ap-card-2);
+  color: #ffffff;
+}
+
+/* The dashboard "This week" tiles: ember and orchid with the stair notch from the brand system. */
+.ap-tile {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 96px;
+  padding: 16px;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #e8713a;
+  color: #1f1d2b;
+}
+.ap-tile::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 56px;
+  height: 56px;
+  background: #b1522b;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 75% 100%, 75% 75%, 50% 75%, 50% 50%, 25% 50%, 25% 25%, 0 25%);
+}
+.ap-tile--orchid {
+  background: #e68be6;
+}
+.ap-tile--orchid::after {
+  background: #c45fc4;
+}
+.ap-tile > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Orbit lines bleeding off the bottom corners, behind everything. */
+.ap-orbits {
+  pointer-events: none;
+  position: fixed;
+  inset: auto 0 0 0;
+  height: 260px;
+  overflow: hidden;
+  z-index: -1;
+  opacity: 0.9;
+}
+.ap-orbits svg {
+  position: absolute;
+  bottom: -130px;
+  width: 340px;
+  height: 340px;
+  fill: none;
+  stroke-width: 4;
+}
+.ap-orbits .left {
+  left: -120px;
+}
+.ap-orbits .right {
+  right: -120px;
+}
+
+html.app-brand {
+  --copilot-accent: #b1522b;
+  --copilot-accent-dim: #b1522b;
+}
+html.dark.app-brand .input:focus {
+  outline-color: #e8713a;
+}
+html.app-brand:not(.dark) .input:focus {
+  outline-color: #b1522b;
+}
+
+/* The prompt box: brand gradient outline, no glow, no spinning conic ring. */
+html.app-brand .prompt-glow,
+html.app-brand .prompt-glow:focus-within,
+html.app-brand .prompt-glow.is-busy {
+  --prompt-elev: none;
+  box-shadow: none;
+}
+html.app-brand .prompt-glow-spin,
+html.app-brand .prompt-glow:hover .prompt-glow-spin,
+html.app-brand .prompt-glow:focus-within .prompt-glow-spin,
+html.app-brand .prompt-glow.is-busy .prompt-glow-spin {
+  background: linear-gradient(90deg, #e8713a, #e87690, #e68be6);
+  opacity: 1;
+  animation: none;
+}
+
+html.app-brand .bg-blue-100 {
+  background-color: rgba(232, 113, 58, 0.22);
+}
+html.app-brand .border-blue-100,
+html.app-brand .border-blue-200 {
+  border-color: rgba(232, 113, 58, 0.4);
+}
+
+/* Prospect list cards: a bordered table preview that slides out of the card on hover, over a name bar that softly blurs the table beneath it. */
+.list-card {
+  --lc-bg: #ffffff;
+  --lc-line: #e5e5e5;
+  background: var(--lc-bg);
+  border: 1px solid var(--lc-line);
+}
+html.dark .list-card {
+  --lc-bg: #212121;
+  --lc-line: #3a3a3a;
+}
+html.dark.app-brand .list-card {
+  --lc-bg: var(--ap-card);
+  --lc-line: var(--ap-line);
+}
+.list-card-preview {
+  border: 1px solid var(--lc-line);
+  background: color-mix(in srgb, var(--lc-bg) 92%, #808080);
+  transform-origin: 20% 100%;
+  transition: transform 220ms ease;
+}
+.list-card:hover .list-card-preview,
+.list-card:focus-visible .list-card-preview {
+  transform: translateY(-10px) rotate(2.5deg);
+}
+.list-card-fade {
+  background: linear-gradient(to bottom, transparent, var(--lc-bg));
+}
+.list-card-bar {
+  background: color-mix(in srgb, var(--lc-bg) 78%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  /* The blur melts into the table instead of starting at a hard edge. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 38%);
+  mask-image: linear-gradient(to bottom, transparent, #000 38%);
 }

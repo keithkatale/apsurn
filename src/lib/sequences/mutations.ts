@@ -5,6 +5,8 @@ import type { CampaignDefinition } from "@/lib/onboarding/campaign-templates";
 import { DRAFT_EMAILS_JOB_PATH } from "@/lib/outreach/draft-job";
 import { draftOpenersForLeads } from "@/lib/outreach/lead-draft";
 import { enqueueInternalJob } from "@/lib/jobs/enqueue";
+import { getBillingStatus } from "@/lib/billing/entitlements";
+import { SETUP_FREE_LEAD_CAP } from "@/lib/billing/plans";
 import { listOwnedContactIdsForWorkspace, listOwnedContactsByIds } from "@/lib/outreach/owned-contact";
 
 export interface SequenceStepInput {
@@ -296,6 +298,9 @@ export async function persistCampaignDefinition(
   return { ok: true, data: { sequenceId: result.data.sequenceId, created: true } };
 }
 
+/** Emails written ahead of time per campaign for accounts that can pay for them. */
+const BACKGROUND_DRAFTS_PER_CAMPAIGN = 25;
+
 export async function enrollAllContactsIntoUserSequences(
   db: SupabaseClient,
   userId: string,
@@ -307,5 +312,26 @@ export async function enrollAllContactsIntoUserSequences(
   if (!sequences?.length || contactIds.length === 0) return { enrolled: 0 };
 
   const results = await Promise.all(sequences.map((sequence) => enrollContacts(db, userId, sequence.id, contactIds, { draftInBackground: false })));
+
+  // Write the first emails on the server, now, so they are saved and waiting when the campaigns open instead of being
+  // written in the browser (and lost when the page is left). Bounded: a few per campaign without a card, a first batch
+  // with one. The campaigns tab writes the rest as each lead is opened.
+  try {
+    const owned = await listOwnedContactsByIds(db, userId, contactIds);
+    const withEmail = owned.filter((row) => row.archived_at === null && Boolean(row.email?.trim())).map((row) => row.id);
+    if (withEmail.length > 0) {
+      const billing = await getBillingStatus(userId);
+      const perCampaign = billing.active ? BACKGROUND_DRAFTS_PER_CAMPAIGN : Math.max(1, Math.ceil(SETUP_FREE_LEAD_CAP / sequences.length));
+      const targets = withEmail.slice(0, perCampaign);
+      for (const sequence of sequences) {
+        enqueueInternalJob(DRAFT_EMAILS_JOB_PATH, { userId, sequenceId: sequence.id, contactIds: targets }, () =>
+          draftOpenersForLeads(db, userId, sequence.id, targets),
+        );
+      }
+    }
+  } catch (error) {
+    console.error("[enroll] could not queue first drafts", error instanceof Error ? error.message : error);
+  }
+
   return { enrolled: results.reduce((sum, result) => sum + (result.ok ? result.data.enrolled : 0), 0) };
 }

@@ -6,6 +6,11 @@ export function isDashboardPath(pathname = typeof window === "undefined" ? "" : 
   return pathname === "/dashboard" || pathname.startsWith("/dashboard/");
 }
 
+/** Every apsurn page carries the Apsurn GTM brand theme, except pages the customer publishes (/p/...) and the embeddable player. */
+export function isAppBrandPath(pathname = typeof window === "undefined" ? "" : window.location.pathname) {
+  return !(pathname.startsWith("/p/") || pathname === "/demo/embed");
+}
+
 export function isSetupPath(pathname = typeof window === "undefined" ? "" : window.location.pathname) {
   return pathname === "/setup" || pathname.startsWith("/setup/");
 }
@@ -25,7 +30,8 @@ export function readStoredTheme(): ThemePreference {
   } catch {
     /* private mode */
   }
-  return "system";
+  // The brand is dark-first: anyone who hasn't chosen a theme gets dark.
+  return "dark";
 }
 
 export function systemPrefersDark() {
@@ -44,6 +50,7 @@ export function applyTheme(preference: ThemePreference, pathname?: string) {
       ? preference !== "light"
       : isDashboardPath(path) && resolvedDark(preference));
   document.documentElement.classList.toggle("dark", dark);
+  document.documentElement.classList.toggle("app-brand", isAppBrandPath(path));
 }
 
 export function persistTheme(preference: ThemePreference) {
@@ -55,4 +62,4 @@ export function persistTheme(preference: ThemePreference) {
   applyTheme(preference);
 }
 
-export const THEME_BOOTSTRAP_SCRIPT = `(function(){try{var p=location.pathname;if(p==="/setup"||p.indexOf("/setup/")===0){document.documentElement.classList.add("dark");return;}if(p==="/"||p===""||p==="/login"||p==="/signup"){if(localStorage.getItem("${THEME_STORAGE_KEY}")!=="light")document.documentElement.classList.add("dark");return;}if(p!=="/dashboard"&&p.indexOf("/dashboard/")!==0)return;var t=localStorage.getItem("${THEME_STORAGE_KEY}");var d=t==="dark"||(t!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.documentElement.classList.add("dark");}catch(e){}})();`;
+export const THEME_BOOTSTRAP_SCRIPT = `(function(){try{var r=document.documentElement,p=location.pathname;if(p.indexOf("/p/")===0||p==="/demo/embed")return;r.classList.add("app-brand");if(p==="/setup"||p.indexOf("/setup/")===0){r.classList.add("dark");return;}if(p==="/"||p===""||p==="/login"||p==="/signup"){if(localStorage.getItem("${THEME_STORAGE_KEY}")!=="light")r.classList.add("dark");return;}if(p!=="/dashboard"&&p.indexOf("/dashboard/")!==0)return;var t=localStorage.getItem("${THEME_STORAGE_KEY}");var d=t==="dark"||t===null||(t!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);if(d)r.classList.add("dark");}catch(e){}})();`;

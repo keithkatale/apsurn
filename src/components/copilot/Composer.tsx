@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Loader2 } from "lucide-react";
+import { ArrowUp, Loader2, Square } from "lucide-react";
 
-export function Composer({ disabled, busy, onSend }: { disabled: boolean; busy: boolean; onSend: (message: string) => void }) {
+export function Composer({ disabled, busy, onSend, onStop, stopping = false }: { disabled: boolean; busy: boolean; onSend: (message: string) => void; /** While the agent runs, the send button becomes a stop button that calls this. */ onStop?: () => void; stopping?: boolean }) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const isSubmitDisabled = disabled || !value.trim();
+  const stoppable = busy && Boolean(onStop);
+  const isSubmitDisabled = stoppable ? stopping : disabled || !value.trim();
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -18,6 +19,7 @@ export function Composer({ disabled, busy, onSend }: { disabled: boolean; busy: 
   }, [value]);
 
   function submit() {
+    if (stoppable) return;
     if (isSubmitDisabled) return;
     onSend(value.trim());
     setValue("");
@@ -34,6 +36,17 @@ export function Composer({ disabled, busy, onSend }: { disabled: boolean; busy: 
     e.preventDefault();
     submit();
   }
+
+  const buttonIcon = stoppable ? (
+    stopping ? <Loader2 className="size-3.5 animate-spin" strokeWidth={2.5} /> : <Square className="size-3 fill-current" strokeWidth={2.5} />
+  ) : busy ? (
+    <Loader2 className="size-3.5 animate-spin" strokeWidth={2.5} />
+  ) : (
+    <ArrowUp className="size-3.5" strokeWidth={2.5} />
+  );
+  const buttonProps = stoppable
+    ? ({ type: "button", onClick: onStop, "aria-label": stopping ? "Stopping" : "Stop" } as const)
+    : ({ type: "submit", "aria-label": busy ? "Waiting for response" : "Send message" } as const);
 
   const sendButtonClass = (extra: string) =>
     `inline-flex size-8 shrink-0 items-center justify-center rounded-full transition ${
@@ -66,24 +79,14 @@ export function Composer({ disabled, busy, onSend }: { disabled: boolean; busy: 
                 aria-label="Message input"
                 className="copilot-prompt-input max-h-32 min-h-10 min-w-0 flex-1 resize-none bg-transparent px-3 py-2 text-[16px] leading-[24px] text-[var(--copilot-foreground)] outline-none placeholder:text-[var(--copilot-muted)] md:w-full"
               />
-              <button
-                type="submit"
-                disabled={isSubmitDisabled}
-                aria-label={busy ? "Waiting for response" : "Send message"}
-                className={sendButtonClass("mb-0.5 md:hidden")}
-              >
-                {busy ? <Loader2 className="size-3.5 animate-spin" strokeWidth={2.5} /> : <ArrowUp className="size-3.5" strokeWidth={2.5} />}
+              <button {...buttonProps} disabled={isSubmitDisabled} className={sendButtonClass("mb-0.5 md:hidden")}>
+                {buttonIcon}
               </button>
             </div>
 
             <div className="hidden items-center justify-end gap-2 px-0.5 pb-0.5 md:flex">
-              <button
-                type="submit"
-                disabled={isSubmitDisabled}
-                aria-label={busy ? "Waiting for response" : "Send message"}
-                className={sendButtonClass("")}
-              >
-                {busy ? <Loader2 className="size-3.5 animate-spin" strokeWidth={2.5} /> : <ArrowUp className="size-3.5" strokeWidth={2.5} />}
+              <button {...buttonProps} disabled={isSubmitDisabled} className={sendButtonClass("")}>
+                {buttonIcon}
               </button>
             </div>
           </div>

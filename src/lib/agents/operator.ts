@@ -1,3 +1,4 @@
+import { ensureSendableEmail } from "@/lib/outreach/email-check";
 import type { ConnectedInbox } from "@/lib/inbox/gmail";
 import { enqueueInternalJob } from "@/lib/jobs/enqueue";
 import { checkSendGuards } from "@/lib/outreach/guards";
@@ -259,6 +260,17 @@ async function sendNow(ctx: AgentToolContext, args: Record<string, unknown>) {
     body = body || draft?.body || "";
   }
   if (!subject || !body) return { error: "Need a subject and body, or a saved draft on that sequence." };
+
+  const emailCheck = await ensureSendableEmail(ctx.db, contact.id, contact.email, contact.email_status ?? null);
+  if (!emailCheck.ok) {
+    return {
+      error:
+        emailCheck.status === "invalid"
+          ? "That address couldn't be confirmed as a real mailbox, so I did not send it. Sending to unconfirmed addresses hurts your sender reputation."
+          : "I couldn't verify that address right now, so I did not send it. Try again in a minute.",
+      code: emailCheck.status === "invalid" ? "invalid_email" : "verification_unavailable",
+    };
+  }
 
   const guards = await checkSendGuards({ email: contact.email, inboxId: inbox.id, ignoreWindow: true });
   if (!guards.ok) {

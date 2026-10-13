@@ -6,17 +6,20 @@
  * Hard rule: the canonical index is read before anything paid. A verified
  * address we already hold costs nothing; Icypeas is only called to fill gaps.
  */
-import { findPeopleAtCompany, type FoundPerson } from "../icypeas";
+import { extractPeople } from "../contact-extract";
+import { findPeopleAtCompany, isEmailFinderConfigured, type FoundPerson } from "../icypeas";
+import { crawlSite } from "@/lib/scraper/crawl";
+import type { Pattern } from "../email-pattern";
 import { findKnownContact } from "../index-lookup";
 import { persistLead, type SaveLeadResult } from "../agent/persist";
-import { resolveEmail } from "../agent/shared";
+import { learnEmailPattern, resolveEmail } from "../agent/shared";
 import type { AgentRunContext } from "../agent/context";
 import type { CandidateCompany, CandidateContact, ContactEvidence, ExtractedPerson } from "../types";
 import type { ScoredLead, SignalCandidate } from "./types";
 
 export const DEFAULT_TITLES = ["Founder", "Co-Founder", "CEO", "Head of Sales", "VP Sales", "Head of Growth"];
 
-function normalizeName(fullName: string): string {
+export function normalizeName(fullName: string): string {
   return fullName
     .normalize("NFKD")
     .replace(/\p{M}/gu, "")
@@ -35,7 +38,7 @@ function evidenceFor(signals: SignalCandidate[], domain: string): ContactEvidenc
   }));
 }
 
-function personFrom(found: FoundPerson, domain: string): ExtractedPerson {
+export function personFrom(found: FoundPerson, domain: string): ExtractedPerson {
   const url = found.profileUrl ?? `https://${domain}`;
   return {
     fullName: found.fullName,
@@ -50,16 +53,45 @@ function personFrom(found: FoundPerson, domain: string): ExtractedPerson {
   };
 }
 
-/** The person to contact: the one the signal named, else the best-fit decision maker Icypeas knows at the company. */
-async function pickPerson(lead: ScoredLead, titles: string[]): Promise<FoundPerson | null> {
+const TITLE_PRIORITY = [/co-?founder|founder/i, /\bceo\b|chief executive/i, /head of (sales|growth|revenue|gtm|marketing)|vp (of )?(sales|growth|revenue|marketing)|chief (revenue|growth|marketing)/i, /\bcto\b|chief technology|head of/i];
+
+function titleRank(person: ExtractedPerson, wanted: string[]): number {
+  const title = person.title ?? "";
+  const exact = wanted.findIndex((want) => want && title.toLowerCase().includes(want.toLowerCase()));
+  if (exact >= 0) return exact;
+  const general = TITLE_PRIORITY.findIndex((pattern) => pattern.test(title));
+  return general >= 0 ? wanted.length + general : 99;
+}
+
+/**
+ * The company's own website is the first place to look for a decision maker: founders and leads who are named on
+ * their About or Team page, plus any email the page publishes. No database, no paid API; just their public pages.
+ */
+export async function personFromWebsite(domain: string, titles: string[]): Promise<{ person: ExtractedPerson; pattern: Pattern | null } | null> {
+  let snapshot: Awaited<ReturnType<typeof crawlSite>>;
+  try {
+    snapshot = await crawlSite(domain);
+  } catch {
+    return null;
+  }
+  const people = await extractPeople(snapshot, titles);
+  if (people.length === 0) return null;
+  const ranked = [...people].sort((a, b) => titleRank(a, titles) - titleRank(b, titles) || Number(Boolean(b.email)) - Number(Boolean(a.email)));
+  return { person: ranked[0], pattern: learnEmailPattern(people, domain) };
+}
+
+/** The person to contact: whoever the signal named, else the best-fit person on the company's own site, else the contact database as a last resort. */
+async function pickPerson(lead: ScoredLead, titles: string[]): Promise<{ person: ExtractedPerson; pattern: Pattern | null } | null> {
   const hint = lead.signals.find((signal) => signal.personHint?.name)?.personHint;
   if (hint?.name) {
-    return { fullName: hint.name, firstName: "", lastName: "", title: hint.title ?? null, companyName: lead.companyName, location: null, profileUrl: hint.profileUrl ?? null, headline: null };
+    return { person: personFrom({ fullName: hint.name, firstName: "", lastName: "", title: hint.title ?? null, companyName: lead.companyName, location: null, profileUrl: hint.profileUrl ?? null, headline: null }, lead.domain), pattern: null };
   }
+  const fromSite = await personFromWebsite(lead.domain, titles);
+  if (fromSite) return fromSite;
+  if (!isEmailFinderConfigured()) return null;
   const withTitles = await findPeopleAtCompany(lead.domain, titles, 3);
-  if (withTitles?.length) return withTitles[0];
-  const anyone = await findPeopleAtCompany(lead.domain, [], 3);
-  return anyone?.[0] ?? null;
+  const found = withTitles?.[0] ?? (await findPeopleAtCompany(lead.domain, [], 3))?.[0];
+  return found ? { person: personFrom(found, lead.domain), pattern: null } : null;
 }
 
 export type TailOutcome =
@@ -112,10 +144,10 @@ export async function enrichAndSave(
       sourceRef: { qualifyReason: lead.qualifyReason, discovery: "signal_scout", fromIndex: true },
     };
   } else {
-    const found = await pickPerson(lead, titles);
-    if (!found) return { saved: false, reason: "no decision maker found" };
-    const person = personFrom(found, lead.domain);
-    const resolved = await resolveEmail(person, lead.domain, null);
+    const picked = await pickPerson(lead, titles);
+    if (!picked) return { saved: false, reason: "no decision maker found" };
+    const { person, pattern } = picked;
+    const resolved = await resolveEmail(person, lead.domain, pattern);
     if (!resolved.email) return { saved: false, reason: "no email found" };
     contact = {
       fullName: person.fullName,

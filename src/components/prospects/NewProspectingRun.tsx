@@ -112,6 +112,15 @@ export function NewProspectingRun({
       geographies: textToList(criteria.geographies),
       companySizeRange: criteria.companySizeRange,
       personas: textToList(criteria.personas),
+      ...(criteria.signals?.length
+        ? {
+            triggers: criteria.signals.map((type) => ({
+              type,
+              keywords: textToList(criteria.topics ?? ""),
+              recencyDays: type === "accelerator" ? 120 : 30,
+            })),
+          }
+        : {}),
     };
 
     try {

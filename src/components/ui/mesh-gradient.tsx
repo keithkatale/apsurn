@@ -33,9 +33,9 @@ let CachedMeshGradient: React.ComponentType<any> | null = null;
 
 export const MeshGradient = React.memo(function MeshGradient({
   colors: colorsProp,
-  color1 = "#4c9bff",
-  color2 = "#1f4fd8",
-  color3 = "#0a1a4a",
+  color1 = "#e8713a",
+  color2 = "#e87690",
+  color3 = "#e68be6",
   color4,
   speed = 1,
   distortion = 1,
@@ -90,7 +90,7 @@ export const MeshGradient = React.memo(function MeshGradient({
       <div
         ref={containerRef}
         className={cn(
-          "size-full bg-gradient-to-tr from-[#0a1a4a] via-[#1f4fd8] to-[#4c9bff]",
+          "size-full bg-gradient-to-tr from-[#e8713a] via-[#e87690] to-[#e68be6]",
           className,
         )}
         style={style}

@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 import type { CopilotArtifact } from "@/lib/agents/types";
-import { AgentInspector } from "./AgentInspector";
+import { resultError } from "@/lib/agents/run-events";
+import type { RunState, TimelineItem, ToolItem } from "@/lib/agents/timeline";
 import { ArtifactSurface } from "./artifacts/ArtifactSurface";
-import { CopilotMarkdown } from "./CopilotMarkdown";
 import { Composer } from "./Composer";
-import { CopilotTurnProgress } from "./CopilotTurnProgress";
-import { isToolTreeRunning } from "./CopilotThought";
-import { findTool, type ToolCall, type UIMessage } from "./types";
+import { AgentTimeline } from "./timeline/AgentTimeline";
+import { useRunStream } from "./timeline/useRunStream";
+import type { UIMessage } from "./types";
 
 interface HistoryRow {
   id: string;
@@ -18,59 +18,54 @@ interface HistoryRow {
   toolName?: string | null;
   args?: Record<string, unknown>;
   result?: unknown;
-  agent?: string;
   callId?: string;
-  parentCallId?: string;
   artifactIds?: string[];
+  timeline?: TimelineItem[];
+  error?: string;
 }
 
-function nestHistoryTools(flat: Array<ToolCall & { parentCallId?: string }>): ToolCall[] {
-  const nodes = new Map<string, ToolCall & { parentCallId?: string }>();
-  for (const tool of flat) nodes.set(tool.id, { ...tool, children: [] });
-  const roots: ToolCall[] = [];
-  for (const tool of nodes.values()) {
-    const parent = tool.parentCallId ? nodes.get(tool.parentCallId) : undefined;
-    if (parent) parent.children = [...(parent.children ?? []), tool];
-    else roots.push(tool);
-  }
-  return roots;
-}
-
-/** Replays the flat row history the GET endpoint returns into the same {role, tools[]} shape a live turn builds locally. */
-function messagesFromHistory(rows: HistoryRow[], artifacts: CopilotArtifact[] = []): UIMessage[] {
-  const byArtifact = new Map(artifacts.map((artifact) => [artifact.id, artifact]));
+/**
+ * Turns the stored rows into messages. A turn that ran with the live timeline carries it (what the user watched,
+ * saved with the answer); older turns only have tool rows and text, which are rebuilt into the same shape.
+ */
+function messagesFromHistory(rows: HistoryRow[]): UIMessage[] {
   const out: UIMessage[] = [];
-  let pendingTools: Array<ToolCall & { parentCallId?: string }> = [];
+  let pendingTools: ToolItem[] = [];
   for (const row of rows) {
     if (row.role === "user") {
       out.push({ id: row.id, role: "user", content: row.content ?? "" });
     } else if (row.role === "tool") {
+      const error = resultError(row.result);
       pendingTools.push({
+        kind: "tool",
         id: row.callId || row.id,
         name: row.toolName ?? "tool",
-        status: "done",
-        args: row.args,
+        args: row.args ?? {},
+        status: error ? "failed" : "done",
+        startedAt: 0,
+        progress: {},
         result: row.result,
-        agent: row.agent,
-        parentCallId: row.parentCallId,
+        error: error ?? undefined,
       });
     } else if (row.role === "model") {
-      const attached = (row.artifactIds ?? []).map((id) => byArtifact.get(id)).filter((item): item is CopilotArtifact => Boolean(item));
-      out.push({
-        id: row.id,
-        role: "model",
-        content: row.content ?? "",
-        tools: pendingTools.length ? nestHistoryTools(pendingTools) : undefined,
-        artifacts: attached.length ? attached : undefined,
-      });
+      let items: TimelineItem[];
+      if (row.timeline && row.timeline.length > 0) {
+        items = row.timeline;
+      } else {
+        items = [...pendingTools];
+        if (row.content?.trim()) items.push({ kind: "text", id: `t-${row.id}`, text: row.content });
+        for (const id of row.artifactIds ?? []) items.push({ kind: "artifact", id, artifact: { id } });
+      }
+      out.push({ id: row.id, role: "model", items, error: row.error });
       pendingTools = [];
     }
   }
-  // Tool rows with no answer yet: the agent is mid-turn in the background. Show them as live activity.
-  if (pendingTools.length > 0) {
-    out.push({ id: `working-${pendingTools[pendingTools.length - 1].id}`, role: "model", content: "", tools: nestHistoryTools(pendingTools) });
-  }
   return out;
+}
+
+/** Wall-clock time, read only from event handlers. */
+function clockNow(): number {
+  return Date.now();
 }
 
 let uidCounter = 0;
@@ -81,40 +76,10 @@ function uid(): string {
 
 const COPILOT_STARTERS = [
   { label: "Find 10 leads for my ICP", prompt: "Find 10 leads that match my approved ICP" },
-  { label: "Create a sequence for my ICP", prompt: "Have Operator create a sequence for my ICP" },
+  { label: "Create a sequence for my ICP", prompt: "Create a sequence for my ICP" },
   { label: "Show leads not in a campaign", prompt: "Which prospects are not in a campaign yet?" },
-  { label: "Check my latest prospecting run", prompt: "How did my latest prospecting run go?" },
+  { label: "Search the web for startups that just raised", prompt: "Search the web for B2B SaaS startups that just raised a seed round and read the top result" },
 ] as const;
-
-function upsertTool(list: ToolCall[], incoming: ToolCall): ToolCall[] {
-  const idx = list.findIndex((tool) => tool.id === incoming.id);
-  if (idx === -1) return [...list, { children: [], ...incoming }];
-  const next = [...list];
-  next[idx] = {
-    ...next[idx],
-    ...incoming,
-    children: incoming.children ?? next[idx].children,
-    reasoning: incoming.reasoning ?? next[idx].reasoning,
-  };
-  return next;
-}
-
-function patchTools(list: ToolCall[], parentId: string | undefined, incoming: ToolCall): ToolCall[] {
-  if (!parentId) return upsertTool(list, incoming);
-  return list.map((tool) => {
-    if (tool.id === parentId) return { ...tool, children: upsertTool(tool.children ?? [], incoming) };
-    if (tool.children?.length) return { ...tool, children: patchTools(tool.children, parentId, incoming) };
-    return tool;
-  });
-}
-
-function appendChildReasoning(list: ToolCall[], parentId: string, text: string): ToolCall[] {
-  return list.map((tool) => {
-    if (tool.id === parentId) return { ...tool, reasoning: `${tool.reasoning ?? ""}${text}` };
-    if (tool.children?.length) return { ...tool, children: appendChildReasoning(tool.children, parentId, text) };
-    return tool;
-  });
-}
 
 export interface CopilotChatProps {
   buildContext?: () => string;
@@ -193,32 +158,35 @@ function CopilotChatSession({
     onConversationIdChange?.(id);
   }
   const [messages, setMessages] = useState<UIMessage[]>([]);
-  const [activeTools, setActiveTools] = useState<ToolCall[]>([]);
-  const [streamingText, setStreamingText] = useState<string | null>(null);
-  const [liveReasoning, setLiveReasoning] = useState("");
-  const [reasoningStreaming, setReasoningStreaming] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [typing, setTyping] = useState(false);
+  /** Cards by id: the live run delivers them whole, saved timelines only point at them. */
+  const [artifacts, setArtifacts] = useState<Record<string, CopilotArtifact>>({});
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  /** The run as the page load found it, so a refresh paints the live view immediately. */
+  const [runSeed, setRunSeed] = useState<RunState | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [runStartedAt, setRunStartedAt] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [liveArtifacts, setLiveArtifacts] = useState<CopilotArtifact[]>([]);
   const [expandedArtifactId, setExpandedArtifactId] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState<string | null>(null);
-  /** The agent is working on this conversation outside the chat request (a plan, or analysis after a run finished). */
-  const [agentBusy, setAgentBusy] = useState(false);
   const activeIdRef = useRef<string | null>(initialConversationId);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const stickRef = useRef(true);
+  /** After Send, the newest exchange gets a full screen of room so the question rises to the top and the answer has space below it. */
+  const [pinned, setPinned] = useState(false);
+  const [viewportH, setViewportH] = useState(0);
+  const justSentRef = useRef(false);
+  const running = Boolean(activeRunId) || starting;
+  const isEmpty = messages.length === 0 && !running;
   const marketMode = Boolean(buildContext);
-  const isEmpty = messages.length === 0 && !sending && streamingText === null && activeTools.length === 0 && !liveReasoning;
+  void marketMode;
 
   useEffect(() => {
     let cancelled = false;
     fetch("/api/copilot/chat")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (!cancelled && data && typeof data.companyName === "string" && data.companyName.trim()) {
-          setCompanyName(data.companyName.trim());
-        }
+        if (!cancelled && data && typeof data.companyName === "string" && data.companyName.trim()) setCompanyName(data.companyName.trim());
       })
       .catch(() => {});
     return () => {
@@ -226,27 +194,63 @@ function CopilotChatSession({
     };
   }, []);
 
-  const selectedTool = useMemo(() => {
-    if (!selectedId) return null;
-    return findTool(activeTools, selectedId) ?? findTool(messages.flatMap((m) => (m.role === "model" ? m.tools ?? [] : [])), selectedId);
-  }, [selectedId, activeTools, messages]);
+  /**
+   * Load the saved conversation (and find a run still going, so a reload picks the live view back up). The last
+   * answer from the server is kept in sessionStorage and painted first, so reopening a task is instant while the
+   * fresh copy loads.
+   */
+  const applyConversation = useCallback((data: { messages?: HistoryRow[]; artifacts?: CopilotArtifact[]; activeRunId?: string | null; run?: { items: TimelineItem[]; label: string; lastSeq: number; status: string } | null }) => {
+    setMessages(messagesFromHistory(data.messages ?? []));
+    setArtifacts(Object.fromEntries((data.artifacts ?? []).map((artifact: CopilotArtifact) => [artifact.id, artifact])));
+    const runId = typeof data.activeRunId === "string" ? data.activeRunId : null;
+    if (runId && data.run) setRunSeed({ items: data.run.items, label: data.run.label, status: "running", error: null, lastSeq: data.run.lastSeq });
+    return runId;
+  }, []);
 
-  useEffect(() => {
-    if (isEmpty) return;
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, streamingText, activeTools, typing, liveReasoning, isEmpty]);
+  const loadConversation = useCallback(
+    async (id: string, options: { paintCached?: boolean } = {}): Promise<{ ok: boolean; activeRunId: string | null }> => {
+      const cacheKey = `copilot-conversation:${id}`;
+      if (options.paintCached) {
+        try {
+          const cached = window.sessionStorage.getItem(cacheKey);
+          if (cached) {
+            const data = JSON.parse(cached);
+            const runId = applyConversation(data);
+            if (runId) {
+              setRunStartedAt(clockNow());
+              setActiveRunId(runId);
+            }
+          }
+        } catch {
+          /* no cache */
+        }
+      }
+      const res = await fetch(`/api/copilot/chat?id=${id}`);
+      if (!res.ok) return { ok: false, activeRunId: null };
+      const data = await res.json();
+      try {
+        const text = JSON.stringify(data);
+        if (text.length < 400_000) window.sessionStorage.setItem(cacheKey, text);
+      } catch {
+        /* storage full or blocked */
+      }
+      return { ok: true, activeRunId: applyConversation(data) };
+    },
+    [applyConversation],
+  );
 
   useEffect(() => {
     if (!initialConversationId) return;
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/copilot/chat?id=${initialConversationId}`);
-        if (!res.ok) throw new Error("Failed to load task");
-        const data = await res.json();
+        const loaded = await loadConversation(initialConversationId, { paintCached: true });
         if (cancelled) return;
-        setMessages(messagesFromHistory(data.messages ?? [], data.artifacts ?? []));
-        setAgentBusy(Boolean(data.agentBusy));
+        if (!loaded.ok) throw new Error("Failed to load task");
+        if (loaded.activeRunId) {
+          setRunStartedAt(clockNow());
+          setActiveRunId(loaded.activeRunId);
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load task");
       }
@@ -258,46 +262,89 @@ function CopilotChatSession({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /**
-   * Re-reads the conversation. `onlyIfBusy` leaves the local transcript alone when the agent is idle,
-   * because a just-finished live turn carries reasoning the stored rows don't.
-   */
-  async function syncConversation(onlyIfBusy: boolean): Promise<boolean> {
-    const id = activeIdRef.current;
-    if (!id) return false;
-    try {
-      const res = await fetch(`/api/copilot/chat?id=${id}`);
-      if (!res.ok) return false;
-      const data = await res.json();
-      const busy = Boolean(data.agentBusy);
-      if (busy || !onlyIfBusy) setMessages(messagesFromHistory(data.messages ?? [], data.artifacts ?? []));
-      setAgentBusy(busy);
-      if (!busy) onTurnComplete?.();
-      return busy;
-    } catch {
-      return false;
-    }
-  }
+  const onRunFinished = useCallback(
+    async (finished: RunState) => {
+      // Swap the live view for the saved message in one step so nothing flashes or disappears.
+      const id = activeIdRef.current;
+      // Cards the run delivered whole stay usable even if the reload is slow.
+      const delivered = finished.items.filter((item): item is Extract<TimelineItem, { kind: "artifact" }> => item.kind === "artifact");
+      if (delivered.length > 0) {
+        setArtifacts((prev) => ({ ...Object.fromEntries(delivered.map((item) => [item.id, item.artifact as unknown as CopilotArtifact])), ...prev }));
+      }
+      try {
+        if (!id) throw new Error("no conversation");
+        const loaded = await loadConversation(id);
+        if (!loaded.ok) throw new Error("reload failed");
+      } catch {
+        // Keep what was watched rather than losing it.
+        setMessages((prev) => [...prev, { id: uid(), role: "model", items: finished.items, error: finished.error ?? undefined }]);
+      }
+      setActiveRunId(null);
+      setStopping(false);
+      onTurnComplete?.();
+    },
+    [loadConversation, onTurnComplete],
+  );
 
-  // While the agent works in the background, follow along: new tool activity and answers appear as they are saved.
+  const run = useRunStream(activeRunId, onRunFinished, runSeed);
+
+  // Follow new content, but never fight a reader who scrolled up.
   useEffect(() => {
-    if (!agentBusy || sending) return;
-    const timer = window.setTimeout(() => void syncConversation(false), 2500);
-    return () => window.clearTimeout(timer);
+    const el = scrollerRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 140;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    const measure = () => setViewportH(el.clientHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      observer.disconnect();
+    };
+  }, [isEmpty]);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el || !stickRef.current) return;
+    // Just after Send the scroll glides; during streaming it follows instantly.
+    el.scrollTo({ top: el.scrollHeight, behavior: justSentRef.current ? "smooth" : "auto" });
+  }, [messages, run.items, run.label, starting, pinned, viewportH]);
+
+  const renderArtifact = useCallback(
+    (reference: Record<string, unknown>): ReactNode => {
+      const id = String(reference.id ?? "");
+      const artifact = artifacts[id] ?? (reference.payload ? (reference as unknown as CopilotArtifact) : null);
+      if (!artifact) return null;
+      return (
+        <ArtifactSurface
+          artifact={artifact}
+          onPrompt={(text) => void sendMessage(text)}
+          expanded={expandedArtifactId === artifact.id}
+          onExpand={() => setExpandedArtifactId(artifact.id)}
+          onCollapse={() => setExpandedArtifactId(null)}
+          onChange={(next) => setArtifacts((prev) => ({ ...prev, [next.id]: next }))}
+        />
+      );
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agentBusy, sending, messages]);
+    [artifacts, expandedArtifactId],
+  );
 
   async function sendMessage(message: string) {
-    if (sending) return;
+    if (running) return;
     setError(null);
     setMessages((prev) => [...prev, { id: uid(), role: "user", content: message }]);
-    setActiveTools([]);
-    setStreamingText(null);
-    setLiveReasoning("");
-    setLiveArtifacts([]);
-    setReasoningStreaming(true);
-    setSending(true);
-    setTyping(true);
+    stickRef.current = true;
+    justSentRef.current = true;
+    window.setTimeout(() => {
+      justSentRef.current = false;
+    }, 800);
+    setPinned(true);
+    setRunStartedAt(clockNow());
+    setStarting(true);
 
     try {
       const context = buildContext?.();
@@ -307,165 +354,34 @@ function CopilotChatSession({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ conversationId: activeId, message: outgoing }),
       });
-      if (!res.ok || !res.body) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "Copilot request failed");
-      }
-
-      if (res.headers.get("content-type")?.includes("application/json")) {
-        // The agent is still finishing background work; the message is queued behind it and answered next.
-        const queued = await res.json().catch(() => ({}));
-        if (!activeId && queued.conversationId) setActiveId(queued.conversationId);
-        setAgentBusy(true);
-        return;
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let finalText = "";
-      let reasoningAcc = "";
-      let toolsAcc: ToolCall[] = [];
-      let artifactsAcc: CopilotArtifact[] = [];
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
-
-        for (const part of parts) {
-          const line = part.split("\n").find((l) => l.startsWith("data:"));
-          if (!line) continue;
-          const event = JSON.parse(line.slice(5).trim());
-
-          switch (event.type) {
-            case "meta":
-              if (!activeId && event.conversationId) {
-                setActiveId(event.conversationId);
-              }
-              break;
-            case "status":
-              setTyping(true);
-              if (event.status === "thinking") setReasoningStreaming(true);
-              break;
-            case "reasoning":
-              setTyping(false);
-              if (event.parentId) {
-                toolsAcc = appendChildReasoning(toolsAcc, event.parentId, event.text ?? "");
-                setActiveTools([...toolsAcc]);
-              } else {
-                reasoningAcc += event.text ?? "";
-                setLiveReasoning(reasoningAcc);
-                setReasoningStreaming(true);
-              }
-              break;
-            case "answer": {
-              const answer = typeof event.text === "string" ? event.text : "";
-              if (answer && reasoningAcc.endsWith(answer)) {
-                reasoningAcc = reasoningAcc.slice(0, -answer.length).replace(/\s+$/, "");
-                setLiveReasoning(reasoningAcc);
-              }
-              finalText = answer;
-              setStreamingText(answer);
-              setReasoningStreaming(false);
-              setTyping(false);
-              break;
-            }
-            case "token":
-              setTyping(false);
-              setStreamingText((prev) => (prev ?? "") + event.text);
-              finalText += event.text;
-              break;
-            case "clear_assistant":
-              if (finalText) {
-                reasoningAcc = `${reasoningAcc}${reasoningAcc && !reasoningAcc.endsWith("\n") ? "\n" : ""}${finalText}`;
-                setLiveReasoning(reasoningAcc);
-              }
-              setStreamingText(null);
-              finalText = "";
-              setTyping(true);
-              break;
-            case "tool_start": {
-              setTyping(false);
-              setReasoningStreaming(false);
-              const incoming: ToolCall = {
-                id: event.id ?? uid(),
-                name: event.name,
-                status: "running",
-                args: event.args,
-                agent: event.agent,
-              };
-              toolsAcc = patchTools(toolsAcc, event.parentId, incoming);
-              setActiveTools([...toolsAcc]);
-              break;
-            }
-            case "tool_end": {
-              const incoming: ToolCall = {
-                id: event.id ?? event.name,
-                name: event.name,
-                status: "done",
-                args: event.args,
-                result: event.result,
-                agent: event.agent,
-              };
-              toolsAcc = patchTools(toolsAcc, event.parentId, incoming);
-              setActiveTools([...toolsAcc]);
-              break;
-            }
-            case "artifact":
-              if (event.artifact) {
-                artifactsAcc = [...artifactsAcc, event.artifact];
-                setLiveArtifacts(artifactsAcc);
-              }
-              break;
-            case "error":
-              setError(event.error);
-              break;
-            case "done":
-              onTurnComplete?.();
-              break;
-          }
-        }
-      }
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: uid(),
-          role: "model",
-          content: finalText,
-          reasoning: reasoningAcc.trim() || undefined,
-          tools: toolsAcc,
-          artifacts: artifactsAcc.length ? artifactsAcc : undefined,
-        },
-      ]);
-      setActiveTools([]);
-      setStreamingText(null);
-      setLiveReasoning("");
-      setLiveArtifacts([]);
-      setReasoningStreaming(false);
-      // The turn may have handed work to the background (an approved plan, a run still going): keep following it.
-      void syncConversation(true);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Copilot request failed");
+      if (!activeIdRef.current && data.conversationId) setActiveId(data.conversationId);
+      setRunSeed(null);
+      setActiveRunId(data.runId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Copilot request failed");
     } finally {
-      setSending(false);
-      setTyping(false);
-      setReasoningStreaming(false);
+      setStarting(false);
     }
   }
 
+  async function stopRun() {
+    if (!activeRunId || stopping) return;
+    setStopping(true);
+    await fetch(`/api/copilot/runs/${activeRunId}/stop`, { method: "POST" }).catch(() => undefined);
+  }
+
+  const liveLabel = stopping ? "Stopping…" : starting && !activeRunId ? "Starting…" : run.label || "Working…";
+
   return (
-    <div className={`copilot-panel relative flex h-full w-full ${selectedTool ? "copilot-panel-split" : ""}`}>
+    <div className="copilot-panel relative flex h-full w-full">
       <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${isEmpty && emptyLayout === "center" ? "justify-center" : ""}`}>
         {isEmpty && emptyLayout === "top" ? (
           <div className="copilot-scroll min-h-0 flex-1 overflow-y-auto px-3 py-3">
             <div className="mx-auto w-full max-w-2xl">
               {emptyHeading}
-              <Composer disabled={sending} busy={sending} onSend={sendMessage} />
+              <Composer disabled={running} busy={running} onSend={sendMessage} onStop={activeRunId ? () => void stopRun() : undefined} stopping={stopping} />
               <ul className="copilot-starters" aria-label="Starting options">
                 {(starters ?? COPILOT_STARTERS).map((item) => (
                   <li key={item.label}>
@@ -476,98 +392,55 @@ function CopilotChatSession({
                   </li>
                 ))}
               </ul>
+              {error ? <p className="mt-3 text-[13px] text-red-500">{error}</p> : null}
               {emptyFooter}
             </div>
           </div>
         ) : !isEmpty ? (
-        <div className="copilot-scroll mx-auto min-h-0 w-full max-w-2xl flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3">
-              {messages.map((m) => {
+          <div ref={scrollerRef} className="copilot-scroll mx-auto min-h-0 w-full max-w-2xl flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 py-3">
+            {(() => {
+              const lastUser = pinned ? messages.map((m) => m.role).lastIndexOf("user") : -1;
+              const renderMessage = (m: UIMessage) => {
                 if (m.role === "user") {
                   return (
                     <div key={m.id} className="flex justify-end">
-                      <div className="copilot-user-bubble w-fit max-w-[85%] rounded-2xl rounded-br-md px-3 py-2 text-[16px] leading-snug">
-                        {m.content}
-                      </div>
+                      <div className="copilot-user-bubble w-fit max-w-[85%] rounded-2xl rounded-br-md px-3 py-2 text-[16px] leading-snug">{m.content}</div>
                     </div>
                   );
                 }
+                return <AgentTimeline key={m.id} items={m.items} renderArtifact={renderArtifact} error={m.error} />;
+              };
+              const live = running ? (
+                <AgentTimeline
+                  items={run.items}
+                  live
+                  label={liveLabel}
+                  startedAt={runStartedAt}
+                  renderArtifact={renderArtifact}
+                />
+              ) : null;
+              if (lastUser < 0) {
                 return (
-                  <div key={m.id} className="space-y-2">
-                    {m.reasoning || (m.tools?.length ?? 0) > 0 ? (
-                      <CopilotTurnProgress
-                        reasoning={m.reasoning}
-                        tools={m.tools}
-                        working={false}
-                        historical
-                        selectedId={selectedId}
-                        onSelect={setSelectedId}
-                      />
-                    ) : null}
-                    {m.content ? <CopilotMarkdown content={m.content} /> : null}
-                    {m.artifacts?.map((artifact) => (
-                      <ArtifactSurface
-                        key={artifact.id}
-                        artifact={artifact}
-                        onPrompt={(text) => void sendMessage(text)}
-                        onAgentWork={() => setAgentBusy(true)}
-                        expanded={expandedArtifactId === artifact.id}
-                        onExpand={() => setExpandedArtifactId(artifact.id)}
-                        onCollapse={() => setExpandedArtifactId(null)}
-                        onChange={(next) =>
-                          setMessages((prev) =>
-                            prev.map((message) =>
-                              message.role === "model" && message.id === m.id
-                                ? { ...message, artifacts: message.artifacts?.map((item) => (item.id === next.id ? next : item)) }
-                                : message,
-                            ),
-                          )
-                        }
-                      />
-                    ))}
-                  </div>
+                  <>
+                    {messages.map(renderMessage)}
+                    {live}
+                  </>
                 );
-              })}
+              }
+              // The newest exchange sits in a block as tall as the window, so the question can scroll to the top with room below.
+              return (
+                <>
+                  {messages.slice(0, lastUser).map(renderMessage)}
+                  <div className="space-y-4" style={{ minHeight: Math.max(0, viewportH - 24) }}>
+                    {messages.slice(lastUser).map(renderMessage)}
+                    {live}
+                  </div>
+                </>
+              );
+            })()}
 
-              {sending || typing || liveReasoning || reasoningStreaming || activeTools.length > 0 ? (
-                <CopilotTurnProgress
-                  reasoning={liveReasoning}
-                  tools={activeTools}
-                  working={
-                    !error &&
-                    (typing || sending || reasoningStreaming || isToolTreeRunning(activeTools)) &&
-                    streamingText === null
-                  }
-                  error={Boolean(error)}
-                  selectedId={selectedId}
-                  onSelect={setSelectedId}
-                />
-              ) : null}
-
-              {agentBusy && !sending ? (
-                <CopilotTurnProgress reasoning="" tools={[]} working selectedId={selectedId} onSelect={setSelectedId} />
-              ) : null}
-
-              {liveArtifacts.map((artifact) => (
-                <ArtifactSurface
-                  key={artifact.id}
-                  artifact={artifact}
-                  onPrompt={(text) => void sendMessage(text)}
-                  onAgentWork={() => setAgentBusy(true)}
-                        expanded={expandedArtifactId === artifact.id}
-                  onExpand={() => setExpandedArtifactId(artifact.id)}
-                  onCollapse={() => setExpandedArtifactId(null)}
-                />
-              ))}
-
-              {streamingText !== null && (
-                <div>
-                  <CopilotMarkdown content={streamingText} caret />
-                </div>
-              )}
-
-              {error && <p className="text-[11px] text-red-600">{error}</p>}
-              <div ref={bottomRef} />
-        </div>
+            {error ? <p className="text-[13px] text-red-500">{error}</p> : null}
+          </div>
         ) : null}
 
         {!(isEmpty && emptyLayout === "top") && (
@@ -581,7 +454,7 @@ function CopilotChatSession({
                   </h1>
                 </div>
               ) : null}
-              <Composer disabled={sending} busy={sending} onSend={sendMessage} />
+              <Composer disabled={running} busy={running} onSend={sendMessage} onStop={activeRunId ? () => void stopRun() : undefined} stopping={stopping} />
               {isEmpty ? (
                 <ul className="copilot-starters" aria-label="Starting options">
                   {(starters ?? COPILOT_STARTERS).map((item) => (
@@ -598,16 +471,6 @@ function CopilotChatSession({
           </div>
         )}
       </div>
-
-      {selectedTool ? (
-        <AgentInspector
-          tool={selectedTool}
-          selectedId={selectedId ?? undefined}
-          overlay={marketMode}
-          onClose={() => setSelectedId(null)}
-          onSelectChild={setSelectedId}
-        />
-      ) : null}
     </div>
   );
 }

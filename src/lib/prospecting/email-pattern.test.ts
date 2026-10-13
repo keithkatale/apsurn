@@ -26,5 +26,12 @@ test("generates common candidates when no company pattern is known", () => {
     "maryjones@acme.com",
     "m.jones@acme.com",
     "jones@acme.com",
+    "mary_jones@acme.com",
+    "maryj@acme.com",
+    "mary-jones@acme.com",
+    "jones.mary@acme.com",
+    "jonesm@acme.com",
+    "jonesmary@acme.com",
+    "mary.j@acme.com",
   ]);
 });

@@ -1,0 +1,298 @@
+/* Live agent timeline: reasoning, tool rows and answers in the order they happened. */
+.cpt {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cpt-reasoning {
+  border-left: 2px solid var(--copilot-card-border);
+  padding-left: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--copilot-muted);
+  white-space: pre-wrap;
+}
+
+.cpt-narration .copilot-md {
+  font-size: 14px;
+  color: var(--copilot-muted);
+}
+
+/* Tool calls are plain lines inside the work window: no boxes, just a status mark and what happened. */
+.cpt-tool {
+  border-radius: 6px;
+}
+
+.cpt-tool-head {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 4px;
+  border-radius: 6px;
+  text-align: left;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--copilot-muted);
+}
+
+.cpt-tool-head:hover {
+  background: color-mix(in srgb, var(--copilot-foreground) 5%, transparent);
+  color: var(--copilot-foreground);
+}
+
+.cpt-tool-phrase {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cpt-tool[data-status="running"] .cpt-tool-phrase {
+  background: linear-gradient(90deg, var(--copilot-muted) 0%, var(--copilot-foreground) 45%, var(--copilot-muted) 90%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: cpt-shimmer 1.6s ease-in-out infinite;
+}
+
+.cpt-tool[data-status="failed"] .cpt-tool-phrase {
+  color: #ef4444;
+}
+
+.cpt-tool-meta {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+.cpt-tool-body {
+  margin: 1px 0 4px 11px;
+  border-left: 1px solid var(--copilot-card-border);
+  padding: 2px 0 2px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--copilot-muted);
+}
+
+.cpt-error {
+  color: #ef4444;
+}
+
+.cpt-result {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 1px 0;
+}
+
+.cpt-result-title {
+  color: var(--copilot-foreground);
+}
+
+.cpt-link {
+  display: inline;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--copilot-muted);
+}
+
+.cpt-link:hover {
+  text-decoration: underline;
+}
+
+.cpt-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 7px;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.cpt-badge[data-tone="good"] {
+  background: color-mix(in srgb, #22c55e 18%, transparent);
+  color: #22c55e;
+}
+
+.cpt-badge[data-tone="bad"] {
+  background: color-mix(in srgb, #ef4444 18%, transparent);
+  color: #ef4444;
+}
+
+.cpt-badge[data-tone="warn"] {
+  background: color-mix(in srgb, #f59e0b 18%, transparent);
+  color: #f59e0b;
+}
+
+.cpt-skeleton {
+  height: 10px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--copilot-foreground) 6%, transparent), color-mix(in srgb, var(--copilot-accent) 20%, transparent), color-mix(in srgb, var(--copilot-foreground) 6%, transparent));
+  background-size: 200% 100%;
+  animation: cpt-shimmer 1.4s ease-in-out infinite;
+}
+
+.cpt-live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--copilot-muted);
+}
+
+.cpt-live-label {
+  background: linear-gradient(90deg, var(--copilot-muted) 0%, var(--copilot-foreground) 45%, var(--copilot-muted) 90%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: cpt-shimmer 1.6s ease-in-out infinite;
+}
+
+.cpt-stop {
+  margin-left: auto;
+  border: 1px solid var(--copilot-card-border);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  color: var(--copilot-muted);
+}
+
+.cpt-stop:hover {
+  color: var(--copilot-foreground);
+  border-color: var(--copilot-muted);
+}
+
+@keyframes cpt-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cpt-tool[data-status="running"] .cpt-tool-phrase,
+  .cpt-live-label,
+  .cpt-skeleton {
+    animation: none;
+  }
+}
+
+/* The work window: capped height, scrolls inside itself. */
+.cpt-window {
+  max-height: min(38vh, 20rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.cpt-window-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 0;
+}
+
+.cpt-summary {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12.5px;
+  color: var(--copilot-muted);
+  border: 1px solid var(--copilot-card-border);
+}
+
+.cpt-summary:hover {
+  color: var(--copilot-foreground);
+}
+
+/* Tool results arrive with a soft fade-up; rows stagger by their inline animation-delay. */
+@keyframes cpt-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cpt-in {
+  animation: cpt-in 260ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+@keyframes cpt-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.cpt-pop {
+  animation: cpt-pop 240ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* A tool's detail opens and closes by height, not by popping. */
+.cpt-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 240ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.cpt-collapse[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+
+.cpt-collapse-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cpt-trail {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.cpt-trail-count {
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+/* Reasoning block content: opens by height. */
+.cpt-reveal[data-state="open"] {
+  animation: cpt-in 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.cpt-reveal[data-state="closed"] {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cpt-in,
+  .cpt-pop,
+  .cpt-reveal[data-state="open"] {
+    animation: none;
+  }
+  .cpt-collapse {
+    transition: none;
+  }
+}

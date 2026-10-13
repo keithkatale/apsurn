@@ -9,12 +9,13 @@ export const AGENT_DISPLAY_NAME: Record<SpecialistId, string> = {
 
 export const AGENT_TOOL_LABELS: Record<string, string> = {
   get_account_snapshot: "Checking your account",
-  find_companies: "Finding companies with a buying signal",
-  find_people: "Finding the decision maker",
-  resolve_email: "Verifying their email",
-  save_lead: "Saving the lead",
-  approve_plan: "Starting the plan",
-  create_plan: "Drafting a plan",
+  web_search: "Searching the web",
+  web_scrape: "Reading a page",
+  find_people: "Finding people at a company",
+  find_email: "Looking up an email",
+  verify_email: "Verifying an email",
+  save_lead: "Saving a lead",
+  present_leads: "Putting the leads together",
   render_ui: "Building a view",
   list_documents: "Looking through the Library",
   get_document: "Reading a document",
@@ -25,8 +26,6 @@ export const AGENT_TOOL_LABELS: Record<string, string> = {
   update_blueprint: "Updating the blueprint",
   get_brand_context: "Reading your brand",
   get_analytics_summary: "Checking analytics",
-  delegate_to_agent: "Delegating",
-  get_agent_status: "Checking agent status",
   list_prospect_companies: "Looking up companies",
   list_contacts: "Looking up contacts",
   source_leads: "Sourcing leads",
@@ -57,34 +56,8 @@ export const AGENT_TOOL_LABELS: Record<string, string> = {
   send_email_now: "Sending an email",
 };
 
-export const TOOL_TO_AGENT: Record<string, SpecialistId> = {
-  list_prospect_companies: "researcher",
-  source_leads: "researcher",
-  save_sourced_leads: "researcher",
-  start_prospecting_run: "researcher",
-  get_prospecting_run: "researcher",
-  cancel_prospecting_run: "researcher",
-  set_company_status: "researcher",
-  list_market_keywords: "listener",
-  list_market_accounts: "listener",
-  list_market_mentions: "listener",
-  add_market_keyword: "listener",
-  set_keyword_active: "listener",
-  follow_account_by_handle: "listener",
-  update_market_account_follow: "listener",
-  update_market_mention: "listener",
-  trigger_market_scan: "listener",
-  convert_mention_to_prospect: "listener",
-  draft_outreach_email: "writer",
-  update_contact_status: "operator",
-  archive_contacts: "operator",
-  archive_prospect_companies: "operator",
-  create_sequence: "operator",
-  enroll_contacts: "operator",
-  activate_sequence: "operator",
-  run_send_pass: "operator",
-  send_email_now: "operator",
-};
+/** Copilot does all the work itself now, so no tool is attributed to a sub-agent. */
+export const TOOL_TO_AGENT: Record<string, SpecialistId> = {};
 
 export function toolLabel(name: string): string {
   return AGENT_TOOL_LABELS[name] ?? name;
@@ -92,4 +65,37 @@ export function toolLabel(name: string): string {
 
 export function toolAgent(name: string): SpecialistId | undefined {
   return TOOL_TO_AGENT[name];
+}
+
+function clip(value: unknown, max: number): string {
+  const text = String(value ?? "").replace(/\s+/g, " ").trim();
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+function hostOf(value: unknown): string {
+  try {
+    return new URL(String(value)).hostname.replace(/^www\./, "");
+  } catch {
+    return clip(value, 40);
+  }
+}
+
+/** The live status line while a tool runs: what exactly it is doing. */
+export function toolPhase(name: string, args: Record<string, unknown>): string {
+  switch (name) {
+    case "web_search":
+      return args.query ? `Searching the web for “${clip(args.query, 60)}”…` : "Searching the web…";
+    case "web_scrape":
+      return args.url ? `Reading ${hostOf(args.url)}…` : "Reading a page…";
+    case "find_people":
+      return args.domain ? `Finding people at ${clip(args.domain, 40)}…` : "Finding people…";
+    case "find_email":
+      return args.fullName ? `Looking up ${clip(args.fullName, 40)}’s email…` : "Looking up an email…";
+    case "verify_email":
+      return args.email ? `Verifying ${clip(args.email, 50)}…` : "Verifying an email…";
+    case "save_lead":
+      return args.companyName ? `Saving ${clip(args.companyName, 40)}…` : "Saving a lead…";
+    default:
+      return `${toolLabel(name)}…`;
+  }
 }

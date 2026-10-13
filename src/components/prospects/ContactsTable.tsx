@@ -15,10 +15,11 @@ export type FlatRow = {
 export function ContactsTable({
   prospects,
   selected,
-  onSelectedChange,
   onOpenProfile,
   readOnly = false,
   maskEmails = false,
+  lists,
+  onMoveToList,
 }: {
   prospects: ProspectRow[];
   selected: Set<string>;
@@ -26,6 +27,9 @@ export function ContactsTable({
   onOpenProfile?: (row: FlatRow) => void;
   readOnly?: boolean;
   maskEmails?: boolean;
+  /** When given, each row gets a picker to file its company in one of these lists. */
+  lists?: Array<{ id: string; name: string }>;
+  onMoveToList?: (companyId: string, listId: string) => void;
 }) {
   const rows = useMemo<FlatRow[]>(
     () =>
@@ -35,27 +39,8 @@ export function ContactsTable({
     [prospects],
   );
 
-  const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.contact.id));
-  const someSelected = rows.some((r) => selected.has(r.contact.id));
-  const showRowCheckboxes = someSelected;
-
-  function toggle(contactId: string) {
-    const next = new Set(selected);
-    if (next.has(contactId)) next.delete(contactId);
-    else next.add(contactId);
-    onSelectedChange(next);
-  }
-
-  function toggleAll() {
-    if (allSelected) {
-      onSelectedChange(new Set());
-      return;
-    }
-    onSelectedChange(new Set(rows.map((r) => r.contact.id)));
-  }
-
   return (
-    <div className="flex flex-col gap-2 overflow-hidden rounded-xl border border-neutral-200 bg-white">
+    <div className="flex flex-col gap-2 overflow-hidden rounded-[8px] border border-neutral-200 bg-white">
       <ul className="divide-y divide-neutral-100 md:hidden">
         {rows.length === 0 ? (
           <li className="px-3 py-8 text-center text-sm text-neutral-500">No leads in this table.</li>
@@ -65,15 +50,6 @@ export function ContactsTable({
           return (
             <li key={contact.id} className={isSelected ? "bg-neutral-100" : undefined}>
               <div className="flex items-start gap-3 px-3 py-3">
-                {!readOnly ? (
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => toggle(contact.id)}
-                    className="mt-2 size-4 shrink-0 rounded border-neutral-300"
-                    aria-label={`Select ${contact.full_name ?? "contact"}`}
-                  />
-                ) : null}
                 <button
                   type="button"
                   className="flex min-w-0 flex-1 items-start gap-2.5 text-left disabled:cursor-default"
@@ -119,20 +95,6 @@ export function ContactsTable({
         <table className="w-full border-collapse text-sm leading-tight">
           <thead>
             <tr className="border-b border-neutral-200 text-left text-[11px] font-medium uppercase tracking-wide text-neutral-400">
-              {!readOnly && (
-                <th className="w-10 px-3 py-2.5">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    ref={(el) => {
-                      if (el) el.indeterminate = someSelected && !allSelected;
-                    }}
-                    onChange={toggleAll}
-                    className="size-3.5 rounded border-neutral-300"
-                    aria-label="Select all"
-                  />
-                </th>
-              )}
               <th className="px-3 py-2.5 font-medium">Name</th>
               <th className="px-3 py-2.5 font-medium">Title</th>
               <th className="px-3 py-2.5 font-medium">Company</th>
@@ -144,11 +106,10 @@ export function ContactsTable({
               ) : (
                 <>
                   <th className="px-3 py-2.5 font-medium">Email</th>
-                  <th className="px-3 py-2.5 font-medium">Phone</th>
-                  <th className="px-3 py-2.5 font-medium">Stage</th>
-                  <th className="px-3 py-2.5 font-medium">Outreach</th>
                   <th className="px-3 py-2.5 font-medium">Why</th>
                   <th className="px-3 py-2.5 font-medium">Fit</th>
+                  <th className="px-3 py-2.5 font-medium">Outreach</th>
+                  {lists && onMoveToList ? <th className="px-3 py-2.5 font-medium">List</th> : null}
                 </>
               )}
             </tr>
@@ -156,7 +117,7 @@ export function ContactsTable({
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={readOnly ? 5 : 10} className="px-3 py-8 text-center text-sm text-neutral-500">
+                <td colSpan={readOnly ? 5 : lists ? 8 : 7} className="px-3 py-8 text-center text-sm text-neutral-500">
                   No leads in this table.
                 </td>
               </tr>
@@ -168,19 +129,6 @@ export function ContactsTable({
                   key={contact.id}
                   className={`border-b border-neutral-100 transition-colors last:border-b-0 hover:bg-neutral-100/60 ${isSelected ? "bg-neutral-100" : ""}`}
                 >
-                  {!readOnly && (
-                    <td className="px-3 py-3 align-middle">
-                      {showRowCheckboxes ? (
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggle(contact.id)}
-                          className="size-3.5 rounded border-neutral-300"
-                          aria-label={`Select ${contact.full_name ?? "contact"}`}
-                        />
-                      ) : null}
-                    </td>
-                  )}
                   <td className="max-w-[200px] px-3 py-3 align-middle">
                     {onOpenProfile ? (
                       <button
@@ -245,15 +193,14 @@ export function ContactsTable({
                       "—"
                     )}
                   </td>
-                  <td className="max-w-[120px] truncate px-3 py-3 align-middle text-neutral-600">
-                    {contact.phone || "—"}
+                  <td
+                    className="max-w-[200px] truncate px-3 py-3 align-middle text-neutral-500"
+                    title={contact.qualify_reason ?? undefined}
+                  >
+                    {contact.qualify_reason || "—"}
                   </td>
-                  <td className="px-3 py-3 align-middle">
-                    {readOnly ? (
-                      <span className="text-[12px] capitalize text-neutral-700">{contact.lead_status}</span>
-                    ) : (
-                      <LeadStatusPicker contactId={contact.id} value={contact.lead_status} />
-                    )}
+                  <td className="px-3 py-3 align-middle tabular-nums text-neutral-600">
+                    {company.icp_fit_score ?? "—"}
                   </td>
                   <td className="px-3 py-3 align-middle">
                     {readOnly ? (
@@ -264,15 +211,23 @@ export function ContactsTable({
                       <OutreachPicker contactId={contact.id} value={(contact.outreach ?? "not_contacted") as OutreachState} />
                     )}
                   </td>
-                  <td
-                    className="max-w-[200px] truncate px-3 py-3 align-middle text-neutral-500"
-                    title={contact.qualify_reason ?? undefined}
-                  >
-                    {contact.qualify_reason || "—"}
-                  </td>
-                  <td className="px-3 py-3 align-middle tabular-nums text-neutral-600">
-                    {company.icp_fit_score ?? "—"}
-                  </td>
+                  {lists && onMoveToList ? (
+                    <td className="px-3 py-3 align-middle">
+                      <select
+                        aria-label="Move to list"
+                        value={company.list_id ?? ""}
+                        onChange={(event) => event.target.value && onMoveToList(company.id, event.target.value)}
+                        className="max-w-[150px] rounded-md border border-neutral-200 bg-transparent px-1.5 py-1 text-[12px] text-neutral-700"
+                      >
+                        {!company.list_id ? <option value="">No list</option> : null}
+                        {lists.map((list) => (
+                          <option key={list.id} value={list.id}>
+                            {list.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  ) : null}
                     </>
                   )}
                 </tr>

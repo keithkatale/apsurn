@@ -40,7 +40,10 @@ export async function POST(request: NextRequest) {
     async start(controller) {
       const send = (payload: Record<string, unknown>) => controller.enqueue(sseEncode(payload));
       try {
-        const result = await importCsv(db, userId, company.id, csvText, (event) => send({ ...event }));
+        const result = await importCsv(db, userId, company.id, csvText, (event) => send({ ...event }), {
+          name: file.name,
+          kind: sequenceId ? "campaign" : "upload",
+        });
         let enrolled = 0;
         if (sequenceId && result.contactIds.length > 0) {
           send({ type: "status", stage: "save", label: "Adding the table to this campaign…", progress: 96 });

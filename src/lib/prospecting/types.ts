@@ -1,4 +1,4 @@
-export type TriggerType = "hiring" | "funding_news" | "social_pain" | "tech_website";
+export type TriggerType = "hiring" | "funding_news" | "social_pain" | "tech_website" | "launch" | "accelerator";
 export type TriggerEventKind = "funding" | "launch" | "expansion" | "exec_hire";
 /** A buying signal to scout for: a company qualifies only if it shows this, recently. */
 export interface TriggerSpec {

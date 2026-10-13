@@ -1,3 +1,4 @@
+import { verifyEmail } from "@/lib/prospecting/email-verifier";
 import { spendCredits } from "@/lib/billing/credits";
 import { CREDIT_COSTS } from "@/lib/billing/plans";
 import { searchLinkedInMentions } from "@/lib/market/linkedin";
@@ -307,7 +308,7 @@ export async function saveSourcedLeads(ctx: AgentToolContext, artifactId: string
   if (!listId) {
     const { data: created, error } = await ctx.db
       .from("prospect_lists")
-      .insert({ user_id: ctx.userId, company_id: companyId, name: "Copilot sourced", criteria: {}, status: "completed", requested_count: 0 })
+      .insert({ user_id: ctx.userId, company_id: companyId, name: "Copilot sourced", criteria: { source: "copilot" }, status: "completed", requested_count: 0 })
       .select("id")
       .single();
     if (error || !created) return { error: error?.message ?? "Could not create a list." };
@@ -351,17 +352,23 @@ export async function saveSourcedLeads(ctx: AgentToolContext, artifactId: string
       stopped = prospectError?.message ?? "Could not save a company.";
       break;
     }
+    // Confirm the address before it is stored; an unconfirmed one is dropped rather than saved to bounce later.
+    let confirmedEmail = row.email;
+    if (confirmedEmail && row.emailStatus !== "verified") {
+      const check = await verifyEmail(confirmedEmail);
+      if (check.status !== "verified") confirmedEmail = null;
+    }
     let contactId: string | null = null;
-    if (row.fullName || row.email) {
+    if (row.fullName || confirmedEmail) {
       const { data: contact } = await ctx.db
         .from("contacts")
         .insert({
           prospect_company_id: prospect.id,
           full_name: row.fullName || row.companyName,
           title: row.title,
-          email: row.email,
+          email: confirmedEmail,
           phone: row.phone,
-          email_status: row.email ? row.emailStatus || "unverified" : null,
+          email_status: confirmedEmail ? "verified" : null,
           source: "copilot_sourced",
           lead_status: "new",
         })

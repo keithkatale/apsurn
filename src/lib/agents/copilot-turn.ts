@@ -10,13 +10,19 @@ import { getAiClient, toFunctionTool } from "@/lib/ai/openai";
 import { COPILOT_SYSTEM_INSTRUCTION, COPILOT_TOOL_DECLARATIONS, runCopilotTool } from "@/lib/copilot/tools";
 import { COPILOT_MUTATING_TOOLS } from "./copilot";
 import { ORCHESTRATION_THINKING_BUDGET, runAgentLoop } from "./loop";
-import { CREATE_PLAN_TOOL } from "./plan";
+import { toolPhase } from "./labels";
+import { resultError } from "./run-events";
+import type { RunSink } from "./run-sink";
 import type { CopilotArtifact } from "./types";
 
-export const CHAT_TURN_ROUNDS = 6;
-/** Plan and wake-up turns do real multi-step work, so they get more rounds before handing over to plan_continue. */
-export const BACKGROUND_TURN_ROUNDS = 16;
-const HISTORY_ROWS = 120;
+export const CHAT_TURN_ROUNDS = 1000;
+/** Turns that run in the background (the normal case now) get room for a long research chain. */
+export const BACKGROUND_TURN_ROUNDS = 1000;
+const HISTORY_ROWS = 80;
+/** Tool results older than this many tool rows are cut to a short stub: the model needs to know what happened, not re-read every page. */
+const RECENT_TOOL_ROWS = 8;
+const OLD_TOOL_CHARS = 700;
+const RECENT_TOOL_CHARS = 6000;
 
 interface MessageRow {
   role: "user" | "model" | "tool";
@@ -26,9 +32,16 @@ interface MessageRow {
   metadata: Record<string, unknown>;
 }
 
+function trimToolOutput(content: string, limit: number): string {
+  return content.length > limit ? `${content.slice(0, limit)}… [trimmed]` : content;
+}
+
 export function buildResponsesInput(rows: MessageRow[]): ResponseInputItem[] {
   const input: ResponseInputItem[] = [];
-  for (const row of rows) {
+  // Every extra thousand characters is read again on every round of the turn; keep old tool output short.
+  const toolIndexes = rows.map((row, index) => (row.role === "tool" ? index : -1)).filter((index) => index >= 0);
+  const recent = new Set(toolIndexes.slice(-RECENT_TOOL_ROWS));
+  for (const [index, row] of rows.entries()) {
     if (row.role === "user") {
       input.push({ role: "user", content: row.content });
     } else if (row.role === "model") {
@@ -36,7 +49,7 @@ export function buildResponsesInput(rows: MessageRow[]): ResponseInputItem[] {
     } else if (row.role === "tool" && row.tool_name && row.tool_call_id) {
       const args = (row.metadata?.args as Record<string, unknown>) ?? {};
       input.push({ type: "function_call", call_id: row.tool_call_id, name: row.tool_name, arguments: JSON.stringify(args) });
-      input.push({ type: "function_call_output", call_id: row.tool_call_id, output: row.content });
+      input.push({ type: "function_call_output", call_id: row.tool_call_id, output: trimToolOutput(row.content, recent.has(index) ? RECENT_TOOL_CHARS : OLD_TOOL_CHARS) });
     }
   }
   return input;
@@ -46,7 +59,8 @@ export interface RunCopilotTurnOptions {
   db: SupabaseClient;
   userId: string;
   conversationId: string;
-  send?: (payload: Record<string, unknown>) => void;
+  /** Where progress goes. The chat follows it live and replays it after a reload. */
+  sink?: RunSink;
   isCancelled?: () => boolean;
   maxRounds?: number;
   deadlineAt?: number;
@@ -57,11 +71,9 @@ export interface RunCopilotTurnOptions {
 export interface CopilotTurnResult {
   finalText: string;
   artifacts: CopilotArtifact[];
-  /** Every round ended in tool calls: the model never finished, so a plan turn should continue. */
+  /** Every round ended in tool calls: the model never finished. */
   exhausted: boolean;
   cancelled: boolean;
-  planned: boolean;
-  approved: boolean;
 }
 
 type ToolRow = {
@@ -70,16 +82,12 @@ type ToolRow = {
   tool_name: string;
   tool_call_id: string;
   content: string;
-  metadata: { args: Record<string, unknown>; agent?: string; callId: string; parentCallId?: string };
+  metadata: { args: Record<string, unknown>; callId: string };
 };
 
-function agentOf(name: string, args: Record<string, unknown>) {
-  return name === "delegate_to_agent" && typeof args.agent === "string" ? args.agent : undefined;
-}
-
 export async function runCopilotTurn(options: RunCopilotTurnOptions): Promise<CopilotTurnResult> {
-  const { db, userId, conversationId, taskId, deadlineAt } = options;
-  const send = options.send ?? (() => {});
+  const { db, userId, conversationId, taskId, deadlineAt, sink } = options;
+  const cancelled = () => Boolean(options.isCancelled?.() || sink?.isCancelled());
 
   // Newest rows win when a long conversation exceeds the window.
   const { data: historyDesc } = await db
@@ -90,9 +98,9 @@ export async function runCopilotTurn(options: RunCopilotTurnOptions): Promise<Co
     .limit(HISTORY_ROWS);
   const input = buildResponsesInput(((historyDesc ?? []) as MessageRow[]).reverse());
 
+  sink?.status("Thinking…");
   const { ai, model } = await getAiClient();
   const turnArtifacts: CopilotArtifact[] = [];
-  const nestedToolRows: ToolRow[] = [];
 
   const loop = await runAgentLoop({
     ai,
@@ -101,22 +109,24 @@ export async function runCopilotTurn(options: RunCopilotTurnOptions): Promise<Co
     tools: COPILOT_TOOL_DECLARATIONS.map(toFunctionTool),
     input,
     maxRounds: options.maxRounds ?? CHAT_TURN_ROUNDS,
+    deadlineAt,
+    // Web search retries once and can take most of a minute; leave room for that.
+    toolTimeoutMs: 120_000,
     thinkingBudget: ORCHESTRATION_THINKING_BUDGET,
-    isCancelled: options.isCancelled,
+    isCancelled: cancelled,
     isParallelSafe: (name) => !COPILOT_MUTATING_TOOLS.has(name),
-    stopAfterRound: (results) =>
-      results.some(
-        (done) =>
-          (done.name === CREATE_PLAN_TOOL && (done.result as { planned?: boolean } | null)?.planned) ||
-          (done.name === "approve_plan" && (done.result as { status?: string } | null)?.status === "queued"),
-      ),
-    onRoundStart: () => send({ type: "status", status: "thinking" }),
-    onText: (delta) => send({ type: "reasoning", text: delta, agent: "copilot" }),
-    onThought: (delta) => send({ type: "reasoning", text: delta, agent: "copilot" }),
-    onToolStart: (call) => send({ type: "tool_start", id: call.id, name: call.name, args: call.args, agent: agentOf(call.name, call.args) }),
-    onToolEnd: (done) =>
-      send({ type: "tool_end", id: done.id, name: done.name, args: done.args, result: done.result, agent: agentOf(done.name, done.args) }),
-    runTool: (call) =>
+    onRoundStart: (round) => sink?.status(round === 0 ? "Thinking…" : "Reading the results…"),
+    onText: (delta) => sink?.text(delta),
+    onThought: (delta) => sink?.reasoning(delta),
+    onToolStart: (call) => {
+      sink?.toolStart(call.id, call.name, call.args);
+      sink?.status(toolPhase(call.name, call.args));
+    },
+    onToolEnd: (done) => {
+      const error = resultError(done.result);
+      sink?.toolEnd(done.id, { ok: !error, result: done.result, error: error ?? undefined });
+    },
+    runTool: (call, signal) =>
       runCopilotTool(
         {
           db,
@@ -125,19 +135,13 @@ export async function runCopilotTurn(options: RunCopilotTurnOptions): Promise<Co
           parentId: call.id,
           taskId,
           deadlineAt,
-          isCancelled: options.isCancelled,
+          isCancelled: cancelled,
+          signal,
+          progress: (patch) => sink?.toolProgress(call.id, patch),
           emit: (event) => {
-            send({ ...event });
-            if (event.type === "artifact" && event.artifact) turnArtifacts.push(event.artifact);
-            if (event.type === "tool_end" && event.parentId && event.name) {
-              nestedToolRows.push({
-                conversation_id: conversationId,
-                role: "tool",
-                tool_name: event.name,
-                tool_call_id: event.id ?? event.name,
-                content: JSON.stringify(event.result ?? {}).slice(0, 20000),
-                metadata: { args: event.args ?? {}, agent: event.agent, callId: event.id ?? event.name, parentCallId: event.parentId },
-              });
+            if (event.type === "artifact" && event.artifact) {
+              turnArtifacts.push(event.artifact);
+              sink?.artifact(event.artifact as unknown as Record<string, unknown>);
             }
           },
         },
@@ -151,37 +155,34 @@ export async function runCopilotTurn(options: RunCopilotTurnOptions): Promise<Co
         tool_name: done.name,
         tool_call_id: done.id,
         content: JSON.stringify(done.result).slice(0, 20000),
-        metadata: { args: done.args, agent: agentOf(done.name, done.args), callId: done.id },
+        metadata: { args: done.args, callId: done.id },
       }));
       if (toolRows.length > 0) await db.from("copilot_messages").insert(toolRows);
-      if (nestedToolRows.length > 0) await db.from("copilot_messages").insert(nestedToolRows.splice(0));
     },
   });
 
   let finalText = loop.finalText;
-  const planned = loop.toolResults.find((done) => done.name === CREATE_PLAN_TOOL && (done.result as { planned?: boolean } | null)?.planned);
-  const approved = loop.toolResults.some((done) => done.name === "approve_plan" && (done.result as { status?: string } | null)?.status === "queued");
-  if (planned) {
-    const estimate = (planned.result as { estimate?: { low?: number; high?: number } }).estimate;
-    finalText = `Here's the plan. It should cost about ${estimate?.low ?? "?"}–${estimate?.high ?? "?"} credits. Approve it and I'll work through it here, step by step.`;
-  } else if (approved && !finalText.trim()) {
-    finalText = "Approved — starting now. I'll work through the steps here and report as I go.";
+  if (!finalText.trim() && !loop.cancelled) {
+    const fallback = turnArtifacts.length > 0 ? "Done — the result is in the card above." : "";
+    if (fallback) {
+      finalText = fallback;
+      sink?.text(fallback);
+    }
   }
-  if (!finalText.trim() && turnArtifacts.length > 0) finalText = "Done — the result is in the card below.";
-  if (!finalText.trim() && loop.exhausted && !taskId) {
-    finalText = "I ran out of steps for this turn before finishing. Tell me to keep going and I'll continue.";
-  }
-  if (finalText) send({ type: "answer", text: finalText });
 
-  if (finalText.trim() || turnArtifacts.length > 0) {
+  // Out of time (not out of work): a continuation picks the same run up and writes the one saved message at the end.
+  if (loop.exhausted && !loop.cancelled && sink) return { finalText, artifacts: turnArtifacts, exhausted: true, cancelled: false };
+
+  const timeline = sink?.timeline() ?? [];
+  if (finalText.trim() || turnArtifacts.length > 0 || timeline.length > 0) {
     await db.from("copilot_messages").insert({
       conversation_id: conversationId,
       role: "model",
       content: finalText,
-      metadata: { artifactIds: turnArtifacts.map((artifact) => artifact.id) },
+      metadata: { artifactIds: turnArtifacts.map((artifact) => artifact.id), ...(timeline.length > 0 ? { timeline, runId: sink?.runId } : {}) },
     });
   }
   await db.from("copilot_conversations").update({ updated_at: new Date().toISOString() }).eq("id", conversationId);
 
-  return { finalText, artifacts: turnArtifacts, exhausted: loop.exhausted, cancelled: loop.cancelled, planned: Boolean(planned), approved };
+  return { finalText, artifacts: turnArtifacts, exhausted: loop.exhausted, cancelled: loop.cancelled };
 }

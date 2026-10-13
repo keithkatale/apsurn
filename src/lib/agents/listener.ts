@@ -325,7 +325,7 @@ async function convertMention(ctx: AgentToolContext, mentionId: string) {
         user_id: ctx.userId,
         company_id: companyId,
         name: "Market Insights",
-        criteria: { industries: [], geographies: [], personas: [] },
+        criteria: { industries: [], geographies: [], personas: [], source: "market" },
         status: "completed",
         requested_count: 0,
       })

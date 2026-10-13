@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseUserAgent } from "@/lib/analytics/user-agent-parser";
 import { getGeolocation } from "@/lib/analytics/geolocation";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 const PageViewSchema = z.object({
   type: z.literal("pageview"),
@@ -57,6 +58,9 @@ export async function OPTIONS(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const headers = corsHeaders(request);
+  if (!rateLimit(`ingest:${clientIp(request)}`, 240, 60_000)) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429, headers });
+  }
   try {
     const body = await request.json().catch(() => null);
     const validated = PageViewSchema.parse(body);

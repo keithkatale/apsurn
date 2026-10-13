@@ -49,6 +49,10 @@ export interface AgentToolContext {
   /** Epoch ms after which the surrounding request is cut off; long waits (await_run) stay inside it. */
   deadlineAt?: number;
   isCancelled?: () => boolean;
+  /** Report something while this tool is still running (shown live on its row in the chat). */
+  progress?: (patch: Record<string, unknown>) => void;
+  /** Aborts when the tool times out or the run is stopped; long work should honour it. */
+  signal?: AbortSignal;
 }
 
 export interface SpecialistModule {

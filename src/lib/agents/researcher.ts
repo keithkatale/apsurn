@@ -1,6 +1,7 @@
 import { CREDIT_COSTS, SETUP_FREE_LEAD_CAP } from "@/lib/billing/plans";
 import { getBillingStatus } from "@/lib/billing/entitlements";
 import { setProspectCompanyStatus } from "@/lib/prospecting/mutations";
+import { icpSearchPaused } from "@/lib/prospecting/mode";
 import { parseTriggers } from "@/lib/prospecting/signals/triggers";
 import { startProspectingRun } from "@/lib/prospecting/start-run";
 import { awaitRun } from "./wakeups";
@@ -24,7 +25,7 @@ You may:
 Rules:
 - When asked for recent, qualified, or all existing leads, call list_contacts immediately and return names.
 - When asked to find, get, or source leads/companies, default to start_signal_scout: read the value prop in the briefing, choose the buying signals that mean a company needs what the account sells, set keywords from the value prop and a recency window, and call it. Contacts and verified emails are still found through the data providers once a company shows a signal. Call start_prospecting_run (plain ICP/directory pull, no buying signal) only when the task explicitly asks for that. Omit industries, geographies, and personas — the tools read the approved blueprint.
-- When asked for leads with a reason to reach out now (just raised, hiring for a role, complaining about a problem, changed their site/tech), call start_signal_scout with the matching trigger(s) and a recency window. Live triggers: hiring (open roles), funding_news (recent funding, launches, expansions, key executive hires — set eventKinds) and social_pain (LinkedIn posts where a named person describes a current problem; set keywords to the problem in their words; yield is low, so say so). tech_website is not live yet; say so plainly and offer a live one instead. A signal run finds only companies with dated evidence, so it may save fewer than asked — that is correct, not a failure.
+- When asked for leads with a reason to reach out now (just raised, hiring for a role, complaining about a problem, changed their site/tech), call start_signal_scout with the matching trigger(s) and a recency window. ICP database search is paused, so lead finding is signal-first and uses free public sources. Prefer launch (companies that just launched on Launch YC, Show HN, Product Hunt or BetaList) and accelerator (newly admitted to the latest Y Combinator batches) for early-stage prospects, hiring for companies building a team, and keep keywords to the topics the account sells into. Live triggers: launch, accelerator, hiring (open roles, including the Hacker News Who-is-hiring thread), funding_news (recent funding, launches, expansions, key executive hires — set eventKinds) and social_pain (LinkedIn posts where a named person describes a current problem; set keywords to the problem in their words; yield is low, so say so). tech_website is not live yet; say so plainly and offer a live one instead. A signal run finds only companies with dated evidence, so it may save fewer than asked — that is correct, not a failure.
 - When asked to source leads from a named place, registry, URL, or social network, call source_leads. Do not ask the user to confirm the place they already named.
 - Starting a run is not the end of the job. Right after start_prospecting_run or start_signal_scout returns a runId, call await_run with that runId. If it returns the finished outcome, report what was saved with real company and contact names, how well they fit, and any gaps. If it says the run is still going, say so in one sentence and stop: Copilot is woken automatically with the results when the run finishes. Never claim results you have not seen.
 - Never ask Copilot or the user which industries, geographies, personas, or company size to use. Those live on the blueprint and in the briefing.
@@ -105,7 +106,7 @@ export const RESEARCHER_TOOLS = [
   {
     name: "start_signal_scout",
     description:
-      "Enqueue a background signal-based run: finds companies showing a recent, evidenced buying signal, then the decision maker and a verified email, and saves each with the reason to reach out. Requires an approved blueprint (industries, geography, personas). Live triggers: hiring (open roles on public job boards) and funding_news (news about funding, launches, expansions, executive hires; set eventKinds). social_pain (public LinkedIn posts describing a current problem; keywords = the problem in the poster's words; few results expected). tech_website is accepted but skipped until released.",
+      "Enqueue a background signal-based run: finds companies showing a recent, evidenced buying signal, then the decision maker and a verified email, and saves each with the reason to reach out. Requires an approved blueprint (industries, geography, personas). Live triggers: launch (public launches on Launch YC, Show HN, Product Hunt, BetaList), accelerator (newly admitted Y Combinator companies), hiring (open roles on public job boards and Hacker News) and funding_news (news about funding, launches, expansions, executive hires; set eventKinds). social_pain (public LinkedIn posts describing a current problem; keywords = the problem in the poster's words; few results expected). tech_website is accepted but skipped until released.",
     parameters: {
       type: "object",
       properties: {
@@ -115,7 +116,7 @@ export const RESEARCHER_TOOLS = [
           items: {
             type: "object",
             properties: {
-              type: { type: "string", enum: ["hiring", "funding_news", "social_pain", "tech_website"] },
+              type: { type: "string", enum: ["launch", "accelerator", "hiring", "funding_news", "social_pain", "tech_website"] },
               roles: { type: "array", items: { type: "string" }, description: "Hiring: job-title fragments, e.g. ['SDR', 'account executive']. Omit to derive from the ICP personas." },
               keywords: { type: "array", items: { type: "string" }, description: "funding_news: topics/markets to look in, e.g. ['fintech', 'devtools']. social_pain: the problem as people phrase it, e.g. ['struggling to find leads']." },
               eventKinds: { type: "array", items: { type: "string", enum: ["funding", "launch", "expansion", "exec_hire"] }, description: "funding_news: which events count. Default funding." },
@@ -177,7 +178,7 @@ export const RESEARCHER_TOOLS = [
   },
 ] as const;
 
-function criteriaFromBlueprint(icp: unknown, personas: unknown): ProspectCriteria {
+export function criteriaFromBlueprint(icp: unknown, personas: unknown): ProspectCriteria {
   const icpObj = icp && typeof icp === "object" ? (icp as Record<string, unknown>) : {};
   const personaRows = Array.isArray(personas) ? personas : [];
   return {
@@ -223,7 +224,7 @@ async function startRun(ctx: AgentToolContext, args: Record<string, unknown>) {
     preferYcLeads: triggers.length === 0,
     ...(triggers.length ? { triggers } : {}),
   };
-  if (industries.length === 0 && personas.length === 0) {
+  if (industries.length === 0 && personas.length === 0 && !icpSearchPaused()) {
     return { error: "The approved blueprint has no industries or personas, so a run cannot start. The user needs to refine the blueprint in setup." };
   }
 
@@ -314,7 +315,7 @@ async function runTool(ctx: AgentToolContext, name: string, args: Record<string,
       return startRun(ctx, args);
     case "start_signal_scout":
       if (parseTriggers(args.triggers).length === 0) {
-        return { error: "start_signal_scout needs at least one valid trigger (hiring, funding_news, social_pain, tech_website)." };
+        return { error: "start_signal_scout needs at least one valid trigger (launch, accelerator, hiring, funding_news, social_pain, tech_website)." };
       }
       return startRun(ctx, args);
     case "await_run":

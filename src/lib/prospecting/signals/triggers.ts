@@ -1,7 +1,7 @@
 /** Parses model/UI-supplied trigger specs into clean TriggerSpecs. Pure — no runtime imports (triggers.test.ts). */
 import type { TriggerEventKind, TriggerSpec, TriggerType } from "../types";
 
-export const TRIGGER_TYPES: readonly TriggerType[] = ["hiring", "funding_news", "social_pain", "tech_website"];
+export const TRIGGER_TYPES: readonly TriggerType[] = ["hiring", "funding_news", "social_pain", "tech_website", "launch", "accelerator"];
 const EVENT_KINDS: readonly TriggerEventKind[] = ["funding", "launch", "expansion", "exec_hire"];
 export const DEFAULT_RECENCY_DAYS = 30;
 const MAX_RECENCY_DAYS = 180;

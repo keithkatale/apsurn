@@ -10,6 +10,10 @@ export interface ProspectSearchCriteria {
   companySizeRange: string;
   personas: string;
   limit: number;
+  /** Public signals to read: a company that launched, joined an accelerator, or is hiring. */
+  signals?: Array<"launch" | "accelerator" | "hiring">;
+  /** Topics the companies should be about, comma separated. */
+  topics?: string;
 }
 
 export function ProspectComposeModal({

@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       const send = (payload: Record<string, unknown>) => controller.enqueue(sseEncode(payload));
       try {
         send({ type: "status", stage: "read", label: "Uploading the file…", progress: 4 });
-        const imported = await importCsv(db, userId, company.id, csvText, (event) => send({ ...event }));
+        const imported = await importCsv(db, userId, company.id, csvText, (event) => send({ ...event }), { name: file.name, kind: "campaign" });
         if (imported.contactIds.length === 0) {
           send({ type: "error", error: "No leads in that file could be saved. Include a name or email and a company domain." });
           return;

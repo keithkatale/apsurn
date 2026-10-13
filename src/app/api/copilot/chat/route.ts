@@ -4,8 +4,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
 import { spendCredits } from "@/lib/billing/credits";
 import { CREDIT_COSTS } from "@/lib/billing/plans";
-import { runCopilotTurn } from "@/lib/agents/copilot-turn";
-import { acquireTurnLease, enqueueCopilotWakeup, isConversationBusy } from "@/lib/agents/wakeups";
+import { enqueueCopilotWakeup } from "@/lib/agents/wakeups";
+import { createRun } from "@/lib/agents/run-sink";
+import { emptyRun, reduceRun } from "@/lib/agents/timeline";
+import type { RunEvent } from "@/lib/agents/run-events";
 import { listArtifactsForConversation } from "@/lib/copilot/artifacts";
 import { getAccountSnapshot } from "@/lib/copilot/tools";
 import { generateConversationTitle } from "@/lib/copilot/title";
@@ -13,16 +15,13 @@ import { generateTaskIcon } from "@/lib/copilot/task-icon";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+// The turn itself runs in the background job (/api/jobs/copilot-turn); this request only starts it.
+export const maxDuration = 30;
 
 const requestSchema = z.object({
   conversationId: z.string().uuid().nullable().optional(),
   message: z.string().trim().min(1).max(4000),
 });
-
-function sseEncode(payload: Record<string, unknown>): Uint8Array {
-  return new TextEncoder().encode(`data: ${JSON.stringify(payload)}\n\n`);
-}
 
 export async function POST(request: NextRequest) {
   let userId: string;
@@ -86,58 +85,52 @@ export async function POST(request: NextRequest) {
     await db.from("copilot_conversations").update({ title, icon }).eq("id", conversationIdFinal);
   }
 
-  // One live turn per conversation. If a background turn (plan step, run analysis) is mid-flight, queue this message behind it.
-  const lease = await acquireTurnLease(db, conversationIdFinal);
-  if (!lease) {
-    await enqueueCopilotWakeup(db, { conversationId: conversationIdFinal, userId, kind: "user_message" });
-    return NextResponse.json({ queued: true, conversationId: conversationIdFinal, title });
+  if (isFirstTurn) {
+    const snapshot = await getAccountSnapshot(db, userId);
+    await db.from("copilot_messages").insert({
+      conversation_id: conversationIdFinal,
+      role: "tool",
+      tool_name: "get_account_snapshot",
+      tool_call_id: "briefing",
+      content: JSON.stringify(snapshot).slice(0, 20000),
+      metadata: { args: {} },
+    });
   }
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (payload: Record<string, unknown>) => controller.enqueue(sseEncode(payload));
+  // The turn runs on the server, independent of this request: closing the tab or reloading does not stop it. The
+  // chat follows its progress through GET /api/copilot/runs/<runId>/events.
+  const runId = await createRun(db, { conversationId: conversationIdFinal, userId });
+  if (!runId) {
+    return NextResponse.json(
+      { error: "Copilot runs need a database update. Run supabase/migrations/0036_copilot_runs.sql in the Supabase SQL editor, then try again." },
+      { status: 500 },
+    );
+  }
+  const queued = await enqueueCopilotWakeup(db, { conversationId: conversationIdFinal, userId, kind: "user_message", payload: { runId } });
+  if (!queued) {
+    await db.from("copilot_runs").update({ status: "error", error: "Could not start the run.", finished_at: new Date().toISOString() }).eq("id", runId);
+    return NextResponse.json({ error: "Could not start the run. Try again." }, { status: 500 });
+  }
 
-      try {
-        send({ type: "meta", conversationId: conversationIdFinal, title });
+  return NextResponse.json({ conversationId: conversationIdFinal, runId, title });
+}
 
-        if (isFirstTurn) {
-          const snapshot = await getAccountSnapshot(db, userId);
-          await db.from("copilot_messages").insert({
-            conversation_id: conversationIdFinal,
-            role: "tool",
-            tool_name: "get_account_snapshot",
-            tool_call_id: "briefing",
-            content: JSON.stringify(snapshot).slice(0, 20000),
-            metadata: { args: {} },
-          });
-        }
-
-        await runCopilotTurn({
-          db,
-          userId,
-          conversationId: conversationIdFinal,
-          send,
-          isCancelled: () => request.signal.aborted,
-          deadlineAt: Date.now() + (maxDuration - 10) * 1000,
-        });
-
-        send({ type: "done", conversationId: conversationIdFinal });
-      } catch (err) {
-        send({ type: "error", error: err instanceof Error ? err.message : "Copilot failed" });
-      } finally {
-        await lease.release();
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-    },
-  });
+/** The run still working on this conversation, if any. A run whose heartbeat stopped is a dead run and is closed out. */
+async function findActiveRunId(db: ReturnType<typeof createAdminClient>, conversationId: string): Promise<string | null> {
+  const { data: run, error } = await db
+    .from("copilot_runs")
+    .select("id, heartbeat_at")
+    .eq("conversation_id", conversationId)
+    .eq("status", "running")
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !run) return null;
+  if (Date.now() - new Date(run.heartbeat_at as string).getTime() > 90_000) {
+    await db.from("copilot_runs").update({ status: "error", error: "The run stopped unexpectedly.", finished_at: new Date().toISOString() }).eq("id", run.id);
+    return null;
+  }
+  return run.id as string;
 }
 
 export async function GET(request: NextRequest) {
@@ -189,14 +182,31 @@ export async function GET(request: NextRequest) {
             parentCallId: meta.parentCallId,
           };
         }
-        const meta = (r.metadata ?? {}) as { artifactIds?: string[] };
-        return { id: r.id, role: r.role as "user" | "model", content: r.content, artifactIds: meta.artifactIds ?? [] };
+        const meta = (r.metadata ?? {}) as { artifactIds?: string[]; timeline?: unknown; runId?: string; error?: string };
+        return {
+          id: r.id,
+          role: r.role as "user" | "model",
+          content: r.content,
+          artifactIds: meta.artifactIds ?? [],
+          timeline: Array.isArray(meta.timeline) ? meta.timeline : undefined,
+          runId: meta.runId,
+          error: meta.error,
+        };
       });
 
     const artifacts = await listArtifactsForConversation(db, userId, id);
-    const agentBusy = await isConversationBusy(db, id);
+    const activeRunId = await findActiveRunId(db, id);
+    // The run as it stands now, so the chat paints the live view at once and only tails what comes after.
+    let run: { id: string; items: unknown; label: string; lastSeq: number; status: string } | null = null;
+    if (activeRunId) {
+      const { data: events } = await db.from("copilot_run_events").select("seq, data").eq("run_id", activeRunId).order("seq", { ascending: true }).limit(5000);
+      let state = emptyRun();
+      for (const row of events ?? []) state = reduceRun(state, row.seq as number, row.data as RunEvent);
+      run = { id: activeRunId, items: state.items, label: state.label, lastSeq: state.lastSeq, status: state.status };
+    }
     return NextResponse.json({
-      agentBusy,
+      activeRunId,
+      run,
       conversationId: conversation.id,
       title: conversation.title,
       icon: conversation.icon,

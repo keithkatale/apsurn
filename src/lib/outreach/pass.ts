@@ -167,10 +167,14 @@ export async function runOutreachSendPass(opts: {
     if (nextIndex === 0) {
       const check = await ensureSendableEmail(db, contact.id, contact.email!, contact.email_status);
       if (!check.ok) {
-        await db
-          .from("enrollments")
-          .update({ status: "bounced", ended_at: now, next_send_at: null })
-          .eq("id", row.id);
+        // A mailbox that can't be confirmed is never mailed. If the verifier simply couldn't answer, leave the
+        // enrollment due so the next pass tries again instead of ending it.
+        if (check.status === "invalid") {
+          await db
+            .from("enrollments")
+            .update({ status: "bounced", ended_at: now, next_send_at: null })
+            .eq("id", row.id);
+        }
         result.skipped += 1;
         continue;
       }

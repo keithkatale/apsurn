@@ -11,6 +11,9 @@ export const TRIGGER_WEIGHT: Record<TriggerType, number> = {
   hiring: 0.9,
   social_pain: 0.85,
   tech_website: 0.6,
+  // A public launch is a company asking for its first customers; joining an accelerator is cash plus a mandate to grow.
+  launch: 0.8,
+  accelerator: 0.85,
 };
 
 const DAY_MS = 86_400_000;
