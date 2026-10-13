@@ -15,7 +15,6 @@ What Apsurn does today:
 - Scores each prospect for fit and explains why they were picked
 - Drafts campaign copy and multi-step email sequences with AI
 - Sends from the customer's connected Google account, with follow-ups that stop when a prospect replies
-- Monitors public social and web mentions through Market Insights
 - Answers questions and takes instructions through Copilot, a chat assistant inside the app
 
 What Apsurn does NOT do today:
@@ -54,14 +53,12 @@ Five screens in the left sidebar plus Settings. The credit meter sits at the bot
 - Home: daily overview. Running campaigns, new replies, this week's numbers, and the company blueprint. Controls: Review on the blueprint card; All campaigns.
 - Copilot: chat assistant that acts on your workspace. Controls: message box; New thread; starter prompts. Past conversations are listed under Conversations in the sidebar while Copilot is open.
 - Prospects: every lead Apsurn has found. Controls: Find prospects; Set weekly target; search; filters.
-- Market Insights: feed of public mentions matching your keywords. Controls: Scan now; Add keyword; Ask AI; filters.
 - Campaigns: write, edit and send sequences. Controls: New campaign; Add people; Send all now.
 - Settings: account, billing, inbox and blueprint. Controls: Manage subscription; Connect to Google; Rebuild blueprint.
 
 Home: opens with the date and how many campaigns are running. It lists replies, every campaign with its status (Draft or Active), contact count, reply count and number of steps, and a This week panel with emails sent, reply rate, replies and bounce rate.
 Copilot: takes plain-language instructions about prospects, contacts and sequences. Starter prompts include "Find 10 leads for my ICP", "Create a sequence for my ICP", "Show leads not in a campaign" and "Check my latest prospecting run".
 Prospects: a table with one row per lead. Columns: Name, Title, Company, Email, Phone, Stage, Outreach, Why, Fit. The email column shows verification status next to the address. Filter by All leads, In campaign, Not in campaign, Contacted or Not contacted. Filter by the prospecting run that found the lead. Tick rows, or Select all, to act on several leads at once. Click Find prospects to start a new run, or Set weekly target to keep new leads coming in.
-Market Insights: shows public posts and mentions that match your keywords. Filter by Source, From and Keywords, or switch to Following only or Saved leads. Scan now refreshes the feed, Add keyword widens it, Ask AI answers questions about what is in it.
 Campaigns: three columns. The left lists every campaign under the company blueprint card. The middle shows People in the selected campaign, with Add to enrol more. The right is the message editor.
 - The first step sends immediately. Follow-up steps wait a set number of days and send only if there is no reply. Change the number of days in the step header
 - Insert merge fields with the buttons under the subject line: First name, Full name, Title, Email, Company, Domain

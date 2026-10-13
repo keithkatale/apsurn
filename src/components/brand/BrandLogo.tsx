@@ -34,7 +34,7 @@ export function BrandLogo({
     return withWordmark ? (
       <span className={`inline-flex items-center gap-2 ${className}`}>
         {mark}
-        <span className="font-heading text-base font-semibold tracking-tight text-neutral-950">apsurn</span>
+        <span className="font-heading text-[24px] leading-none tracking-[-0.03em] text-neutral-950" style={{ fontWeight: 700 }}>apsurn</span>
       </span>
     ) : (
       mark
@@ -49,7 +49,7 @@ export function BrandLogo({
     >
       {mark}
       {withWordmark && (
-        <span className="font-heading text-base font-semibold tracking-tight text-neutral-950">apsurn</span>
+        <span className="font-heading text-[24px] leading-none tracking-[-0.03em] text-neutral-950" style={{ fontWeight: 700 }}>apsurn</span>
       )}
     </Link>
   );

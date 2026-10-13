@@ -1106,7 +1106,7 @@ export function CampaignWorkspace({
                     Add
                   </button>
                 </div>
-                <ul className="min-h-0 flex-1 overflow-y-auto p-2">
+                <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
                   {campaignLeads.length === 0 && (
                     <li className="flex flex-col items-center gap-2 px-3 py-8 text-center">
                       <p className="text-[12px] text-neutral-500">No people in this campaign yet.</p>
@@ -1214,7 +1214,7 @@ export function CampaignWorkspace({
                         </button>
                       </div>
                     </div>
-                    <ul className="min-h-0 flex-1 overflow-y-auto px-1 py-1">
+                    <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-1">
                       {filteredContacts.length === 0 ? (
                         <li className="px-3 py-10 text-center text-[13px] text-neutral-500">
                           {availableContacts.length === 0

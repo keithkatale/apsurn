@@ -106,7 +106,7 @@ export function AiProviderSettings() {
     <section className="rounded-lg border border-neutral-200 bg-white p-6">
       <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-neutral-500">AI Provider</h2>
       <p className="mb-4 text-sm text-neutral-500">
-        Which backend every AI feature (blueprint generation, prospecting, Copilot, Market Insights) routes through.
+        Which backend every AI feature (blueprint generation, prospecting, Copilot) routes through.
       </p>
 
       <div className="flex flex-col gap-2">

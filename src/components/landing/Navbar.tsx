@@ -92,7 +92,7 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
           <div className="flex items-center gap-6 sm:gap-7">
             <BrandLogo
               href="/"
-              size={embedded ? 20 : 24}
+              size={embedded ? 26 : 28}
               priority
               className="transition-opacity hover:opacity-85"
               onClick={() => setIsOpen(false)}

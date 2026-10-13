@@ -6,18 +6,19 @@ import { PageLoader } from "@/components/loaders/page-loader";
 import { setDashboardContentPending, subscribeDashboardContent } from "@/lib/navigation-progress";
 import { cn } from "@/lib/cn";
 
-const FULL_BLEED = new Set([
+// Pages that fill the window and scroll inside their own panels. A page with an id in its address (a campaign, a list)
+// counts too, so each panel keeps scrolling on its own.
+const FULL_BLEED = [
   "/dashboard/campaigns",
   "/dashboard/prospects",
   "/dashboard/copilot",
-  "/dashboard/market-insights",
   "/dashboard/library",
-]);
+];
 
 export function DashboardMain({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [pending, setPending] = useState(false);
-  const fullBleed = FULL_BLEED.has(pathname);
+  const fullBleed = FULL_BLEED.some((base) => pathname === base || pathname.startsWith(`${base}/`));
 
   useEffect(() => {
     return subscribeDashboardContent(setPending);

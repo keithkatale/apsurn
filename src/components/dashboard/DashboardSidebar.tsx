@@ -3,7 +3,7 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar, Ellipsis, Library, LayoutGrid, Megaphone, Radar, Settings, Users, type LucideIcon } from "lucide-react";
+import { Calendar, Ellipsis, Library, LayoutGrid, Megaphone, Settings, Users, type LucideIcon } from "lucide-react";
 import { ENTERPRISE_PLAN } from "@/lib/billing/plans";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { CampaignsNavChips, CampaignsNavMenu } from "@/components/campaigns/CampaignsNav";
@@ -18,7 +18,6 @@ type NavItem = { href: string; label: string; icon: LucideIcon; exact?: boolean 
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Home", icon: LayoutGrid, exact: true },
   { href: "/dashboard/prospects", label: "Prospects", icon: Users },
-  { href: "/dashboard/market-insights", label: "Market Insights", icon: Radar },
   { href: "/dashboard/campaigns", label: "Campaigns", icon: Megaphone },
   { href: "/dashboard/library", label: "Library", icon: Library },
 ];
@@ -26,7 +25,6 @@ const NAV_ITEMS: NavItem[] = [
 const SETTINGS_ITEM: NavItem = { href: "/dashboard/settings", label: "Settings", icon: Settings };
 
 const MORE_ITEMS: NavItem[] = [
-  { href: "/dashboard/market-insights", label: "Market Insights", icon: Radar },
   { href: "/dashboard/library", label: "Library", icon: Library },
   SETTINGS_ITEM,
 ];
@@ -89,7 +87,7 @@ export function DashboardSidebar() {
       {/* Desktop: fixed left rail */}
       <aside data-dashboard-sidebar className="z-20 hidden w-60 shrink-0 flex-col bg-white md:flex">
         <div className="flex h-14 shrink-0 items-center px-4">
-          <BrandLogo href="/dashboard" size={26} />
+          <BrandLogo href="/dashboard" size={30} />
         </div>
         <div className="flex min-h-0 flex-1 flex-col px-3 pt-2">
         <nav className="flex shrink-0 flex-col gap-0.5" aria-label="Dashboard">
@@ -125,7 +123,7 @@ export function DashboardSidebar() {
 
       <header data-dashboard-sidebar className="z-20 flex shrink-0 flex-col border-b border-neutral-200 bg-white pt-[env(safe-area-inset-top)] md:hidden">
         <div className="flex items-center justify-between gap-2 px-4 py-2.5">
-          <BrandLogo href="/dashboard" size={24} />
+          <BrandLogo href="/dashboard" size={28} />
           <div className="flex items-center gap-1.5">
             <CreditsBalance />
             <ThemeToggle compact />

@@ -291,23 +291,23 @@ export async function DashboardHomePage() {
                             className="size-9"
                           />
                           <div className="min-w-0 flex-1">
-                            <h3 className="truncate font-heading text-[16px] font-semibold tracking-[-0.04em] text-black">
+                            <h3 className="truncate font-heading text-[22px] leading-tight tracking-[-0.02em] text-black" style={{ fontWeight: 700 }}>
                               {seq.name}
                             </h3>
-                            <p className="text-[11px] font-medium uppercase tracking-wide text-[#4379EE]">{seq.status}</p>
+                            <p className="mt-0.5 text-[12px] font-semibold uppercase tracking-wide text-[#4379EE]">{seq.status}</p>
                           </div>
                         </div>
                         {description ? (
-                          <p className="line-clamp-2 text-[13px] leading-snug tracking-[-0.03em] text-[#605f5f]">{description}</p>
+                          <p className="line-clamp-2 text-[14px] leading-snug tracking-[-0.01em] text-[#605f5f]">{description}</p>
                         ) : null}
                         <div className="mt-1 flex flex-wrap gap-1.5">
-                          <span className="rounded-md bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-700">
+                          <span className="rounded-md bg-neutral-100 px-2.5 py-1 text-[12px] text-neutral-700">
                             {counts.total} {counts.total === 1 ? "contact" : "contacts"}
                           </span>
-                          <span className="rounded-md bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-700">
+                          <span className="rounded-md bg-neutral-100 px-2.5 py-1 text-[12px] text-neutral-700">
                             {counts.replied} {counts.replied === 1 ? "reply" : "replies"}
                           </span>
-                          <span className="rounded-md bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-700">
+                          <span className="rounded-md bg-neutral-100 px-2.5 py-1 text-[12px] text-neutral-700">
                             {seq.sequence_steps?.length ?? 0} steps
                           </span>
                         </div>
@@ -329,7 +329,7 @@ export async function DashboardHomePage() {
             <CompanyFavicon domain={domain} name={company.name ?? undefined} className="mt-0.5 size-10 rounded-lg" />
             <div className="min-w-0 flex-1">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-[#4379EE]">Company blueprint</p>
-              <h3 className="mt-0.5 font-sans text-[24px] font-semibold leading-tight tracking-[-0.02em] text-black">
+              <h3 className="mt-0.5 font-heading text-[26px] leading-tight tracking-[-0.02em] text-black" style={{ fontWeight: 700 }}>
                 {company.name ?? "Your company"}
               </h3>
               {domain ? <p className="text-[12px] text-neutral-400">{domain}</p> : null}
