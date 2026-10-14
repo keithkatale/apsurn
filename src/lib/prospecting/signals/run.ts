@@ -20,7 +20,8 @@ import type { ScoredLead, SignalCandidate } from "./types";
 const DEFAULT_RECENCY_DAYS = 30;
 /** Candidates considered per lead wanted — most lose to no contact, no email, or already being saved. */
 const OVERSAMPLE = 3;
-const CONCURRENCY = 4;
+// Leads are independent, and most of the time is spent waiting on lookups, so many run at once.
+const CONCURRENCY = 8;
 const KEY_CHUNK = 50;
 
 const TRIGGER_NAME: Record<TriggerSpec["type"], string> = {

@@ -17,10 +17,10 @@ import { SetupStepper } from "./SetupStepper";
 import type { BlueprintData } from "./BlueprintReviewForm";
 
 /** How many accounts setup looks for before it stops, and the longest the search may run. */
-const SETUP_LEADS = 10;
-const SETUP_SEARCH_MS = 110_000;
-/** Every setup step stays on screen exactly this long before the next one starts. */
-const STEP_HOLD_MS = 5000;
+const SETUP_LEADS = 6;
+const SETUP_SEARCH_MS = 80_000;
+/** Every setup step stays on screen this long before the next one starts. */
+const STEP_HOLD_MS = 3000;
 
 let heroSetupStartedFor = "";
 let guestStart: Promise<Response> | null = null;
@@ -189,6 +189,9 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
   /** The address we couldn't open; set when the website read fails so the user can go back and fix it. */
   const [badDomain, setBadDomain] = useState<string | null>(null);
   const [scan, setScan] = useState<ScanState | null>(null);
+  /** The account search has its own progress, because it starts during step 2 and runs alongside the steps before it. */
+  const [acctScan, setAcctScan] = useState<ScanState | null>(null);
+  const accountSearchStarted = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState("");
@@ -340,6 +343,9 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Could not save blueprint");
       trackGoal("blueprint_approved");
+      // The account search needs only the approved blueprint, so it starts now and runs while competitors and campaigns
+      // are shown; by step 4 the leads are usually already there.
+      void findAccounts();
       setScan((prev) =>
         prev?.phase === "scanning"
           ? { ...prev, progress: 55, logs: [...prev.logs, { id: uid(), text: "Matching similar services…" }] }
@@ -419,11 +425,12 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
     }
   }
 
-  async function findAccounts() {
+  async function findAccounts(force = false) {
     if (!blueprint) return;
+    if (accountSearchStarted.current && !force) return;
+    accountSearchStarted.current = true;
     setAccountsReady(false);
-    setStep(4);
-    setScan(scanningState(["Finding companies that match your ICP…"], 10));
+    setAcctScan(scanningState(["Finding companies that match your ICP…"], 10));
     try {
       const personas = (blueprint.personas ?? []).map((p) => p.title).filter(Boolean);
       // Setup looks for SETUP_LEADS accounts and stops there; a hard timer ends a slow search with whatever was found.
@@ -505,21 +512,21 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
               error?: string;
             };
             if (event.type === "tool_start" && event.name === "find_companies") {
-              setScan((prev) =>
+              setAcctScan((prev) =>
                 prev
                   ? { ...prev, progress: Math.min(90, prev.progress + 8), logs: [...prev.logs, { id: uid(), text: "Listing companies from your ICP…" }].slice(-12) }
                   : prev,
               );
             }
             if (event.type === "tool_start" && event.name === "find_people") {
-              setScan((prev) =>
+              setAcctScan((prev) =>
                 prev
                   ? { ...prev, progress: Math.min(94, prev.progress + 4), logs: [...prev.logs, { id: uid(), text: "Finding decision makers…" }].slice(-12) }
                   : prev,
               );
             }
             if (event.type === "tool_start" && event.name === "save_lead") {
-              setScan((prev) =>
+              setAcctScan((prev) =>
                 prev
                   ? { ...prev, progress: Math.min(96, prev.progress + 2), logs: [...prev.logs, { id: uid(), text: "Saving new accounts…" }].slice(-12) }
                   : prev,
@@ -533,7 +540,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
               if (found === 0) {
                 throw new Error(accountSearchMessage(event.stopReason));
               }
-              setScan({
+              setAcctScan({
                 phase: "done",
                 progress: 100,
                 logs: [{ id: uid(), text: `Saved ${found} companies · ${event.contactCount ?? 0} people` }],
@@ -557,9 +564,9 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
       await refresh();
       if (savedSoFar === 0) throw new Error("No accounts matched this search.");
       setAccountsReady(true);
-      setScan(null);
+      setAcctScan(null);
     } catch (err) {
-      setScan({
+      setAcctScan({
         phase: "error",
         progress: 100,
         logs: [],
@@ -572,8 +579,10 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
     setStep(5);
     setScan(scanningState(["Opening your campaigns…"], 70));
     try {
-      await fetch("/api/onboarding/campaigns/enroll", { method: "POST" });
-      router.push("/dashboard/campaigns");
+      const res = await fetch("/api/onboarding/campaigns/enroll", { method: "POST" });
+      const data = (await res.json().catch(() => null)) as { campaignId?: string | null } | null;
+      // Land inside the first campaign, not on a list: its leads are in it and their emails start writing at once.
+      router.push(data?.campaignId ? `/dashboard/campaigns/${data.campaignId}` : "/dashboard/campaigns");
     } catch (err) {
       setScan({
         phase: "error",
@@ -584,7 +593,8 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
     }
   }
 
-  const showScan = Boolean(scan && (scan.phase === "scanning" || scan.phase === "error"));
+  const activeScan = step === 4 ? acctScan : scan;
+  const showScan = Boolean(activeScan && (activeScan.phase === "scanning" || activeScan.phase === "error"));
   const blueprintReview = step === 1 && started && Boolean(blueprint) && !showScan;
   // Setup keeps working through `step`; `view` is only what is on screen, so people can look back at an earlier step while it continues.
   const view = viewStep ?? step;
@@ -600,6 +610,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
       void loadCampaigns();
     },
     findAccounts: () => {
+      setStep(4);
       void findAccounts();
     },
     finishSetup: () => {
@@ -660,7 +671,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
             onClick={() => {
               setError(null);
               if (step === 3) void loadCampaigns();
-              if (step === 4) void findAccounts();
+              if (step === 4) void findAccounts(true);
               if (step === 5) void finishSetup();
             }}
           >
@@ -884,17 +895,17 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
               <p className="py-10 text-center text-sm text-neutral-500">No accounts yet</p>
             )}
           </div>
-          {scanHere && scan && (
+          {scanHere && acctScan && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center px-4">
               <div className="pointer-events-auto w-[22rem] shrink-0">
                 <ScanOverlay
                   compact
-                  state={scan}
+                  state={acctScan}
                   kicker="Step 4"
                   title="Finding accounts & people"
                   runningLabel="Searching"
                   smooth
-                  onRetry={() => void findAccounts()}
+                  onRetry={() => void findAccounts(true)}
                 />
               </div>
             </div>

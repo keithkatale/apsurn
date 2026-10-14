@@ -234,24 +234,20 @@ export async function resolveEmail(
     if (v.status === "verified") return { email: person.email, origin: "public", status: "verified", checks: v.checks };
   }
 
-  // A discovery provider is tried before guessing: it returns an address someone actually observed, where the loop
-  // below only produces hypotheses, each costing a verification to disprove.
-  const found = await findEmail(person.fullName, domain);
-  if (found) {
-    if (found.status === "verified") {
-      return { email: found.email, origin: "public", status: "verified", checks: { source: found.provider, certainty: found.certainty } };
-    }
-    const v = await verifyEmail(found.email);
-    if (v.status === "verified") {
-      return { email: found.email, origin: "public", status: "verified", checks: { ...v.checks, source: found.provider, certainty: found.certainty } };
-    }
-  }
-
-  // Every plausible format for this name, checked together in one bulk verification; the best-ranked confirmed one wins.
+  // The contact database and every plausible address format are checked at the same time, not one after the other.
   const guesses = emailCandidates(person.fullName, domain, pattern).filter((candidate) => candidate !== person.email);
-  if (guesses.length > 0) {
-    const { verified } = await verifyCandidates(guesses);
-    if (verified) return { email: verified, origin: "inferred", status: "verified", checks: { source: "pattern_guess" } };
+  const [found, guessed] = await Promise.all([
+    findEmail(person.fullName, domain).catch(() => null),
+    guesses.length > 0 ? verifyCandidates(guesses).catch(() => ({ verified: null as string | null, verdicts: [] })) : Promise.resolve({ verified: null as string | null, verdicts: [] }),
+  ]);
+  if (found && found.status === "verified") {
+    return { email: found.email, origin: "public", status: "verified", checks: { source: found.provider, certainty: found.certainty } };
+  }
+  if (guessed.verified) return { email: guessed.verified, origin: "inferred", status: "verified", checks: { source: "pattern_guess" } };
+  if (found) {
+    // The database named an address it was not sure of: confirm it before trusting it.
+    const v = await verifyEmail(found.email);
+    if (v.status === "verified") return { email: found.email, origin: "public", status: "verified", checks: { ...v.checks, source: found.provider, certainty: found.certainty } };
   }
   return none;
 }

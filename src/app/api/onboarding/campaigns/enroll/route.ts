@@ -14,5 +14,14 @@ export async function POST() {
 
   const db = createAdminClient();
   const result = await enrollAllContactsIntoUserSequences(db, userId);
-  return NextResponse.json(result);
+  // The campaign setup opens on: the first one defined, so the person lands inside it with its leads and emails.
+  const { data: first } = await db
+    .from("sequences")
+    .select("id")
+    .eq("user_id", userId)
+    .neq("status", "archived")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  return NextResponse.json({ ...result, campaignId: (first?.id as string | undefined) ?? null });
 }

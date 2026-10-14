@@ -6,6 +6,7 @@ import { Check, ChevronLeft, Loader2, Search, Upload } from "lucide-react";
 import { CampaignsGallery } from "@/components/campaigns/CampaignsGallery";
 import { CampaignIcon } from "@/components/campaigns/CampaignIcon";
 import { CsvImportProgress, rememberProgressLog } from "@/components/campaigns/CsvImportProgress";
+import { ConnectGoogleModal } from "@/components/settings/ConnectGoogleModal";
 import { NewCampaignDialog, type CsvProgressUpdate } from "@/components/campaigns/NewCampaignDialog";
 import { useCampaignNav } from "@/components/campaigns/CampaignsNav";
 import { CompanyFavicon } from "@/components/prospects/CompanyFavicon";
@@ -104,7 +105,7 @@ export function CampaignWorkspace({
   initialDrafts,
   senderName,
   hasBlueprint,
-  inboxEmail,
+  inboxEmail: inboxEmailProp,
 }: {
   profile: CompanyProfile;
   campaigns: CampaignWorkspaceItem[];
@@ -175,6 +176,10 @@ export function CampaignWorkspace({
   const [trialPlan, setTrialPlan] = useState<PlanKey>("startup");
   const [billingActive, setBillingActive] = useState(false);
   const [guestAccount, setGuestAccount] = useState(false);
+  /** The sending inbox. Connecting one in the pop-up updates it here without leaving the campaign. */
+  const [inboxEmail, setInboxEmail] = useState<string | null>(inboxEmailProp);
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [accountEmail, setAccountEmail] = useState("");
   const [sessionKnown, setSessionKnown] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, CampaignDraft>>(initialDrafts);
   const [generatingKeys, setGeneratingKeys] = useState<Set<string>>(new Set());
@@ -228,8 +233,9 @@ export function CampaignWorkspace({
         const data = (await res.json()) as { active?: boolean };
         if (!cancelled) setBillingActive(Boolean(data.active));
         const session = await fetch("/api/auth/session");
-        const who = (await session.json().catch(() => null)) as { guest?: boolean } | null;
+        const who = (await session.json().catch(() => null)) as { guest?: boolean; email?: string | null } | null;
         if (!cancelled) {
+          setAccountEmail(who?.email ?? "");
           setGuestAccount(Boolean(who?.guest));
           setSessionKnown(true);
         }
@@ -594,6 +600,15 @@ export function CampaignWorkspace({
     goToAccount();
   }
 
+  /** Connect to Google in a pop-up on this page. A guest creates an account first, like sending does. */
+  function openConnectGoogle() {
+    if (guestAccount) {
+      askForAccount();
+      return;
+    }
+    setConnectOpen(true);
+  }
+
   function openCredits() {
     if (guestAccount) {
       goToAccount();
@@ -620,7 +635,8 @@ export function CampaignWorkspace({
       return;
     }
     if (!inboxEmail) {
-      setSendMessage("Connect Gmail to send as you.");
+      setSendMessage(null);
+      openConnectGoogle();
       return;
     }
     if (!subject.trim() || !htmlToPlain(body)) {
@@ -674,7 +690,8 @@ export function CampaignWorkspace({
       return;
     }
     if (!inboxEmail) {
-      setSendAllMessage("Connect Gmail to send as you.");
+      setSendAllMessage(null);
+      openConnectGoogle();
       return;
     }
 
@@ -1319,6 +1336,7 @@ export function CampaignWorkspace({
                     onSend={() => void sendEmail()}
                     billingActive={billingActive}
                     onStartTrial={() => void openCredits()}
+                    onConnectGoogle={openConnectGoogle}
                   />
                 ) : null}
               </section>
@@ -1341,6 +1359,18 @@ export function CampaignWorkspace({
           </div>
         )}
       </div>
+
+      <ConnectGoogleModal
+        open={connectOpen}
+        onClose={() => setConnectOpen(false)}
+        defaultEmail={accountEmail}
+        onConnected={(connected) => {
+          setInboxEmail(connected);
+          setSendMessage(null);
+          setSendAllMessage(null);
+          router.refresh();
+        }}
+      />
 
       {trialOpen && (
         <TrialStartModal open={trialOpen} onClose={() => setTrialOpen(false)} defaultPlan={trialPlan} />

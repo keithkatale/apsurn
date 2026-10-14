@@ -71,6 +71,7 @@ export function SequenceCanvas({
   onSend,
   billingActive = false,
   onStartTrial,
+  onConnectGoogle,
 }: {
   campaignId: string;
   steps: CampaignEmailStep[];
@@ -94,6 +95,8 @@ export function SequenceCanvas({
   sendMessage: string | null;
   onSend: () => void;
   billingActive?: boolean;
+  /** Opens the Connect to Google pop-up in place, without leaving the campaign. */
+  onConnectGoogle?: () => void;
   onStartTrial?: () => void;
 }) {
   const [addBusy, setAddBusy] = useState(false);
@@ -310,7 +313,7 @@ export function SequenceCanvas({
                 )}
               </ThreeDButton>
             ) : (
-              <ThreeDButton href="/dashboard/settings" variant="solid" size="sm">
+              <ThreeDButton type="button" variant="solid" size="sm" onClick={onConnectGoogle}>
                 Connect to Google
               </ThreeDButton>
             )}
