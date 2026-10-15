@@ -213,6 +213,8 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
   /** An earlier step the person clicked in the progress bar. Null means follow the live step. */
   const [viewStep, setViewStep] = useState<number | null>(null);
   const confirmLock = useRef(false);
+  /** True while the workspace belongs to a guest session (no account yet). */
+  const guestWorkspace = useRef(true);
   const fromQuery = useRef(
     Boolean(initialUrl || searchParams.get("url") || searchParams.get("websiteUrl")),
   );
@@ -293,6 +295,9 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
     );
     try {
       const guest = await ensureGuestSession();
+      // A guest has not made an account yet; they are asked to at the end, before campaigns open.
+      const guestInfo = (await guest.clone().json().catch(() => null)) as { guest?: boolean } | null;
+      guestWorkspace.current = guestInfo?.guest !== false;
       if (!guest.ok) {
         const guestBody = (await guest.json().catch(() => null)) as { error?: string } | null;
         throw new Error(guestBody?.error || "Could not start setup");
@@ -582,7 +587,9 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
       const res = await fetch("/api/onboarding/campaigns/enroll", { method: "POST" });
       const data = (await res.json().catch(() => null)) as { campaignId?: string | null } | null;
       // Land inside the first campaign, not on a list: its leads are in it and their emails start writing at once.
-      router.push(data?.campaignId ? `/dashboard/campaigns/${data.campaignId}` : "/dashboard/campaigns");
+      const target = data?.campaignId ? `/dashboard/campaigns/${data.campaignId}` : "/dashboard/campaigns";
+      // Someone without an account sees what setup produced first, and signs up right before the campaigns open.
+      router.push(guestWorkspace.current ? `/signup?next=${encodeURIComponent(target)}&from=setup` : target);
     } catch (err) {
       setScan({
         phase: "error",
@@ -814,22 +821,8 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
       {view === 2 && !scanHere && (
         <div className="setup-rise mx-auto w-full max-w-[920px]">
           <PricingCardShell className="p-3" innerClassName="p-3 sm:p-4">
-            <div className="grid gap-4 md:grid-cols-2 md:gap-0">
-              <div className="flex flex-col gap-2 md:pr-5">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-[#4379EE]">Product</p>
-                <h3 className="font-heading text-[17px] font-semibold leading-snug tracking-[-0.04em] text-black">
-                  {productSummary || "Your product"}
-                </h3>
-                {positioning && <p className="text-[13px] leading-snug text-[#605f5f]">{positioning}</p>}
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {textToList(industries).slice(0, 3).map((industry) => (
-                    <span key={industry} className="rounded-md bg-neutral-50 px-2 py-1 text-[12px] text-neutral-700">
-                      {industry}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div className="flex flex-col gap-2 border-t border-neutral-100 pt-3 md:border-l md:border-t-0 md:pl-5 md:pt-0">
+            <div className="grid gap-4">
+              <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-[#4379EE]">Competitors</p>
                   <span className="text-[11px] text-emerald-600">{competitorNames.length} found</span>

@@ -255,3 +255,61 @@ export function privacyRequestEmail(params: { requestType: string; from: string;
   const text = `${label} request from ${params.from}\nReference: ${params.reference}\n\n${params.details ?? ""}`;
   return { html, text };
 }
+
+/** Plain text with blank-line paragraphs → email paragraphs. {{first_name}} is filled by the caller. */
+function paragraphsHtml(text: string) {
+  return text
+    .replace(/\r\n?/g, "\n")
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => para(multiline(p)))
+    .join(gap(14));
+}
+
+/**
+ * Marketing and one-to-one emails sent from the admin area. Same branded layout as the platform emails; a
+ * marketing send carries an unsubscribe link, a one-to-one note does not need one.
+ */
+export function marketingEmail(params: {
+  preheader?: string;
+  eyebrow?: string;
+  title: string;
+  body: string;
+  ctaLabel?: string;
+  ctaUrl?: string;
+  unsubscribeUrl?: string;
+}) {
+  const hasCta = Boolean(params.ctaLabel?.trim() && params.ctaUrl?.trim());
+  const body = [
+    paragraphsHtml(params.body),
+    hasCta ? gap(24) : "",
+    hasCta ? button(params.ctaLabel!.trim(), params.ctaUrl!.trim()) : "",
+    gap(24),
+    divider,
+    gap(8),
+    para("Just reply to this email. It goes straight to a real person at apsurn.", 14),
+  ].join("\n");
+  const footer = params.unsubscribeUrl
+    ? `You are getting this because you have an apsurn account.<br><a href="${escapeHtml(params.unsubscribeUrl)}" style="color:${MUTED};text-decoration:underline;">Unsubscribe from product emails</a>`
+    : "Sent by apsurn. Just reply to this email if you want to talk.";
+  const html = shell({
+    preheader: params.preheader?.trim() || params.title,
+    eyebrow: params.eyebrow?.trim() || "apsurn",
+    title: params.title,
+    body,
+    footer,
+  });
+  const text = [
+    params.title,
+    "",
+    params.body.trim(),
+    hasCta ? `\n${params.ctaLabel!.trim()}: ${params.ctaUrl!.trim()}` : "",
+    "",
+    "Reply to this email to reach a real person at apsurn.",
+    params.unsubscribeUrl ? `\nUnsubscribe: ${params.unsubscribeUrl}` : "",
+  ]
+    .filter((line, i, all) => !(line === "" && all[i - 1] === ""))
+    .join("\n");
+  return { html, text };
+}

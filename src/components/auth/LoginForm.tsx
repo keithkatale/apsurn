@@ -63,6 +63,7 @@ export function LoginForm({ mode = "signin" }: { mode?: "signin" | "signup" }) {
   const [phase, setPhase] = useState<"credentials" | "otp">("credentials");
   const [otpStatus, setOtpStatus] = useState<"idle" | "checking" | "rejected">("idle");
   const isSignup = mode === "signup";
+  const fromSetup = searchParams.get("from") === "setup";
 
   async function sendVerification() {
     const guest = await fetch("/api/auth/guest", { method: "POST" });
@@ -168,13 +169,20 @@ export function LoginForm({ mode = "signin" }: { mode?: "signin" | "signup" }) {
       <BrandLogo href="/" size={28} className="mb-8" />
       <div className="mb-8">
         <h1 className="auth-title">
-          {phase === "otp" ? "Check your email" : isSignup ? "Create your account" : "Welcome back"}
+          {phase === "otp"
+            ? "Check your email"
+            : isSignup
+              ? fromSetup
+                ? "One last step"
+                : "Create your account"
+              : "Welcome back"}
         </h1>
         <p className="auth-subtitle">
           {phase === "otp" ? (
             <>We sent a code and a magic link to {email.trim()}.</>
           ) : (
             <>
+              {isSignup && fromSetup ? "Create your account to open your campaigns. " : null}
               {isSignup ? "Already have an account? " : "Don't have an account? "}
               <Link href={switchHref}>{isSignup ? "Sign in" : "Sign up"}</Link>
             </>

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getCurrentUserId } from "@/lib/auth/session";
+import { getCurrentUserIdOrRedirect } from "@/lib/auth/session";
 import {
   CampaignWorkspace,
   type CampaignLead,
@@ -77,7 +77,7 @@ export async function CampaignsPage({
   // Old links used ?campaign=<id>; a campaign now lives at /dashboard/campaigns/<id>.
   if (legacyCampaignId) redirect(`/dashboard/campaigns/${legacyCampaignId}`);
   const supabase = createAdminClient();
-  const userId = await getCurrentUserId();
+  const userId = await getCurrentUserIdOrRedirect("/dashboard/campaigns");
 
   const { data: company } = await supabase
     .from("companies")

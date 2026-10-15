@@ -1,12 +1,12 @@
 import { LibraryWorkspace } from "@/components/library/LibraryWorkspace";
-import { getCurrentUserId } from "@/lib/auth/session";
+import { getCurrentUserIdOrRedirect } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { listDocuments, listFolders, shareUrl } from "@/lib/workspace/documents";
 
 export const dynamic = "force-dynamic";
 
 export default async function LibraryPage({ searchParams }: { searchParams: Promise<{ doc?: string }> }) {
-  const [{ doc }, userId] = await Promise.all([searchParams, getCurrentUserId()]);
+  const [{ doc }, userId] = await Promise.all([searchParams, getCurrentUserIdOrRedirect("/dashboard/library")]);
   const db = createAdminClient();
   let documents: Awaited<ReturnType<typeof listDocuments>> = [];
   let folders: string[] = [];

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getCurrentUserId } from "@/lib/auth/session";
+import { getCurrentUserIdOrRedirect } from "@/lib/auth/session";
 import { ProspectsWorkspace } from "@/components/prospects/ProspectsWorkspace";
 import type { ProspectRow } from "@/components/prospects/types";
 import { loadProspectCompanies, loadProspectLists } from "@/lib/prospects/load";
@@ -12,7 +12,7 @@ export async function ProspectsPage({
 }) {
   const params = await searchParams;
   const supabase = createAdminClient();
-  const userId = await getCurrentUserId();
+  const userId = await getCurrentUserIdOrRedirect("/dashboard/prospects");
 
   const { data: company } = await supabase
     .from("companies")

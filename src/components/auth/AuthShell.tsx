@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
-const AUTH_VISUAL =
-  "https://cdn.21st.dev/assets/mirror/0d/0d205a1a31d40e927885b0ec5f603407caa10585b5bc6e8b08240402c7417e86.png";
+import { AuthLeadsPreview } from "@/components/auth/AuthLeadsPreview";
 
 export function AuthShell({ children }: { children: React.ReactNode }) {
   return (
@@ -11,7 +10,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
         <Link href="/" className="auth-back" aria-label="Back to home">
           <ArrowLeft className="size-5" />
         </Link>
-        <img src={AUTH_VISUAL} alt="" className="absolute inset-0 size-full object-cover" />
+        <AuthLeadsPreview />
       </aside>
 
       <div className="auth-panel flex min-h-dvh w-full flex-1 flex-col">

@@ -3,11 +3,10 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
-import { DodoPayments } from "dodopayments-checkout";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { ACTIVATION_FEE_USD, PLANS, STARTER_CREDITS, STARTER_CREDIT_USD, type PlanKey } from "@/lib/billing/plans";
 import { trackGoal } from "@/lib/analytics/datafast";
-import { ensureDodoCheckout } from "@/lib/billing/dodo-checkout-client";
+import { ensureDodoCheckout, openDodoCheckout } from "@/lib/billing/dodo-checkout-client";
 import { goToAccount, redirectGuestToAccount } from "@/lib/auth/require-account-client";
 
 export function TrialStartModal({
@@ -56,9 +55,8 @@ export function TrialStartModal({
       if (!res.ok || !data?.checkoutUrl) {
         throw new Error(data?.error || "Could not start checkout");
       }
-      ensureDodoCheckout();
       trackGoal("initiate_checkout", { plan, starterCreditUsd: STARTER_CREDIT_USD });
-      await DodoPayments.Checkout.open({ checkoutUrl: data.checkoutUrl });
+      await openDodoCheckout(data.checkoutUrl);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Checkout failed");
@@ -117,7 +115,6 @@ export function TrialStartModal({
 
 export async function openPlanCheckout(plan: PlanKey) {
   if (await redirectGuestToAccount()) return;
-  ensureDodoCheckout();
   const res = await fetch("/api/billing/checkout", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -130,5 +127,5 @@ export async function openPlanCheckout(plan: PlanKey) {
   }
   if (!res.ok || !data?.checkoutUrl) throw new Error(data?.error || "Checkout failed");
   trackGoal("initiate_checkout", { plan, starterCreditUsd: STARTER_CREDIT_USD });
-  await DodoPayments.Checkout.open({ checkoutUrl: data.checkoutUrl });
+  await openDodoCheckout(data.checkoutUrl);
 }

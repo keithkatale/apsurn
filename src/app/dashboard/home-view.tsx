@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getCurrentUserId } from "@/lib/auth/session";
+import { getCurrentUserIdOrRedirect } from "@/lib/auth/session";
 import { CampaignIcon } from "@/components/campaigns/CampaignIcon";
 import { CompanyFavicon } from "@/components/prospects/CompanyFavicon";
 import { PricingCardShell } from "@/components/ui/pricing-card-shell";
@@ -55,7 +55,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 export async function DashboardHomePage() {
   const db = createAdminClient();
-  const userId = await getCurrentUserId();
+  const userId = await getCurrentUserIdOrRedirect("/dashboard");
 
   const { data: company } = await db
     .from("companies")
