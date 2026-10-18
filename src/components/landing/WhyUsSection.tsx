@@ -26,9 +26,9 @@ const CARDS = [
   {
     index: "03",
     title: "Reach out and book",
-    description: "Get those prospects to book a call with you, and check out your products.",
+    description: "Send personalized emails from your own Gmail and get prospects booking calls with you.",
     primary: { href: "/signup?next=/setup", label: "Get 50 credits" },
-    secondary: { href: "https://cal.com/keith-katale/30min", label: "Book a call" },
+    secondary: { href: "#pricing", label: "View plans" },
     sim: SequenceSim,
     previewClass: "lg:w-[520px] lg:max-w-[48%]",
   },

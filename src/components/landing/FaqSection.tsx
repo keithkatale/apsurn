@@ -37,7 +37,7 @@ export function FaqSection() {
     },
     {
       q: "Can you just do it for me?",
-      a: "Yes. That's the done-with-you sprint. Book a call and we'll scope it.",
+      a: "apsurn does the work for you: it drafts your ICP, finds verified prospects and writes the emails, and you approve and send. If you want hands-on help running it, talk to us and we'll set it up inside your account.",
     },
   ];
 

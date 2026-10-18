@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
@@ -63,6 +63,17 @@ export function LoginForm({ mode = "signin" }: { mode?: "signin" | "signup" }) {
   const [phase, setPhase] = useState<"credentials" | "otp">("credentials");
   const [otpStatus, setOtpStatus] = useState<"idle" | "checking" | "rejected">("idle");
   const isSignup = mode === "signup";
+  /** A full 6-digit code is in the boxes. While true there is nothing to resend, so the button is hidden. */
+  const [codeEntered, setCodeEntered] = useState(false);
+  const confirming = useRef(false);
+
+  // As soon as the code screen opens: wake the verification endpoint and load the page they will land on,
+  // so entering the code only has to wait for the check itself.
+  useEffect(() => {
+    if (phase !== "otp") return;
+    void fetch("/api/auth/verify/confirm").catch(() => null);
+    router.prefetch(next);
+  }, [phase, next, router]);
   const fromSetup = searchParams.get("from") === "setup";
 
   async function sendVerification() {
@@ -92,16 +103,20 @@ export function LoginForm({ mode = "signin" }: { mode?: "signin" | "signup" }) {
   }
 
   async function confirmCode(code: string) {
+    // The boxes can report "complete" more than once for one code; only one check may run.
+    if (confirming.current) return;
+    confirming.current = true;
     setOtpStatus("checking");
     setMessage(null);
     try {
       const response = await fetch("/api/auth/verify/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({ code, email: email.trim() }),
       });
       const data = (await response.json().catch(() => null)) as { error?: string; next?: string } | null;
       if (!response.ok) {
+        confirming.current = false;
         setOtpStatus("rejected");
         setMessage(data?.error || "That code is wrong.");
         return;
@@ -110,6 +125,7 @@ export function LoginForm({ mode = "signin" }: { mode?: "signin" | "signup" }) {
       setNavigationPending(true);
       router.replace(data?.next && data.next.startsWith("/") ? data.next : next);
     } catch (error) {
+      confirming.current = false;
       setOtpStatus("rejected");
       setMessage(error instanceof Error ? error.message : "Could not verify that code.");
     }
@@ -199,23 +215,36 @@ export function LoginForm({ mode = "signin" }: { mode?: "signin" | "signup" }) {
             status={otpStatus === "rejected" ? "error" : "idle"}
             errorMessage={message || "That code is wrong."}
             hint="Paste the whole code into any cell. The magic link in the same email works too."
-            onChange={() => setOtpStatus((current) => (current === "rejected" ? "idle" : current))}
+            onChange={(value) => {
+              setCodeEntered(value.length === 6);
+              setOtpStatus((current) => (current === "rejected" ? "idle" : current));
+            }}
             onComplete={(code) => void confirmCode(code)}
           />
           {message && otpStatus !== "rejected" ? <p className="auth-message">{message}</p> : null}
-          <button
-            type="button"
-            disabled={busy}
-            className="auth-submit"
-            onClick={() => {
-              setBusy(true);
-              void sendVerification()
-                .catch((error) => setMessage(error instanceof Error ? error.message : "Could not resend the code."))
-                .finally(() => setBusy(false));
-            }}
-          >
-            {busy ? <SpinLoader size="sm" label="Loading" iconClassName="text-current" /> : "Resend code"}
-          </button>
+          {otpStatus === "checking" ? (
+            <p className="flex items-center gap-2 text-sm text-neutral-500" role="status">
+              <SpinLoader size="sm" label="Checking" iconClassName="text-current" /> Checking your code…
+            </p>
+          ) : null}
+          {/* Once the code is in, the form is not waiting for a button: it checks by itself. Resend only returns if the code was wrong. */}
+          {!codeEntered || otpStatus === "rejected" ? (
+            <button
+              type="button"
+              disabled={busy}
+              className="auth-submit"
+              onClick={() => {
+                setBusy(true);
+                setCodeEntered(false);
+                confirming.current = false;
+                void sendVerification()
+                  .catch((error) => setMessage(error instanceof Error ? error.message : "Could not resend the code."))
+                  .finally(() => setBusy(false));
+              }}
+            >
+              {busy ? <SpinLoader size="sm" label="Loading" iconClassName="text-current" /> : "Resend code"}
+            </button>
+          ) : null}
         </div>
       ) : null}
 

@@ -14,9 +14,10 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   const code = typeof body?.code === "string" ? body.code : undefined;
   const token = typeof body?.token === "string" ? body.token : undefined;
+  const email = typeof body?.email === "string" ? body.email : undefined;
 
   try {
-    const result = await confirmEmailVerification({ userId, code, token });
+    const result = await confirmEmailVerification({ userId, code, token, email });
     if (!result.ok) {
       return NextResponse.json(
         { error: result.error, code: "code" in result ? result.code : undefined },
@@ -30,4 +31,9 @@ export async function POST(request: NextRequest) {
     console.error("[auth/verify/confirm]", error instanceof Error ? error.message : error);
     return NextResponse.json({ error: "Could not verify that code." }, { status: 500 });
   }
+}
+
+/** Called when the code screen opens so the first real check does not pay for a cold start. */
+export async function GET() {
+  return new NextResponse(null, { status: 204 });
 }

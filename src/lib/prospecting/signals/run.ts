@@ -11,6 +11,7 @@ import { persistLead, type SaveLeadResult } from "../agent/persist";
 import type { TriggerSpec } from "../types";
 import { collectAcceleratorSignals, collectLaunchSignals } from "./community";
 import { collectHiringSignals } from "./hiring";
+import { activeListeningKeywords } from "@/lib/market/suggest";
 import { collectNewsSignals } from "./news";
 import { collectSocialSignals } from "./social";
 import { eventKey, rankLeads } from "./score";
@@ -106,7 +107,13 @@ export async function runSignalScout(opts: {
   emit({ type: "tool_start", name: "find_companies", args: { source: "signals", triggers: supported.map((spec) => spec.type) } });
   const candidates: SignalCandidate[] = [];
   const want = Math.max(targetCount * OVERSAMPLE * 4, 60);
-  for (const spec of supported) {
+  // The user's social-listening keywords steer the pain-post search automatically, ahead of generic industry terms.
+  const listening = await activeListeningKeywords(db, userId).catch(() => [] as string[]);
+  for (const baseSpec of supported) {
+    const spec: TriggerSpec =
+      baseSpec.type === "social_pain" && listening.length
+        ? { ...baseSpec, keywords: [...new Set([...(baseSpec.keywords ?? []).slice(0, 2), ...listening, ...(baseSpec.keywords ?? [])])].slice(0, 12) }
+        : baseSpec;
     const stopped = await checkStopped();
     if (stopped) return result(stopped, stopped === "cancelled");
     const collect =

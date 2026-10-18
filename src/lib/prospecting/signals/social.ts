@@ -7,7 +7,7 @@ import { buildPainPrompt, companyFromHeadline, engagementStrength, parsePainVerd
 import type { SignalCandidate } from "./types";
 
 const MAX_POSTS_PER_QUERY = 15;
-const MAX_QUERIES = 3;
+const MAX_QUERIES = 4;
 const JUDGE_BATCH = 20;
 const DOMAIN_LOOKUP_CONCURRENCY = 4;
 

@@ -150,61 +150,13 @@ export function PricingSection() {
               </div>
             </div>
           ))}
-          <div className="relative flex flex-col justify-between overflow-hidden rounded-[20px] bg-gradient-to-t from-[#FAFAFA] to-[#F4F4F4] p-4">
-            <div className="absolute inset-x-0 bottom-0 h-[270px] pointer-events-none rounded-b-[20px] opacity-20 sm:opacity-25 bg-[radial-gradient(#000000_0.85px,transparent_0.85px)] [background-size:17px_17px]" />
-            <div className="relative z-10 flex flex-col gap-6 w-full">
-              <div className="flex flex-col justify-between gap-6 rounded-[12px] bg-white p-4 sm:p-5 shadow-[0px_1px_3px_rgba(0,0,0,0.03)] min-h-[175px]">
-                <div className="flex flex-col gap-3.5">
-                  <h3 className="text-[22px] font-semibold tracking-[-0.04em] text-black font-heading leading-tight">
-                    {ENTERPRISE_PLAN.name}
-                  </h3>
-                  <p className="text-[15px] sm:text-[16px] text-[#605f5f] tracking-[-0.03em] leading-snug font-sans">
-                    {ENTERPRISE_PLAN.description}
-                  </p>
-                </div>
-                <div className="flex flex-col gap-1 pt-1">
-                  <span className="text-[13px] font-medium tracking-[-0.03em] text-[#605f5f]">From</span>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-[34px] sm:text-[36px] font-semibold tracking-[-0.04em] text-black font-sans leading-none">
-                      ${ENTERPRISE_PLAN.priceUsd}
-                    </span>
-                    <span className="text-[14px] text-[#605f5f] tracking-[-0.03em] font-sans">/month</span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-col gap-3 px-1 pb-2">
-                <ThreeDButton
-                  href={ENTERPRISE_PLAN.bookingUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  variant="soft"
-                  size="md"
-                  className="h-11 w-full max-w-full shrink rounded-[12px] px-4 text-[15px] font-medium tracking-[-0.03em] sm:text-base"
-                >
-                  Book a call
-                </ThreeDButton>
-                <div className="flex flex-col gap-2 p-2 pt-3">
-                  {ENTERPRISE_PLAN.features.map((feature) => (
-                    <div key={feature} className="flex items-center gap-2.5">
-                      <div className="size-[20px] shrink-0">
-                        <Image
-                          src="/landing/pricing-check.svg"
-                          alt=""
-                          width={20}
-                          height={20}
-                          className="size-[20px] object-contain"
-                        />
-                      </div>
-                      <span className="text-[15px] sm:text-[16px] text-[#605f5f] tracking-[-0.03em] leading-snug font-sans">
-                        {feature}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
+        <p className="mt-6 text-center text-[14px] text-[#605f5f]">
+          Need hands-on help running it?{" "}
+          <a href={ENTERPRISE_PLAN.bookingUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-black">
+            Talk to us
+          </a>
+        </p>
       </div>
     </section>
   );

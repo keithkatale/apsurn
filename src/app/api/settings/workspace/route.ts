@@ -26,7 +26,7 @@ export async function GET() {
 
   const [{ data: blueprint }, { data: inboxes }] = await Promise.all([
     company
-      ? db.from("company_blueprints").select("generated_at, approved_at").eq("company_id", company.id).maybeSingle()
+      ? db.from("company_blueprints").select("generated_at, approved_at, icp, personas, value_prop, positioning, product_summary, competitors, confidence").eq("company_id", company.id).maybeSingle()
       : Promise.resolve({ data: null }),
     db
       .from("connected_inboxes")
@@ -40,11 +40,29 @@ export async function GET() {
     email: user?.email ?? null,
     company: company
       ? {
+          id: company.id,
           name: company.name,
           websiteUrl: company.website_url,
           status: company.status,
           generatedAt: blueprint?.generated_at ?? null,
           approvedAt: blueprint?.approved_at ?? null,
+          blueprint: blueprint
+            ? {
+                company_id: company.id,
+                icp: {
+                  industries: blueprint.icp?.industries ?? [],
+                  companySizeRange: blueprint.icp?.companySizeRange ?? "",
+                  geographies: blueprint.icp?.geographies ?? [],
+                  budgetSignals: blueprint.icp?.budgetSignals ?? [],
+                },
+                personas: blueprint.personas ?? [],
+                value_prop: blueprint.value_prop ?? null,
+                positioning: blueprint.positioning ?? null,
+                product_summary: blueprint.product_summary ?? null,
+                competitors: blueprint.competitors ?? [],
+                confidence: blueprint.confidence ?? "model",
+              }
+            : null,
         }
       : null,
     inboxes: inboxes ?? [],

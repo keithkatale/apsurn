@@ -40,9 +40,14 @@ function textToList(text: string): string[] {
 export function BlueprintReviewForm({
   companyId,
   blueprint,
+  mode = "setup",
+  onSaved,
 }: {
   companyId: string;
   blueprint: BlueprintData;
+  /** "settings" saves in place and re-locks the ICP; "setup" approves and moves on. */
+  mode?: "setup" | "settings";
+  onSaved?: () => void;
 }) {
   const [industries, setIndustries] = useState(listToText(blueprint.icp.industries));
   const [companySizeRange, setCompanySizeRange] = useState(blueprint.icp.companySizeRange);
@@ -79,7 +84,8 @@ export function BlueprintReviewForm({
       if (!res.ok) throw new Error((await res.json()).error ?? "Save failed");
       if (approve) {
         setApproved(true);
-        router.push("/dashboard/copilot");
+        if (mode === "settings") onSaved?.();
+        else router.push("/dashboard/copilot");
       }
     } finally {
       setSaving(false);
@@ -173,15 +179,17 @@ export function BlueprintReviewForm({
       )}
 
       <div className="flex gap-3 pt-2">
-        <ThreeDButton
-          variant="soft"
-          size="md"
-          disabled={saving}
-          onClick={() => save(false)}
-        >
-          <Save className="size-4" />
-          <span>Save changes</span>
-        </ThreeDButton>
+        {mode === "setup" && (
+          <ThreeDButton
+            variant="soft"
+            size="md"
+            disabled={saving}
+            onClick={() => save(false)}
+          >
+            <Save className="size-4" />
+            <span>Save changes</span>
+          </ThreeDButton>
+        )}
         <ThreeDButton
           variant="solid"
           size="md"
@@ -193,7 +201,7 @@ export function BlueprintReviewForm({
           ) : (
             <Check className="size-4" />
           )}
-          <span>{approved ? "Approved ✓" : "Approve blueprint"}</span>
+          <span>{approved ? "Locked ✓" : mode === "settings" ? "Save and lock ICP" : "Approve blueprint"}</span>
         </ThreeDButton>
       </div>
     </div>

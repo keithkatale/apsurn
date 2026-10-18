@@ -6,7 +6,6 @@ import Link from "next/link";
 import { ArrowRight, Menu, Moon, Sun, X } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { BrandLogo } from "@/components/brand/BrandLogo";
-import { ENTERPRISE_PLAN } from "@/lib/billing/plans";
 import { useTheme } from "@/components/theme/theme-provider";
 import { createClient } from "@/lib/supabase/client";
 
@@ -53,22 +52,6 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
       data.subscription.unsubscribe();
     };
   }, [pathname]);
-
-  const bookCall = (
-    <a
-      href={ENTERPRISE_PLAN.bookingUrl}
-      target="_blank"
-      rel="noreferrer"
-      onClick={() => setIsOpen(false)}
-      className={
-        embedded
-          ? "hero-outline-btn inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-full px-3.5 text-[13px] font-medium"
-          : "inline-flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-xl px-3 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-100 hover:text-neutral-950"
-      }
-    >
-      Book a Call
-    </a>
-  );
 
   const navLinks = embedded
     ? [
@@ -128,7 +111,6 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
                 >
                   See how it works
                 </Link>
-                {bookCall}
                 <Link
                   href={showDashboard ? "/dashboard" : "/signup?next=/setup"}
                   className="hero-solid-btn inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-full px-3.5 text-[13px] font-medium"
@@ -138,7 +120,6 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
               </>
             ) : (
               <>
-                {bookCall}
                 <ThreeDButton href={showDashboard ? "/dashboard" : "/signup?next=/setup"} variant="solid" size="sm" className="landing-nav-cta rounded-xl px-4 shadow-none">
                   <span>{showDashboard ? "Dashboard" : "Get 50 free credits"}</span>
                   <ArrowRight className="size-3.5" />
@@ -177,15 +158,6 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
             ))}
 
             <div className="flex flex-col gap-2 pt-2">
-              <a
-                href={ENTERPRISE_PLAN.bookingUrl}
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => setIsOpen(false)}
-                className="rounded-full py-2 text-[15px] font-medium text-neutral-800 hover:bg-neutral-100/70"
-              >
-                Book a Call
-              </a>
               {embedded && !showDashboard ? (
                 <Link
                   href="/login"

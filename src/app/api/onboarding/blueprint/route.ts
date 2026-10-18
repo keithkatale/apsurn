@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
+import { seedListeningKeywords } from "@/lib/market/suggest";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
 import { crawlSite } from "@/lib/scraper/crawl";
@@ -144,6 +145,9 @@ export async function PATCH(request: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // Approving the ICP also picks the social-listening keywords prospecting and Market research use.
+  if (body?.approve) after(() => seedListeningKeywords(supabase, userId, companyId).then(() => undefined, () => undefined));
 
   return NextResponse.json({ blueprint: data });
 }

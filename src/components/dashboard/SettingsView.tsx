@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
+import { BlueprintReviewForm, type BlueprintData } from "@/components/onboarding/BlueprintReviewForm";
 import { RebuildBlueprintButton } from "@/components/settings/RebuildBlueprintButton";
 import { ConnectGoogleModal, GoogleLogo } from "@/components/settings/ConnectGoogleModal";
 import { CreditTopupPanel } from "@/components/billing/CreditTopupPanel";
@@ -96,6 +97,8 @@ export function SettingsView() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState<string | null>(null);
   const [company, setCompany] = useState<{
+    id?: string;
+    blueprint?: BlueprintData | null;
     websiteUrl: string | null;
     status: string | null;
     generatedAt: string | null;
@@ -286,6 +289,18 @@ export function SettingsView() {
                   {approved ? formatDate(company?.approvedAt) : "Not approved"}
                 </span>
               </SettingsRow>
+              {company?.id && company.blueprint ? (
+                <div className="px-5 py-4">
+                  <p className="mb-3 text-sm font-medium text-neutral-900">Edit your ICP</p>
+                  <BlueprintReviewForm
+                    key={`${company.generatedAt}-${company.approvedAt}`}
+                    companyId={company.id}
+                    blueprint={company.blueprint}
+                    mode="settings"
+                    onSaved={() => router.refresh()}
+                  />
+                </div>
+              ) : null}
             </SettingsSection>
 
             <SettingsSection id="billing" title="Billing & credits" description="Plans start with 50 free credits. Your card is charged when they run out.">

@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { PageLoader } from "@/components/loaders/page-loader";
-import { setDashboardContentPending, subscribeDashboardContent } from "@/lib/navigation-progress";
+import { setDashboardContentPending } from "@/lib/navigation-progress";
 import { cn } from "@/lib/cn";
 
 // Pages that fill the window and scroll inside their own panels. A page with an id in its address (a campaign, a list)
@@ -17,15 +16,9 @@ const FULL_BLEED = [
 
 export function DashboardMain({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [pending, setPending] = useState(false);
   const fullBleed = FULL_BLEED.some((base) => pathname === base || pathname.startsWith(`${base}/`));
 
   useEffect(() => {
-    return subscribeDashboardContent(setPending);
-  }, []);
-
-  useEffect(() => {
-    setPending(false);
     setDashboardContentPending(false);
   }, [pathname]);
 
@@ -39,11 +32,6 @@ export function DashboardMain({ children }: { children: React.ReactNode }) {
       >
         {children}
       </div>
-      {pending ? (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-neutral-50">
-          <PageLoader fullScreen={false} className="min-h-0 bg-transparent" />
-        </div>
-      ) : null}
     </main>
   );
 }

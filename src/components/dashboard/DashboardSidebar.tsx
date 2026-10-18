@@ -3,7 +3,7 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar, Ellipsis, Library, LayoutGrid, Megaphone, Settings, Users, type LucideIcon } from "lucide-react";
+import { Calendar, Ellipsis, Library, LayoutGrid, Megaphone, Radar, Settings, Users, type LucideIcon } from "lucide-react";
 import { ENTERPRISE_PLAN } from "@/lib/billing/plans";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { CampaignsNavChips, CampaignsNavMenu } from "@/components/campaigns/CampaignsNav";
@@ -18,6 +18,7 @@ type NavItem = { href: string; label: string; icon: LucideIcon; exact?: boolean 
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Home", icon: LayoutGrid, exact: true },
   { href: "/dashboard/prospects", label: "Prospects", icon: Users },
+  { href: "/dashboard/market-insights", label: "Market research", icon: Radar },
   { href: "/dashboard/campaigns", label: "Campaigns", icon: Megaphone },
   { href: "/dashboard/library", label: "Library", icon: Library },
 ];
@@ -25,6 +26,7 @@ const NAV_ITEMS: NavItem[] = [
 const SETTINGS_ITEM: NavItem = { href: "/dashboard/settings", label: "Settings", icon: Settings };
 
 const MORE_ITEMS: NavItem[] = [
+  { href: "/dashboard/market-insights", label: "Market research", icon: Radar },
   { href: "/dashboard/library", label: "Library", icon: Library },
   SETTINGS_ITEM,
 ];

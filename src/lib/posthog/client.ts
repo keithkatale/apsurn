@@ -12,6 +12,8 @@ export function getPosthogHost() {
 export function initPosthog() {
   const key = getPosthogKey();
   if (!key || typeof window === "undefined") return;
+  // Local dev has no route to PostHog; the /ingest proxy would just log ECONNRESET/ENOTFOUND errors.
+  if (["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname)) return;
   if (posthog.__loaded) return;
   if ((window as Window & { posthog?: { __loaded?: boolean } }).posthog?.__loaded) return;
   posthog.init(key, {

@@ -7,7 +7,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="auth-page flex min-h-dvh w-full">
       <aside className="auth-visual relative hidden min-h-dvh flex-1 overflow-hidden lg:block">
-        <Link href="/" className="auth-back" aria-label="Back to home">
+        <Link href="/" className="auth-back" aria-label="Back to home" style={{ top: "2.25rem", left: "2.25rem" }}>
           <ArrowLeft className="size-5" />
         </Link>
         <AuthLeadsPreview />

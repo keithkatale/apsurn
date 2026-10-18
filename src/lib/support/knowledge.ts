@@ -68,10 +68,10 @@ Campaigns: three columns. The left lists every campaign under the company bluepr
 Settings: Appearance (Light, Dark or System); Account (signed-in email and Sign out); Billing & credits (Manage subscription and credit top-ups); Inbox (Connect to Google); Company blueprint (website, status, last built date, approved date, and Rebuild blueprint).
 
 # Pricing, credits and billing
-Three plans. There is no free plan. Startup and Growth both begin with 50 free credits before the card is charged.
+Two self-serve plans (Startup and Growth), plus an on-request Enterprise option. There is no free plan. Startup and Growth both begin with 50 free credits before the card is charged.
 - Startup: $30 per month. Best for founders starting outbound. 50 free credits to start, then 2,000 credits after the card is charged. Includes personalised email drafts, campaign sequences, lead enrichment. How to start: sign up.
 - Growth: $79 per month. Best for teams running outbound every week. 50 free credits to start, then 8,000 credits after the card is charged. Includes everything in Startup, higher prospecting volume, priority AI throughput. How to start: sign up.
-- Enterprise: from $833 per month. For larger outbound teams. Scoped on a call. Custom credit volume. Includes everything in Growth, shared team rollout. How to start: book a call.
+- Enterprise (on request, not a front-door offer): from $833 per month. For larger outbound teams or anyone who wants hands-on help running campaigns inside their account. Scoped on a call. Custom credit volume. Includes everything in Growth, shared team rollout. How to start: book a call.
 How billing works:
 - Every new account gets 50 free credits. The card is charged when those credits run out
 - Credits are spent when Apsurn does AI work for you, such as finding prospects and drafting copy

@@ -449,6 +449,17 @@ export function MarketInsightsWorkspace({
 
   const rightPanelOpen = selectedMention !== null || aiOpen;
 
+  // Keywords were picked for this company automatically; listen on them right away the first time the tab opens.
+  const autoScanned = useRef(false);
+  useEffect(() => {
+    if (autoScanned.current || scanState) return;
+    if (keywords.length > 0 && mentions.length === 0 && keywords.every((k) => !k.last_scanned_at)) {
+      autoScanned.current = true;
+      window.setTimeout(() => void runScan(), 0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keywords, mentions.length]);
+
   if (keywords.length === 0 && !scanState) {
     return (
       <div className="h-full min-h-0 flex-1 overflow-y-auto bg-white px-4 md:px-6">

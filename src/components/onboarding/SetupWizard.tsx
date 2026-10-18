@@ -213,6 +213,8 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
   /** An earlier step the person clicked in the progress bar. Null means follow the live step. */
   const [viewStep, setViewStep] = useState<number | null>(null);
   const confirmLock = useRef(false);
+  /** When the domain was first submitted, to report time-to-first-sequence. */
+  const setupStartedAt = useRef<number | null>(null);
   /** True while the workspace belongs to a guest session (no account yet). */
   const guestWorkspace = useRef(true);
   const fromQuery = useRef(
@@ -274,6 +276,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
       setDomainError(true);
       return;
     }
+    if (setupStartedAt.current == null) setupStartedAt.current = Date.now();
     setStarted(true);
     setStep(1);
     setViewStep(null);
@@ -587,6 +590,9 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
       const res = await fetch("/api/onboarding/campaigns/enroll", { method: "POST" });
       const data = (await res.json().catch(() => null)) as { campaignId?: string | null } | null;
       // Land inside the first campaign, not on a list: its leads are in it and their emails start writing at once.
+      if (setupStartedAt.current != null) {
+        trackGoal("setup_complete", { seconds: Math.round((Date.now() - setupStartedAt.current) / 1000) });
+      }
       const target = data?.campaignId ? `/dashboard/campaigns/${data.campaignId}` : "/dashboard/campaigns";
       // Someone without an account sees what setup produced first, and signs up right before the campaigns open.
       router.push(guestWorkspace.current ? `/signup?next=${encodeURIComponent(target)}&from=setup` : target);
@@ -775,7 +781,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
             <div className="flex items-center gap-3">
               <CompanyFavicon domain={domain} name={companyName || domain} className="size-10 rounded-lg text-sm" />
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-[#4379EE]">Company blueprint</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-[#4379EE]">Your ICP · edit anytime in Settings</p>
                 <h2 className="truncate text-[17px] font-semibold tracking-[-0.03em] text-neutral-900">
                   {companyName || domain}
                 </h2>

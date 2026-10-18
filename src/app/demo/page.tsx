@@ -90,14 +90,6 @@ export default function DemoPage() {
           >
             Get 50 free credits
           </Link>
-          <a
-            href="https://cal.com/keith-katale/30min"
-            target="_blank"
-            rel="noreferrer noopener"
-            className="inline-flex rounded-full bg-white/10 px-5 py-2.5 text-sm font-medium text-white hover:bg-white/15"
-          >
-            Book a call
-          </a>
           <CopyLinkButton url={page} />
           {DEMO.youtubeUrl ? (
             <a href={DEMO.youtubeUrl} target="_blank" rel="noreferrer noopener" className="text-sm text-[#9a9a9a] hover:text-[#f0f0f0]">
