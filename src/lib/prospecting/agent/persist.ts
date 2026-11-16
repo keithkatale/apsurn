@@ -10,6 +10,7 @@ import { CREDIT_COSTS } from "@/lib/billing/plans";
 import { isSuppressed, saveCanonicalCompany, saveCanonicalContact } from "../pipeline";
 import type { CandidateCompany, CandidateContact } from "../types";
 import { contactPhotoUrl, countryFromLocation, fetchCompanyDescription, trackProfileTask } from "../profile";
+import { hasEmailOrLinkedIn, linkedInProfile } from "../reachable";
 import type { AgentRunContext } from "./context";
 import { rememberDirectory } from "./directories";
 
@@ -48,22 +49,27 @@ export async function persistLead(
     return { saved: false, contactCount: 0, reason: "already in this account" };
   }
 
-  // An email enters the database only if the verifier confirmed it as a real mailbox ("verified"), so nothing
-  // unconfirmed can later be mailed and bounce. A contact with a phone number is still kept without an email (the
-  // phone channel was never subject to email verification), but its unconfirmed email is dropped, not stored.
+  // An email is stored only when the verifier confirmed the mailbox. A LinkedIn profile is the other way a
+  // person counts. A name, a phone, or an unconfirmed address alone is not a lead.
   const candidateContacts = contacts
-    .map((c) => (c.email && c.emailStatus !== "verified" ? { ...c, email: null } : c))
-    .filter((c) => Boolean(c.fullName) && (Boolean(c.email) || Boolean(c.phone)));
-  // Drop contacts whose email/phone is on the global suppression list.
+    .map((c) => ({
+      ...c,
+      email: c.email && c.emailStatus === "verified" ? c.email : null,
+      linkedinUrl: linkedInProfile(c.linkedinUrl),
+    }))
+    .filter((c) => Boolean(c.fullName) && hasEmailOrLinkedIn(c));
   const actionable: CandidateContact[] = [];
   for (const c of candidateContacts) {
-    if (c.email && (await isSuppressed("email", c.email))) continue;
-    if (!c.email && c.phone && (await isSuppressed("phone", c.phone))) continue;
+    if (c.email && (await isSuppressed("email", c.email))) {
+      if (!c.linkedinUrl) continue;
+      actionable.push({ ...c, email: null });
+      continue;
+    }
     actionable.push(c);
   }
   if (actionable.length === 0) {
     ctx.counters.warnings += 1;
-    return { saved: false, contactCount: 0, reason: "no actionable contacts" };
+    return { saved: false, contactCount: 0, reason: "no email or LinkedIn" };
   }
 
   const canonical = await saveCanonicalCompany(company);
@@ -86,6 +92,8 @@ export async function persistLead(
         location: company.location,
         description: knownDescription,
         country: companyCountry,
+        hiring: typeof company.sourceRef.hiring === "boolean" ? company.sourceRef.hiring : null,
+        source_url: typeof company.sourceRef.sourceUrl === "string" ? company.sourceRef.sourceUrl : company.websiteUrl,
         source: company.source,
         source_ref: company.sourceRef,
         icp_fit_score: company.icpFitScore,
@@ -101,8 +109,8 @@ export async function persistLead(
     ctx.db.from("prospect_companies").upsert(row, { onConflict: "list_id,domain" }).select().single();
   let { data: snapshot, error } = await saveCompany(companyRow);
   // Before migration 0034 the profile columns don't exist: save the lead without them rather than losing it.
-  if (error && /description|country/i.test(error.message)) {
-    const { description: _d, country: _c, ...legacy } = companyRow;
+  if (error && /description|country|hiring|source_url|their_buyer|key_insight|outreach_angle/i.test(error.message)) {
+    const { description: _d, country: _c, hiring: _h, source_url: _u, ...legacy } = companyRow;
     ({ data: snapshot, error } = await saveCompany(legacy));
   }
   if (error || !snapshot) throw new Error(error?.message ?? "Could not save prospect company");

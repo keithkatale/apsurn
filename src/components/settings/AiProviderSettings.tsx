@@ -16,7 +16,7 @@ const PROVIDERS = [
     id: "vertex",
     label: "Vertex AI (Gemini)",
     description:
-      "Google Cloud Gemini. Needs a real service-account key below to work in production — ADC (a local gcloud login) only works on the machine that ran it, never in a serverless deploy.",
+      "Vertex AI Gemini on your Google Cloud project. Uses the project's trial or billing credits. Needs a service-account key below, or a local gcloud login.",
   },
 ] as const;
 

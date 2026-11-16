@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { hasEmailOrLinkedIn } from "@/lib/prospecting/reachable";
 import { ownedSiteIds } from "@/lib/analytics/access";
 import { parseAnalyticsRange, rangeWindow } from "@/lib/analytics/range";
-import { listSequences } from "@/lib/sequences/mutations";
 
 export function clampLimit(limit: unknown, fallback = 20, max = 100): number {
   const n = typeof limit === "number" ? Math.floor(limit) : fallback;
@@ -23,7 +23,7 @@ export async function listProspectCompanies(
 
   let q = db
     .from("prospect_companies")
-    .select("id, name, domain, industry, location, status, icp_fit_score, contacts!contacts_prospect_company_id_fkey(id)")
+    .select("id, name, domain, industry, location, status, icp_fit_score, contacts!contacts_prospect_company_id_fkey(id, email, linkedin_url)")
     .eq("company_id", company.id)
     .is("archived_at", null)
     .limit(clampLimit(args.limit));
@@ -43,38 +43,19 @@ export async function listProspectCompanies(
       location: c.location,
       status: c.status,
       icpFitScore: c.icp_fit_score,
-      contactCount: (c.contacts ?? []).length,
-    })),
+      contactCount: (c.contacts ?? []).filter((contact) => hasEmailOrLinkedIn({ email: contact.email, linkedinUrl: contact.linkedin_url })).length,
+    })).filter((company) => company.contactCount > 0),
   };
 }
 
 export async function listContacts(
   db: SupabaseClient,
   userId: string,
-  args: { query?: string; leadStatus?: string; companyId?: string; limit?: number; campaign?: string },
-) {
-  const filtering = args.campaign === "none" || args.campaign === "any";
-  const result = await listContactsRaw(db, userId, filtering ? { ...args, limit: 100 } : args);
-  if (!filtering) return result;
-  const ids = result.contacts.map((c) => c.id);
-  if (ids.length === 0) return result;
-  const { data: enrolled } = await db.from("enrollments").select("contact_id").in("contact_id", ids);
-  const enrolledIds = new Set((enrolled ?? []).map((row) => row.contact_id));
-  return {
-    contacts: result.contacts
-      .filter((c) => (args.campaign === "none" ? !enrolledIds.has(c.id) : enrolledIds.has(c.id)))
-      .slice(0, clampLimit(args.limit)),
-  };
-}
-
-async function listContactsRaw(
-  db: SupabaseClient,
-  userId: string,
-  args: { query?: string; leadStatus?: string; companyId?: string; limit?: number; campaign?: string },
+  args: { query?: string; leadStatus?: string; companyId?: string; limit?: number },
 ) {
   let q = db
     .from("contacts")
-    .select("id, full_name, title, email, phone, linkedin_url, lead_status, email_status, created_at, prospect_companies!inner(id, name, domain, user_id)")
+    .select("id, full_name, title, email, phone, linkedin_url, lead_status, email_status, created_at, prospect_companies!contacts_prospect_company_id_fkey!inner(id, name, domain, user_id)")
     .eq("prospect_companies.user_id", userId)
     .is("archived_at", null)
     .order("created_at", { ascending: false })
@@ -120,7 +101,7 @@ async function listContactsRaw(
           leadStatus: c.lead_status,
           company: company ? { id: company.id, name: company.name, domain: company.domain } : null,
         };
-      }),
+      }).filter((contact) => hasEmailOrLinkedIn(contact)),
     };
   }
 
@@ -138,38 +119,7 @@ async function listContactsRaw(
         leadStatus: c.lead_status,
         company: company ? { id: company.id, name: company.name, domain: company.domain } : null,
       };
-    }),
-  };
-}
-
-export async function getSequenceOverview(db: SupabaseClient, userId: string, args: { sequenceId?: string }) {
-  if (!args.sequenceId) {
-    return { sequences: await listSequences(db, userId) };
-  }
-
-  const { data: sequence, error } = await db
-    .from("sequences")
-    .select("id, name, status, from_inbox_id, sequence_steps(id, step_order, delay_days, subject_template, body_template), enrollments(id, status, current_step, contacts(id, full_name, email))")
-    .eq("id", args.sequenceId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!sequence) return { error: "Sequence not found" };
-
-  return {
-    sequence: {
-      id: sequence.id,
-      name: sequence.name,
-      status: sequence.status,
-      fromInboxId: sequence.from_inbox_id,
-      steps: (sequence.sequence_steps ?? []).sort((a, b) => a.step_order - b.step_order),
-      enrollments: (sequence.enrollments ?? []).map((e) => ({
-        id: e.id,
-        status: e.status,
-        currentStep: e.current_step,
-        contact: e.contacts,
-      })),
-    },
+    }).filter((contact) => hasEmailOrLinkedIn(contact)),
   };
 }
 

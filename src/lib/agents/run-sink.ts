@@ -40,11 +40,13 @@ export async function createRun(db: SupabaseClient, input: { conversationId: str
   return data.id as string;
 }
 
-export async function openRunSink(db: SupabaseClient, runId: string): Promise<RunSink> {
-  // A run carried on by a later job starts from everything already reported, so its saved timeline is whole.
-  const { data: earlier } = await db.from("copilot_run_events").select("seq, data").eq("run_id", runId).order("seq", { ascending: true }).limit(20000);
+export async function openRunSink(db: SupabaseClient, runId: string, opts?: { fresh?: boolean }): Promise<RunSink> {
   let state: RunState = emptyRun();
-  for (const row of earlier ?? []) state = reduceRun(state, row.seq as number, row.data as RunEvent);
+  // Brand-new runs from the chat POST have no events yet — skip the replay query.
+  if (!opts?.fresh) {
+    const { data: earlier } = await db.from("copilot_run_events").select("seq, data").eq("run_id", runId).order("seq", { ascending: true }).limit(20000);
+    for (const row of earlier ?? []) state = reduceRun(state, row.seq as number, row.data as RunEvent);
+  }
   let seq = state.lastSeq;
   // Stop pressed while the run was still queued.
   const { data: row } = await db.from("copilot_runs").select("cancel_requested").eq("id", runId).maybeSingle();

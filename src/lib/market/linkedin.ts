@@ -1,5 +1,6 @@
 import { ACTORS, asNumber, asString, asIsoDate, runApifyActor } from "./apify";
 import type { DiscoveredMention, MarketComment, ScanDepth } from "./types";
+import { duckDuckGoSearch } from "@/lib/search/duckduckgo";
 
 interface LinkedInAuthor {
   name?: string;
@@ -18,24 +19,25 @@ interface LinkedInComment {
 
 interface LinkedInActorItem {
   type?: string;
-  linkedinUrl?: string;
   url?: string;
+  postUrl?: string;
+  text?: string;
   content?: string;
   author?: LinkedInAuthor;
-  postedAt?: { date?: string; timestamp?: number };
+  postedAt?: { date?: string; timestamp?: string };
   engagement?: { likes?: number; comments?: number; shares?: number };
-  postImages?: Array<{ url?: string }>;
   comments?: LinkedInComment[];
+  postImages?: Array<{ url?: string }>;
 }
 
 function toMention(item: LinkedInActorItem): DiscoveredMention | null {
-  if (item.type && item.type !== "post") return null;
-  const url = asString(item.linkedinUrl) || asString(item.url);
-  const content = (asString(item.content) || "").slice(0, 2000);
+  const url = asString(item.url) || asString(item.postUrl);
+  const content = (asString(item.text) || asString(item.content) || "").slice(0, 2000);
   if (!url || !content) return null;
 
-  const author = item.author ?? {};
-  const handle = asString(author.publicIdentifier) || asString(author.universalName);
+  const author = item.author || {};
+  const handle = asString(author.publicIdentifier) || asString(author.universalName) || null;
+
   const comments: MarketComment[] = Array.isArray(item.comments)
     ? item.comments
         .flatMap((comment) => {
@@ -69,20 +71,52 @@ function maxPosts(depth: ScanDepth): number {
   return depth === "deep" ? 12 : 8;
 }
 
-/** harvestapi/linkedin-post-search — keyword listening. Profile-posts cannot search text. */
+async function keylessLinkedInSearch(keyword: string, limit: number): Promise<DiscoveredMention[]> {
+  try {
+    const hits = await duckDuckGoSearch(`site:linkedin.com/posts OR site:linkedin.com/pulse "${keyword.trim()}"`, { limit });
+    return hits
+      .filter((h) => h.url.includes("linkedin.com"))
+      .map((h): DiscoveredMention => ({
+        platform: "linkedin",
+        url: h.url,
+        authorName: h.title.split(/[-–|]/)[0].trim() || "LinkedIn Author",
+        authorHandle: null,
+        authorAvatarUrl: null,
+        mediaUrl: null,
+        content: `${h.title}\n\n${h.snippet}`.slice(0, 2000),
+        postedAt: h.date ?? new Date().toISOString(),
+        engagement: { likes: 0, comments: 0, shares: 0 },
+        comments: [],
+        sentiment: null,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+/** harvestapi/linkedin-post-search — keyword listening. Profile-posts cannot search text. Falls back to keyless DuckDuckGo. */
 export async function searchLinkedInMentions(keyword: string, depth: ScanDepth = "broad"): Promise<DiscoveredMention[]> {
-  const items = await runApifyActor<LinkedInActorItem>(ACTORS.linkedinSearch, {
-    searchQueries: [keyword.trim().slice(0, 85)],
-    maxPosts: maxPosts(depth),
-    sortBy: depth === "deep" ? "date" : "relevance",
-    postedLimit: depth === "deep" ? "3months" : "month",
-    scrapeComments: false,
-    scrapeReactions: false,
-  });
-  return items.flatMap((item) => {
-    const mention = toMention(item);
-    return mention ? [mention] : [];
-  });
+  const token = process.env.APIFY_TOKEN?.trim();
+  if (!token) {
+    return keylessLinkedInSearch(keyword, maxPosts(depth));
+  }
+  try {
+    const items = await runApifyActor<LinkedInActorItem>(ACTORS.linkedinSearch, {
+      searchQueries: [keyword.trim().slice(0, 85)],
+      maxPosts: maxPosts(depth),
+      sortBy: depth === "deep" ? "date" : "relevance",
+      postedLimit: depth === "deep" ? "3months" : "month",
+      scrapeComments: false,
+      scrapeReactions: false,
+    });
+    const mentions = items.flatMap((item) => {
+      const mention = toMention(item);
+      return mention ? [mention] : [];
+    });
+    return mentions.length > 0 ? mentions : keylessLinkedInSearch(keyword, maxPosts(depth));
+  } catch {
+    return keylessLinkedInSearch(keyword, maxPosts(depth));
+  }
 }
 
 function linkedInTargetUrl(handle: string): string | null {
@@ -102,14 +136,22 @@ export async function linkedInAccountMentions(handle: string, depth: ScanDepth =
     throw new Error("LinkedIn account scans need a profile URL or public slug (e.g. linkedin.com/in/name).");
   }
 
-  const items = await runApifyActor<LinkedInActorItem>(ACTORS.linkedinProfile, {
-    targetUrls: [target],
-    maxPosts: maxPosts(depth),
-    scrapeComments: false,
-    scrapeReactions: false,
-  });
-  return items.flatMap((item) => {
-    const mention = toMention(item);
-    return mention ? [mention] : [];
-  });
+  const token = process.env.APIFY_TOKEN?.trim();
+  if (!token) {
+    return keylessLinkedInSearch(`"${handle}"`, maxPosts(depth));
+  }
+  try {
+    const items = await runApifyActor<LinkedInActorItem>(ACTORS.linkedinProfile, {
+      targetUrls: [target],
+      maxPosts: maxPosts(depth),
+      scrapeComments: false,
+      scrapeReactions: false,
+    });
+    return items.flatMap((item) => {
+      const mention = toMention(item);
+      return mention ? [mention] : [];
+    });
+  } catch {
+    return keylessLinkedInSearch(`"${handle}"`, maxPosts(depth));
+  }
 }

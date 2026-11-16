@@ -43,11 +43,11 @@ function ListCard({
         left: (
           <span className="flex min-w-0 items-center gap-2">
             <ContactAvatar name={contact.full_name} linkedinUrl={contact.linkedin_url} email={contact.email} photoUrl={contact.photo_url} className="size-5" />
-            <span className="truncate font-medium text-neutral-800">{contact.full_name || "—"}</span>
+            <span className="truncate font-medium text-neutral-800 dark:text-neutral-200">{contact.full_name || "—"}</span>
           </span>
         ),
         right: (
-          <span className="flex min-w-0 items-center gap-2 text-neutral-500">
+          <span className="flex min-w-0 items-center gap-2 text-neutral-500 dark:text-neutral-400">
             <CompanyFavicon domain={company.domain} name={company.name} className="size-4" />
             <span className="truncate">{company.name}</span>
           </span>
@@ -104,7 +104,7 @@ export function ProspectListsGrid({
           onOpen={() => onOpen(list.id)}
         />
       ))}
-      <div className="flex h-[260px] flex-col items-center justify-center gap-3 rounded-[10px] border border-dashed border-neutral-300 p-4">
+      <div className="flex h-[260px] flex-col items-center justify-center gap-3 rounded-[10px] border border-dashed border-neutral-300 p-4 dark:border-neutral-800">
         {naming ? (
           <form
             className="flex w-full flex-col gap-2"
@@ -122,17 +122,17 @@ export function ProspectListsGrid({
               className="input w-full py-1.5"
             />
             <div className="flex gap-2">
-              <button type="submit" disabled={!name.trim() || busy} className="rounded-full bg-neutral-900 px-3 py-1.5 text-[12px] font-medium text-white disabled:opacity-50">
+              <button type="submit" disabled={!name.trim() || busy} className="rounded-full bg-neutral-900 px-3 py-1.5 text-[12px] font-medium text-white disabled:opacity-50 dark:bg-white dark:text-neutral-900">
                 {busy ? "Creating…" : "Create list"}
               </button>
-              <button type="button" onClick={() => setNaming(false)} className="rounded-full px-3 py-1.5 text-[12px] font-medium text-neutral-600 hover:bg-neutral-100">
+              <button type="button" onClick={() => setNaming(false)} className="rounded-full px-3 py-1.5 text-[12px] font-medium text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800">
                 Cancel
               </button>
             </div>
           </form>
         ) : (
-          <button type="button" onClick={() => setNaming(true)} className="flex flex-col items-center gap-2 text-neutral-500 hover:text-neutral-900">
-            <span className="inline-flex size-9 items-center justify-center rounded-full border border-neutral-300">
+          <button type="button" onClick={() => setNaming(true)} className="flex flex-col items-center gap-2 text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100">
+            <span className="inline-flex size-9 items-center justify-center rounded-full border border-neutral-300 dark:border-neutral-700">
               <Plus className="size-4" />
             </span>
             <span className="text-[13px] font-medium">New list</span>

@@ -18,7 +18,7 @@ test("only allows safe links", () => {
   assert.equal(safeHref("data:text/html,x"), undefined);
   assert.equal(safeHref("//evil.com"), undefined);
   assert.equal(safeHref("https://apsurn.com/x"), "https://apsurn.com/x");
-  assert.equal(safeHref("/dashboard/library"), "/dashboard/library");
+  assert.equal(safeHref("/dashboard/prospects"), "/dashboard/prospects");
   assert.equal(safeHref("mailto:hello@apsurn.com"), "mailto:hello@apsurn.com");
 });
 

@@ -15,9 +15,6 @@ interface PlannedStep {
 const AGENT_LABEL: Record<string, string> = {
   researcher: "Researcher",
   signal_scout: "Signal Scout",
-  listener: "Listener",
-  writer: "Writer",
-  operator: "Operator",
 };
 
 export function PlanArtifact({

@@ -19,7 +19,7 @@ export const TOOLKIT_TOOLS: AiToolDeclaration[] = [
   {
     name: "web_search",
     description:
-      "Search Google and return real results (title, url, snippet, date). Use it to find companies, news, funding announcements, launches, job posts or people. Operators work: quotes, site:, OR. Takes 15-30 seconds, so make few, precise queries. Returns an error if search is down; never guess results.",
+      "Search Google and the web for general knowledge, specific questions, or articles. DO NOT use web_search for finding leads, sourcing prospects, or discovering companies matching an ICP — you MUST use run_signal_radar for all lead and company prospecting.",
     parameters: {
       type: "object",
       properties: {
@@ -80,7 +80,7 @@ export const TOOLKIT_TOOLS: AiToolDeclaration[] = [
   {
     name: "save_lead",
     description:
-      "Save ONE lead (company + person + a verified email + the reason to reach out) into a named prospect list. The email must have passed verify_email. Charges credits for the company. Returns saved true/false and the listId.",
+      "Save ONE lead into a named prospect list. The person must have a verified email or a LinkedIn profile (linkedin.com/in/…). An email must have passed verify_email. A company with neither is not a lead. Charges credits for the company.",
     parameters: {
       type: "object",
       properties: {
@@ -95,7 +95,7 @@ export const TOOLKIT_TOOLS: AiToolDeclaration[] = [
         reason: { type: "string", description: "Why this company and person, one sentence, from a source you read." },
         sourceUrl: { type: "string", description: "The page that shows the reason." },
       },
-      required: ["companyName", "domain", "fullName", "email", "reason"],
+        required: ["companyName", "domain", "fullName", "reason"],
     },
   },
   {

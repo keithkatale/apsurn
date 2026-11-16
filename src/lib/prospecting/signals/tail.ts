@@ -12,6 +12,7 @@ import { crawlSite } from "@/lib/scraper/crawl";
 import type { Pattern } from "../email-pattern";
 import { findKnownContact } from "../index-lookup";
 import { persistLead, type SaveLeadResult } from "../agent/persist";
+import { linkedInProfile } from "../reachable";
 import { learnEmailPattern, resolveEmail } from "../agent/shared";
 import type { AgentRunContext } from "../agent/context";
 import type { CandidateCompany, CandidateContact, ContactEvidence, ExtractedPerson } from "../types";
@@ -148,16 +149,17 @@ export async function enrichAndSave(
     if (!picked) return { saved: false, reason: "no decision maker found" };
     const { person, pattern } = picked;
     const resolved = await resolveEmail(person, lead.domain, pattern);
-    if (!resolved.email) return { saved: false, reason: "no email found" };
+    const linkedinUrl = linkedInProfile(person.profileUrl);
+    if (!resolved.email && !linkedinUrl) return { saved: false, reason: "no email or LinkedIn" };
     contact = {
       fullName: person.fullName,
       normalizedName: person.normalizedName,
       title: person.title,
       location: person.location,
       email: resolved.email,
-      emailStatus: resolved.status,
+      emailStatus: resolved.email ? resolved.status : "observed",
       phone: null,
-      linkedinUrl: person.profileUrl,
+      linkedinUrl,
       origin: resolved.origin,
       confidence: resolved.status === "verified" ? 0.85 : resolved.status === "accept_all" ? 0.7 : 0.5,
       evidence: [...signalEvidence, person.evidence],

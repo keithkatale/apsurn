@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+﻿import { createHmac, timingSafeEqual } from "node:crypto";
 import { appOrigin } from "./templates";
 
 function secret(): string {

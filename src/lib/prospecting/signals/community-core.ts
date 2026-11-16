@@ -17,6 +17,7 @@ const SOURCE_LABEL: Record<LaunchSource, string> = {
   hn_show: "Hacker News",
   product_hunt: "Product Hunt",
   betalist: "BetaList",
+  reddit: "Reddit",
 };
 
 export function sourceLabel(source: LaunchSource): string {
@@ -82,7 +83,9 @@ export function launchHeadline(launch: CommunityLaunch, why: string): string {
           ? "Launched on Hacker News (Show HN)"
           : launch.source === "product_hunt"
             ? "Launched on Product Hunt"
-            : "Listed on BetaList";
+            : launch.source === "reddit"
+              ? "Launched on Reddit"
+              : "Listed on BetaList";
   return why ? `${base}: ${why}` : base;
 }
 

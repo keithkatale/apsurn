@@ -112,8 +112,8 @@ export function WeeklyScheduleForm() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-50 mt-1.5 w-72 rounded-lg border border-neutral-200 bg-white p-3 shadow-lg">
-            <p className="mb-2 text-[12px] font-medium text-neutral-700">
+          <div className="absolute right-0 z-50 mt-1.5 w-72 rounded-lg border border-neutral-200 bg-white p-3 shadow-lg dark:border-neutral-800 dark:bg-neutral-900">
+            <p className="mb-2 text-[12px] font-medium text-neutral-700 dark:text-neutral-300">
               Automatically find new qualified accounts every week
             </p>
             <label className="mb-2 flex flex-col gap-1 text-[11px] text-neutral-500">

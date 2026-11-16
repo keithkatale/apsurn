@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 // A long run outlives one connection; the chat reconnects with ?after=<last seq> and carries on.
 export const maxDuration = 300;
 
-const POLL_MS = 250;
+const POLL_MS = 50;
 const PING_MS = 15_000;
 const DEAD_AFTER_MS = 90_000;
 

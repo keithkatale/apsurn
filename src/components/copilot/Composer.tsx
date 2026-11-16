@@ -49,10 +49,10 @@ export function Composer({ disabled, busy, onSend, onStop, stopping = false }: {
     : ({ type: "submit", "aria-label": busy ? "Waiting for response" : "Send message" } as const);
 
   const sendButtonClass = (extra: string) =>
-    `inline-flex size-8 shrink-0 items-center justify-center rounded-full transition ${
+    `inline-flex size-7 shrink-0 items-center justify-center rounded-full transition ${
       isSubmitDisabled
         ? "cursor-not-allowed bg-[var(--copilot-dropdown-hover)] text-[var(--copilot-muted)] opacity-60"
-        : "bg-neutral-900 text-white hover:opacity-90"
+        : "bg-neutral-900 text-white hover:opacity-90 dark:bg-white dark:text-neutral-900"
     } ${extra}`;
 
   return (
@@ -66,29 +66,21 @@ export function Composer({ disabled, busy, onSend, onStop, stopping = false }: {
             textareaRef.current?.focus();
           }}
         >
-          <div className="flex flex-col gap-1 p-2">
-            <div className="flex items-end gap-1">
-              <textarea
-                ref={textareaRef}
-                rows={1}
-                value={value}
-                disabled={disabled}
-                onChange={(e) => setValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask Copilot about your prospects, contacts, or sequences…"
-                aria-label="Message input"
-                className="copilot-prompt-input max-h-32 min-h-10 min-w-0 flex-1 resize-none bg-transparent px-3 py-2 text-[16px] leading-[24px] text-[var(--copilot-foreground)] outline-none placeholder:text-[var(--copilot-muted)] md:w-full"
-              />
-              <button {...buttonProps} disabled={isSubmitDisabled} className={sendButtonClass("mb-0.5 md:hidden")}>
-                {buttonIcon}
-              </button>
-            </div>
-
-            <div className="hidden items-center justify-end gap-2 px-0.5 pb-0.5 md:flex">
-              <button {...buttonProps} disabled={isSubmitDisabled} className={sendButtonClass("")}>
-                {buttonIcon}
-              </button>
-            </div>
+          <div className="flex items-center gap-1.5 px-3 py-1.5">
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={value}
+              disabled={disabled}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask Copilot about your prospects or contacts…"
+              aria-label="Message input"
+              className="copilot-prompt-input max-h-32 min-h-[32px] min-w-0 flex-1 resize-none bg-transparent py-1 text-sm leading-normal text-[var(--copilot-foreground)] outline-none placeholder:text-[var(--copilot-muted)]"
+            />
+            <button {...buttonProps} disabled={isSubmitDisabled} className={sendButtonClass("")}>
+              {buttonIcon}
+            </button>
           </div>
         </div>
       </div>

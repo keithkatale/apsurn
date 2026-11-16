@@ -23,7 +23,7 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
         onClick={() => setTheme(next)}
         aria-label={`Theme: ${theme}. Switch to ${next}`}
         title={`Theme: ${theme}`}
-        className="inline-flex size-9 items-center justify-center rounded-full text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
+        className="inline-flex size-8 items-center justify-center rounded-lg text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
       >
         <Icon className="size-4" />
       </button>
@@ -31,7 +31,7 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
   }
 
   return (
-    <div className="inline-flex rounded-lg border border-[#EEEEEE] p-0.5">
+    <div className="inline-flex rounded-lg border border-neutral-200 bg-neutral-100/70 p-0.5 dark:border-neutral-800 dark:bg-neutral-900">
       {OPTIONS.map((option) => {
         const Icon = option.icon;
         const selected = theme === option.id;
@@ -42,7 +42,9 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
             onClick={() => setTheme(option.id)}
             className={cn(
               "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors",
-              selected ? "bg-[#E8F1FC] text-[#4379EE]" : "text-neutral-500 hover:text-neutral-800",
+              selected
+                ? "bg-white text-neutral-900 shadow-2xs dark:bg-neutral-800 dark:text-neutral-100"
+                : "text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-200",
             )}
           >
             <Icon className="size-3.5" />

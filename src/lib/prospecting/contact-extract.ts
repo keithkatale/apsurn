@@ -2,6 +2,7 @@ import * as cheerio from "cheerio";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 import { getAiClient } from "@/lib/ai/openai";
 import type { SiteSnapshot } from "@/lib/scraper/crawl";
+import { founderLinkedIn } from "./sources/community-parse";
 import type { ContactEvidence, ExtractedPerson } from "./types";
 import { safeAiErrorMessage } from "@/lib/ai/errors";
 
@@ -63,6 +64,6 @@ Every person must be named in a supplied source. Contact values must appear verb
     const email = typeof value.email === "string" ? value.email.toLowerCase() : null;
     const phone = typeof value.phone === "string" ? parsePhoneNumberFromString(value.phone)?.number ?? null : null;
     const profile = typeof value.profileUrl === "string" ? value.profileUrl : null;
-    return [{ fullName, normalizedName: fullName.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(), title: typeof value.title === "string" ? value.title.trim().slice(0, 160) : null, location: typeof value.location === "string" ? value.location.trim().slice(0, 160) : null, sourceUrl, email: email && contacts.emails.has(email) ? email : null, phone: phone && contacts.phones.has(phone) ? phone : null, profileUrl: profile && contacts.profiles.has(profile) ? profile : null, evidence: { url: sourceUrl, excerpt: `${fullName}${value.title ? ` — ${String(value.title)}` : ""}`.slice(0, 500), observedAt: snapshot.fetchedAt, contentHash: snapshot.pages.find((page) => page.url === sourceUrl)?.contentHash, sourceType: "website" } }];
+    return [{ fullName, normalizedName: fullName.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(), title: typeof value.title === "string" ? value.title.trim().slice(0, 160) : null, location: typeof value.location === "string" ? value.location.trim().slice(0, 160) : null, sourceUrl, email: email && contacts.emails.has(email) ? email : null, phone: phone && contacts.phones.has(phone) ? phone : null, profileUrl: profile && contacts.profiles.has(profile) ? founderLinkedIn(profile) : null, evidence: { url: sourceUrl, excerpt: `${fullName}${value.title ? ` — ${String(value.title)}` : ""}`.slice(0, 500), observedAt: snapshot.fetchedAt, contentHash: snapshot.pages.find((page) => page.url === sourceUrl)?.contentHash, sourceType: "website" } }];
   }).slice(0, 12);
 }

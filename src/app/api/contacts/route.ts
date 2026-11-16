@@ -16,7 +16,7 @@ const requestSchema = z
     email: z.string().trim().max(200).nullable().optional(),
     phone: z.string().trim().max(60).nullable().optional(),
     linkedin_url: z.string().trim().max(400).nullable().optional(),
-    outreach: z.enum(["in_campaign", "not_in_campaign", "contacted", "not_contacted"]).optional(),
+    outreach: z.enum(["contacted", "not_contacted"]).optional(),
   })
   .refine(
     (body) =>

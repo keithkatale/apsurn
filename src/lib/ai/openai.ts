@@ -107,9 +107,20 @@ function createOpenRouterClient(): { ai: AiClient; model: string } {
  * debugging it. Re-add a fallback only once Vertex is confirmed reliable.
  */
 export async function getAiClient(): Promise<{ ai: AiClient; model: string }> {
-  const provider = await getActiveProvider();
+  // Env wins when set — skip the app_settings DB round-trip on every chat turn.
+  const envProvider = process.env.AI_PROVIDER?.trim();
+  const provider =
+    envProvider === "anthropic" || envProvider === "openai" || envProvider === "openrouter" || envProvider === "vertex"
+      ? envProvider
+      : await getActiveProvider();
 
   if (provider === "vertex") {
+    const envKey = process.env.GEMINI_API_KEY?.trim() || null;
+    const envJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim() || null;
+    // Local ADC / env project: no need to hit the DB for stored credentials.
+    if (envKey || envJson || process.env.GOOGLE_CLOUD_PROJECT?.trim()) {
+      return { ai: createVertexAiClient(envKey, envJson) as unknown as AiClient, model: getVertexModel() };
+    }
     const [geminiApiKey, serviceAccountJson] = await Promise.all([getGeminiApiKey(), getVertexServiceAccountJson()]);
     return { ai: createVertexAiClient(geminiApiKey, serviceAccountJson) as unknown as AiClient, model: getVertexModel() };
   }

@@ -97,7 +97,12 @@ export function AgentTimeline({
   const beforeAnswer = answerStart === -1 ? items : items.slice(0, answerStart);
   const cards = beforeAnswer.filter((item): item is Extract<TimelineItem, { kind: "artifact" }> => item.kind === "artifact");
   const work = beforeAnswer.filter((item) => item.kind !== "artifact");
-  const hasWork = work.some((item) => item.kind === "tool" || ("text" in item && item.text.trim() !== ""));
+  const hasWork = work.some(
+    (item) =>
+      item.kind === "tool" ||
+      (item.kind === "reasoning" && item.text.trim() !== "") ||
+      (item.kind === "text" && item.text.trim() !== ""),
+  );
   const lastToolId = [...work].reverse().find((item) => item.kind === "tool")?.id;
   const elapsed = useElapsed(startedAt, live);
 
@@ -112,28 +117,30 @@ export function AgentTimeline({
 
   return (
     <div className="cpt">
-      {live || hasWork ? (
-        <Reasoning isStreaming={live}>
+      {live && !hasWork && label ? (
+        <p className="cpt-status text-[13px] text-[var(--copilot-muted)]">
+          {label} <span className="tabular-nums opacity-70">{formatElapsed(elapsed)}</span>
+        </p>
+      ) : hasWork ? (
+        <Reasoning isStreaming={live && answer.length === 0}>
           <div className="flex items-center gap-2">
             <ReasoningTrigger getThinkingMessage={(streaming) => message(streaming)} />
           </div>
           <ReasoningContent>
-            {hasWork ? (
-              <WorkWindow live={live} itemCount={work.length}>
-                {work.map((item, index) => {
-                  if (item.kind === "reasoning") return item.text.trim() ? <Reasoning_ key={item.id} text={item.text} live={live && index === work.length - 1} /> : null;
-                  if (item.kind === "tool") return <ToolRow key={item.id} tool={item} latest={item.id === lastToolId} />;
-                  if (item.kind === "text" && item.text.trim()) {
-                    return (
-                      <div key={item.id} className="cpt-narration">
-                        <CopilotMarkdown content={item.text} caret={live && index === work.length - 1} />
-                      </div>
-                    );
-                  }
-                  return null;
-                })}
-              </WorkWindow>
-            ) : null}
+            <WorkWindow live={live} itemCount={work.length}>
+              {work.map((item, index) => {
+                if (item.kind === "reasoning") return item.text.trim() ? <Reasoning_ key={item.id} text={item.text} live={live && index === work.length - 1} /> : null;
+                if (item.kind === "tool") return <ToolRow key={item.id} tool={item} latest={item.id === lastToolId} />;
+                if (item.kind === "text" && item.text.trim()) {
+                  return (
+                    <div key={item.id} className="cpt-narration">
+                      <CopilotMarkdown content={item.text} caret={live && index === work.length - 1} />
+                    </div>
+                  );
+                }
+                return null;
+              })}
+            </WorkWindow>
           </ReasoningContent>
         </Reasoning>
       ) : null}

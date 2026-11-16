@@ -9,7 +9,11 @@ type CopilotThreads = {
   conversations: ConversationSummary[];
   loading: boolean;
   activeId: string | null;
+  /** Bumps when the user asks for a blank chat so the session remounts even if the URL stays /dashboard. */
+  newChatEpoch: number;
   select: (id: string | null) => void;
+  /** Remember the live conversation without rewriting the URL (first message on Home). */
+  adopt: (id: string) => void;
   refresh: () => Promise<void>;
   rename: (id: string, title: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
@@ -21,9 +25,23 @@ const CopilotThreadsContext = createContext<CopilotThreads | null>(null);
 export function CopilotThreadsProvider({ children }: { children: ReactNode }) {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  // /dashboard is a fresh task; /dashboard/tasks/<id> is an existing one.
-  const activeId = idFromPath(usePathname(), "/dashboard/tasks");
-  const setActiveId = useCallback((id: string | null) => pushPath(id ? `/dashboard/tasks/${id}` : "/dashboard"), []);
+  const pathId = idFromPath(usePathname(), "/dashboard/tasks");
+  // Chat id lives in React state — sending a message must not rewrite the URL to /dashboard/tasks/{id}.
+  const [activeId, setActiveIdState] = useState<string | null>(pathId);
+  const [newChatEpoch, setNewChatEpoch] = useState(0);
+  const select = useCallback((id: string | null) => {
+    setActiveIdState(id);
+    if (id === null) setNewChatEpoch((n) => n + 1);
+    // Keep the address bar on /dashboard. Deep links still seed activeId above on first load.
+    if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard/tasks/")) {
+      pushPath("/dashboard");
+    } else if (id === null) {
+      pushPath("/dashboard");
+    }
+  }, []);
+  const adopt = useCallback((id: string) => {
+    setActiveIdState(id);
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -35,6 +53,13 @@ export function CopilotThreadsProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }
   }, []);
+
+  // Deep links seed activeId above; keep the address bar on /dashboard so chat never remounts on a path change.
+  useEffect(() => {
+    if (pathId && typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard/tasks/")) {
+      pushPath("/dashboard");
+    }
+  }, [pathId]);
 
   // The nav lists tasks on every dashboard page, so load them once when the dashboard opens.
   const fetched = useRef(false);
@@ -62,14 +87,14 @@ export function CopilotThreadsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const remove = useCallback(async (id: string) => {
-    if (activeId === id) setActiveId(null);
+    if (activeId === id) select(null);
     setConversations((prev) => prev.filter((c) => c.id !== id));
     await fetch(`/api/copilot/chat?id=${id}`, { method: "DELETE" });
-  }, [activeId, setActiveId]);
+  }, [activeId, select]);
 
   const value = useMemo(
-    () => ({ conversations, loading, activeId, select: setActiveId, refresh, rename, remove }),
-    [conversations, loading, activeId, setActiveId, refresh, rename, remove],
+    () => ({ conversations, loading, activeId, newChatEpoch, select, adopt, refresh, rename, remove }),
+    [conversations, loading, activeId, newChatEpoch, select, adopt, refresh, rename, remove],
   );
 
   return <CopilotThreadsContext.Provider value={value}>{children}</CopilotThreadsContext.Provider>;

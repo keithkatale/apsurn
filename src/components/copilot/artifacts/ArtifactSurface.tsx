@@ -6,7 +6,6 @@ import { LeadTableArtifact } from "./LeadTableArtifact";
 import { DocumentArtifact } from "./DocumentArtifact";
 import { PlanRunner } from "./PlanRunner";
 import { RunLeadsArtifact } from "./RunLeadsArtifact";
-import { SequenceArtifact } from "./SequenceArtifact";
 import { UiArtifact } from "./UiArtifact";
 
 export function ArtifactSurface({
@@ -54,9 +53,7 @@ export function ArtifactSurface({
         )}
       </header>
       )}
-      {artifact.kind === "sequence" ? (
-        <SequenceArtifact artifact={artifact} expanded={expanded} onChange={onChange} />
-      ) : artifact.kind === "lead_table" ? (
+      {artifact.kind === "lead_table" ? (
         artifact.payload.presentation === "run" ? (
           <RunLeadsArtifact artifact={artifact} />
         ) : (

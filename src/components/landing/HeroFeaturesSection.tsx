@@ -127,7 +127,7 @@ function HeroLaunchFilm() {
 const CHIPS = [
   { label: "Draft my ICP", href: "#how-it-works" },
   { label: "Find verified emails", href: "#how-it-works" },
-  { label: "Write the sequence", href: "#how-it-works" },
+  { label: "Work lists with Copilot", href: "#how-it-works" },
 ];
 
 function domainFromInput(raw: string) {
@@ -253,7 +253,7 @@ export function HeroFilmSection() {
             How it works
           </h2>
           <p className="mt-3 text-[16px] text-[#605F5F] sm:text-[18px]">
-            From your URL to the first campaign in about 10 minutes.
+            From your URL to verified prospects in about 10 minutes.
           </p>
         </div>
         <HeroLaunchFilm />

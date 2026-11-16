@@ -9,7 +9,7 @@ import { spendCredits } from "@/lib/billing/credits";
 import { CREDIT_COSTS } from "@/lib/billing/plans";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { safeAiErrorMessage } from "@/lib/ai/errors";
-import { BACKGROUND_TURN_ROUNDS, runCopilotTurn } from "./copilot-turn";
+import { BACKGROUND_TURN_ROUNDS, CHAT_TURN_ROUNDS, runCopilotTurn } from "./copilot-turn";
 import { openRunSink } from "./run-sink";
 import { loadSteps, loadTask, setTaskStatus, type AgentStepRow, type AgentTaskRow } from "./tasks";
 import {
@@ -103,17 +103,16 @@ function errorCode(error: unknown): string | undefined {
  * A chat message's turn. It runs here, on the server, so it never depends on the browser staying connected; its
  * progress goes to the run's event log, which the open chat follows. The run always ends in a terminal state.
  */
-async function runChatTurn(db: SupabaseClient, wakeup: WakeupRow, runId: string, deadlineAt: number) {
-  const { conversation_id: conversationId, user_id: userId } = wakeup;
-  const sink = await openRunSink(db, runId);
+async function runChatTurn(
+  db: SupabaseClient,
+  input: { conversationId: string; userId: string; runId: string },
+  deadlineAt: number,
+  opts?: { fresh?: boolean },
+) {
+  const { conversationId, userId, runId } = input;
+  const sink = await openRunSink(db, runId, { fresh: opts?.fresh });
   try {
-    const result = await runCopilotTurn({ db, userId, conversationId, maxRounds: BACKGROUND_TURN_ROUNDS, deadlineAt, sink });
-    if (result.exhausted && !result.cancelled) {
-      // Out of time for this job, not out of work: the run stays open and a fresh job carries it on.
-      await sink.pause();
-      await db.from("copilot_wakeups").insert({ conversation_id: conversationId, user_id: userId, kind: "user_message", payload: { runId, resume: true } });
-      return;
-    }
+    const result = await runCopilotTurn({ db, userId, conversationId, maxRounds: CHAT_TURN_ROUNDS, deadlineAt, sink });
     await sink.finish(result.cancelled ? "cancelled" : "done");
   } catch (error) {
     const message = safeAiErrorMessage(error);
@@ -128,6 +127,15 @@ async function runChatTurn(db: SupabaseClient, wakeup: WakeupRow, runId: string,
     });
     await sink.finish("error", message);
   }
+}
+
+/** Hot path from POST /api/copilot/chat: start the model immediately, skip the wakeup queue. */
+export function startUserMessageTurn(input: { userId: string; conversationId: string; runId: string }): void {
+  const db = createAdminClient();
+  const deadlineAt = Date.now() + JOB_BUDGET_MS;
+  void runChatTurn(db, input, deadlineAt, { fresh: true }).catch((error) => {
+    console.error("[copilot-run] direct turn failed", input.runId, error);
+  });
 }
 
 /** Runs one wake-up. Throws only for unexpected failures; expected stops (budget, credits) are reported in chat. */
@@ -163,7 +171,7 @@ async function runWakeup(db: SupabaseClient, wakeup: WakeupRow, deadlineAt: numb
     // user_message: the user's text is already in the conversation.
     const runId = typeof wakeup.payload.runId === "string" ? wakeup.payload.runId : null;
     if (runId) {
-      await runChatTurn(db, wakeup, runId, deadlineAt);
+      await runChatTurn(db, { conversationId, userId, runId }, deadlineAt);
       return;
     }
     const plan = await activePlan(db, conversationId);

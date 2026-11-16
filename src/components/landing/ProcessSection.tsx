@@ -19,8 +19,8 @@ export function ProcessSection() {
     },
     {
       number: "03",
-      title: "Send from your Gmail",
-      description: "apsurn writes a personalized multi-step sequence for every lead. Edit any draft, then launch from your own inbox.",
+      title: "Work lists with Copilot",
+      description: "Saved companies land in prospect lists with evidence and confidence. Ask Copilot to find more, refine ICP, or dig into a contact.",
       image: "/landing/leads.png",
     },
   ];
@@ -35,7 +35,7 @@ export function ProcessSection() {
         <div className="mx-auto max-w-2xl text-center flex flex-col items-center gap-2.5 sm:gap-3">
           <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#4379EE]">How it works</p>
           <h2 className="text-2xl sm:text-4xl lg:text-[44px] font-bold tracking-tight text-neutral-950 font-heading leading-tight">
-            From your URL to booked calls in three steps
+            From your URL to verified leads in three steps
           </h2>
         </div>
 

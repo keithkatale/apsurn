@@ -1,38 +1,58 @@
-import { CREDIT_COSTS, SETUP_FREE_LEAD_CAP } from "@/lib/billing/plans";
-import { getBillingStatus } from "@/lib/billing/entitlements";
 import { setProspectCompanyStatus } from "@/lib/prospecting/mutations";
-import { icpSearchPaused } from "@/lib/prospecting/mode";
-import { parseTriggers } from "@/lib/prospecting/signals/triggers";
-import { startProspectingRun } from "@/lib/prospecting/start-run";
-import { awaitRun } from "./wakeups";
-import type { ProspectCriteria } from "@/lib/prospecting/types";
-import { publishArtifact } from "@/lib/copilot/artifacts";
-import { saveSourcedLeads, sourceLeads } from "./source-leads";
-import { listContacts, listProspectCompanies, stringList } from "./shared";
+import { generateCommercialLeadsTool, runSignalRadarTool, saveSourcedLeads, sourceLeads } from "./source-leads";
+import { listContacts, listProspectCompanies } from "./shared";
 import type { AgentToolContext, SpecialistModule } from "./types";
 
-const instruction = `You are Researcher, apsurn's prospecting specialist. You talk to Copilot, not the user.
+const instruction = `You are Researcher, apsurn's prospecting tools. Copilot calls these itself, one step at a time.
 
-You find companies that match the approved ICP and the decision-makers at those companies. Company search is a deterministic directory job — you start it and report status. You never invent company names, emails, or contact IDs.
-
-You may:
-- List prospected companies and contacts
-- Start a background prospecting run from the approved blueprint
-- Wait for a run you started and read what it saved (await_run)
-- Check or cancel an active run
-- Qualify or reject companies Copilot named
+You find companies that match the approved ICP and the decision-makers at those companies. You never invent company names, emails, or contact IDs.
 
 Rules:
 - When asked for recent, qualified, or all existing leads, call list_contacts immediately and return names.
-- When asked to find, get, or source leads/companies, default to start_signal_scout: read the value prop in the briefing, choose the buying signals that mean a company needs what the account sells, set keywords from the value prop and a recency window, and call it. Contacts and verified emails are still found through the data providers once a company shows a signal. Call start_prospecting_run (plain ICP/directory pull, no buying signal) only when the task explicitly asks for that. Omit industries, geographies, and personas — the tools read the approved blueprint.
-- When asked for leads with a reason to reach out now (just raised, hiring for a role, complaining about a problem, changed their site/tech), call start_signal_scout with the matching trigger(s) and a recency window. ICP database search is paused, so lead finding is signal-first and uses free public sources. Prefer launch (companies that just launched on Launch YC, Show HN, Product Hunt or BetaList) and accelerator (newly admitted to the latest Y Combinator batches) for early-stage prospects, hiring for companies building a team, and keep keywords to the topics the account sells into. Live triggers: launch, accelerator, hiring (open roles, including the Hacker News Who-is-hiring thread), funding_news (recent funding, launches, expansions, key executive hires — set eventKinds) and social_pain (LinkedIn posts where a named person describes a current problem; set keywords to the problem in their words; yield is low, so say so). tech_website is not live yet; say so plainly and offer a live one instead. A signal run finds only companies with dated evidence, so it may save fewer than asked — that is correct, not a failure.
+- When asked to find leads, discover leads, or find companies matching the approved ICP or intent signals, call run_signal_radar immediately. It scans Reddit buying threads, Hacker News launches, Ask HN tool discussions, and remote hiring expansion triggers 100% keyless, without external API keys or Apify, and presents an interactive table card that continues discovering up to 100s of prospects in the background.
+- When asked to find leads from a specific source, call source_leads for a named public place (YC, Remote OK, We Work Remotely, Reddit launches, OpenStreetMap, NPI, FMCSA) or use Copilot's web_search, web_scrape, find_people, find_email, and save_lead tools in this same turn. A row is a lead only after it has an email or a LinkedIn profile. Look for those two before saving.
 - When asked to source leads from a named place, registry, URL, or social network, call source_leads. Do not ask the user to confirm the place they already named.
-- Starting a run is not the end of the job. Right after start_prospecting_run or start_signal_scout returns a runId, call await_run with that runId. If it returns the finished outcome, report what was saved with real company and contact names, how well they fit, and any gaps. If it says the run is still going, say so in one sentence and stop: Copilot is woken automatically with the results when the run finishes. Never claim results you have not seen.
-- Never ask Copilot or the user which industries, geographies, personas, or company size to use. Those live on the blueprint and in the briefing.
-- If the tool says there is no approved blueprint or the ICP is empty, report that error and stop. Do not interview anyone.
+- Never ask which industries, geographies, personas, or company size to use. Those live on the blueprint.
 - Do not send email, write outreach copy, or rewrite the ICP.`;
 
 export const RESEARCHER_TOOLS = [
+  {
+    name: "run_signal_radar",
+    description:
+      "Scan public social media and organic intent channels (Reddit buying threads, Hacker News launches, Ask HN recommendations, remote hiring boards, and active web discussions) for companies and buyers showing active buying intent matching the user's ICP. Operates 100% keyless, never fails, and presents an interactive table card immediately with live background discovery up to 100s of prospects.",
+    parameters: {
+      type: "object",
+      properties: {
+        keywords: { type: "array", items: { type: "string" }, description: "Topics, problems, or software categories, e.g. ['CRM', 'inbound sales', 'developer tools']" },
+        competitors: { type: "array", items: { type: "string" }, description: "Competitors buyers might switch from, e.g. ['Salesforce', 'HubSpot']" },
+        limit: { type: "number", description: "Target count of prospects to find, e.g. 50, 100, 200. Default 50." },
+      },
+    },
+  },
+  {
+    name: "generate_commercial_leads",
+    description:
+      "Generate commercial real estate leads, commercial contractors with active building permits, and commercial land/property buyers with deed transfers. Up to 100 verified leads (or top 15 filtered leads) with phone, email, address, permit values, and licensing databases. 100% keyless and renders an interactive table card immediately in chat.",
+    parameters: {
+      type: "object",
+      properties: {
+        leadType: {
+          type: "string",
+          enum: ["all", "contractors", "buyers", "blended", "top"],
+          description: "Type of leads: 'all' (100 blended contractors + buyers), 'contractors' (active construction permits), 'buyers' (land purchases), 'blended' (dual match), 'top' (top 15 filtered leads). Default 'all'.",
+        },
+        states: {
+          type: "array",
+          items: { type: "string" },
+          description: "US state codes (e.g. ['CA', 'TX', 'FL', 'NY'])",
+        },
+        limit: {
+          type: "number",
+          description: "Number of leads (default 100 for all, 15 for top)",
+        },
+      },
+    },
+  },
   {
     name: "list_prospect_companies",
     description: "List prospected companies, optionally filtered by status or a name/domain search query.",
@@ -61,11 +81,11 @@ export const RESEARCHER_TOOLS = [
   {
     name: "source_leads",
     description:
-      "Pull a lead table from a named place: a registry (YC, NPI, FMCSA, Arbeitnow, Remotive), a URL, or X/Reddit/LinkedIn. Charges a sourcing credit, then shows an interactive table. Saving into Prospects is separate.",
+      "Pull a lead table from a named place: YC, Remote OK, We Work Remotely, Reddit launch posts, OpenStreetMap, NPI, FMCSA, Arbeitnow, Remotive, a URL, or X/LinkedIn mentions. Reddit and the job boards do not name a founder. OpenStreetMap returns name, website, phone and address. Charges a sourcing credit, then shows an interactive table. Saving into Prospects is separate.",
     parameters: {
       type: "object",
       properties: {
-        place: { type: "string", description: "Where to look, e.g. 'dental practices in Texas', 'https://example.com/directory', or 'Reddit founders hiring SDRs'." },
+        place: { type: "string", description: "Where to look, e.g. 'Remote OK', 'We Work Remotely', 'Reddit launches', 'OpenStreetMap dentists in Austin', 'dental practices in Texas', or a directory URL." },
         industries: { type: "array", items: { type: "string" } },
         geographies: { type: "array", items: { type: "string" } },
         personas: { type: "array", items: { type: "string" } },
@@ -85,64 +105,6 @@ export const RESEARCHER_TOOLS = [
         rowIds: { type: "array", items: { type: "string" } },
       },
       required: ["artifactId", "rowIds"],
-    },
-  },
-  {
-    name: "start_prospecting_run",
-    description:
-      "Enqueue a background prospecting run. Requires an approved blueprint. Searches the YC leads API first, then Icypeas if those industries or tags are not in that database. Uses supplied criteria, or derives them from the blueprint ICP/personas if omitted.",
-    parameters: {
-      type: "object",
-      properties: {
-        limit: { type: "number", description: "How many companies to find, 1–30, default 10" },
-        listName: { type: "string" },
-        industries: { type: "array", items: { type: "string" } },
-        geographies: { type: "array", items: { type: "string" } },
-        personas: { type: "array", items: { type: "string" } },
-        companySizeRange: { type: "string" },
-      },
-    },
-  },
-  {
-    name: "start_signal_scout",
-    description:
-      "Enqueue a background signal-based run: finds companies showing a recent, evidenced buying signal, then the decision maker and a verified email, and saves each with the reason to reach out. Requires an approved blueprint (industries, geography, personas). Live triggers: launch (public launches on Launch YC, Show HN, Product Hunt, BetaList), accelerator (newly admitted Y Combinator companies), hiring (open roles on public job boards and Hacker News) and funding_news (news about funding, launches, expansions, executive hires; set eventKinds). social_pain (public LinkedIn posts describing a current problem; keywords = the problem in the poster's words; few results expected). tech_website is accepted but skipped until released.",
-    parameters: {
-      type: "object",
-      properties: {
-        triggers: {
-          type: "array",
-          minItems: 1,
-          items: {
-            type: "object",
-            properties: {
-              type: { type: "string", enum: ["launch", "accelerator", "hiring", "funding_news", "social_pain", "tech_website"] },
-              roles: { type: "array", items: { type: "string" }, description: "Hiring: job-title fragments, e.g. ['SDR', 'account executive']. Omit to derive from the ICP personas." },
-              keywords: { type: "array", items: { type: "string" }, description: "funding_news: topics/markets to look in, e.g. ['fintech', 'devtools']. social_pain: the problem as people phrase it, e.g. ['struggling to find leads']." },
-              eventKinds: { type: "array", items: { type: "string", enum: ["funding", "launch", "expansion", "exec_hire"] }, description: "funding_news: which events count. Default funding." },
-              competitors: { type: "array", items: { type: "string" } },
-              recencyDays: { type: "number", description: "Only signals this recent count. Default 30, max 180." },
-            },
-            required: ["type"],
-          },
-        },
-        limit: { type: "number", description: "How many leads to save, 1–30, default 10" },
-        listName: { type: "string" },
-      },
-      required: ["triggers"],
-    },
-  },
-  {
-    name: "await_run",
-    description:
-      "Wait up to about a minute for a prospecting run you started, then return its result (counts, saved companies with fit and contacts, buying signals). If the run is still going it returns will_resume: Copilot will be woken with the results when it finishes. Call this right after start_prospecting_run or start_signal_scout.",
-    parameters: {
-      type: "object",
-      properties: {
-        runId: { type: "string" },
-        maxWaitSeconds: { type: "number", description: "Default and max 60." },
-      },
-      required: ["runId"],
     },
   },
   {
@@ -177,94 +139,6 @@ export const RESEARCHER_TOOLS = [
     },
   },
 ] as const;
-
-export function criteriaFromBlueprint(icp: unknown, personas: unknown): ProspectCriteria {
-  const icpObj = icp && typeof icp === "object" ? (icp as Record<string, unknown>) : {};
-  const personaRows = Array.isArray(personas) ? personas : [];
-  return {
-    industries: stringList(icpObj.industries, 8),
-    geographies: stringList(icpObj.geographies, 8),
-    personas: personaRows
-      .map((row) => (row && typeof row === "object" ? String((row as { title?: string }).title ?? "").trim() : ""))
-      .filter(Boolean)
-      .slice(0, 8),
-    companySizeRange: typeof icpObj.companySizeRange === "string" ? icpObj.companySizeRange : undefined,
-    minimumConfidence: 0.5,
-    requiredContactChannels: ["email"],
-  };
-}
-
-async function startRun(ctx: AgentToolContext, args: Record<string, unknown>) {
-  const { db, userId } = ctx;
-  const triggers = parseTriggers(args.triggers);
-  const { data: company } = await db
-    .from("companies")
-    .select("id, company_blueprints!inner(approved_at, icp, personas)")
-    .eq("user_id", userId)
-    .not("company_blueprints.approved_at", "is", null)
-    .maybeSingle();
-  if (!company) {
-    return { error: "No approved blueprint. The user must build and approve one in setup before Researcher can run." };
-  }
-
-  const blueprintRel = company.company_blueprints;
-  const blueprint = Array.isArray(blueprintRel) ? blueprintRel[0] : blueprintRel;
-  const fromBlueprint = criteriaFromBlueprint(blueprint?.icp, blueprint?.personas);
-  const industries = stringList(args.industries, 8).length ? stringList(args.industries, 8) : fromBlueprint.industries;
-  const geographies = stringList(args.geographies, 8).length ? stringList(args.geographies, 8) : fromBlueprint.geographies;
-  const personas = stringList(args.personas, 8).length ? stringList(args.personas, 8) : (fromBlueprint.personas ?? []);
-  const criteria: ProspectCriteria = {
-    industries,
-    geographies,
-    personas,
-    companySizeRange: typeof args.companySizeRange === "string" ? args.companySizeRange : fromBlueprint.companySizeRange,
-    minimumConfidence: 0.5,
-    requiredContactChannels: ["email"],
-    // A signal run needs dated evidence, which the YC directory can't give.
-    preferYcLeads: triggers.length === 0,
-    ...(triggers.length ? { triggers } : {}),
-  };
-  if (industries.length === 0 && personas.length === 0 && !icpSearchPaused()) {
-    return { error: "The approved blueprint has no industries or personas, so a run cannot start. The user needs to refine the blueprint in setup." };
-  }
-
-  const billing = await getBillingStatus(userId);
-  const requested = typeof args.limit === "number" ? Math.floor(args.limit) : 10;
-  if (!billing.active && requested > SETUP_FREE_LEAD_CAP) {
-    return { error: `Add a card to start with 50 free credits before finding more than ${SETUP_FREE_LEAD_CAP} leads.`, code: "billing_required" };
-  }
-  const limit = Math.min(30, Math.max(1, billing.active ? requested : Math.min(requested, SETUP_FREE_LEAD_CAP)));
-  const listName =
-    typeof args.listName === "string" && args.listName.trim()
-      ? args.listName.trim().slice(0, 120)
-      : `Copilot run — ${new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
-
-  const started = await startProspectingRun(db, {
-    userId,
-    companyId: company.id,
-    listName,
-    limit,
-    criteria,
-    agentTaskId: ctx.taskId,
-    conversationId: ctx.conversationId,
-  });
-  if (!started.ok) return { error: started.error };
-  const published = {
-    queued: true,
-    runId: started.runId,
-    listId: started.listId,
-    limit,
-    criteria,
-    creditsPerCompany: CREDIT_COSTS.prospect_company,
-    creditsNote: `Each company saved costs ${CREDIT_COSTS.prospect_company} credits.`,
-  };
-  const artifact = await publishArtifact(ctx, {
-    kind: "run",
-    title: listName,
-    payload: { ...published, status: "queued" },
-  });
-  return { ...published, artifactId: artifact?.id };
-}
 
 async function getRun(ctx: AgentToolContext, args: Record<string, unknown>) {
   let query = ctx.db
@@ -307,25 +181,14 @@ async function runTool(ctx: AgentToolContext, name: string, args: Record<string,
       return listProspectCompanies(ctx.db, ctx.userId, args);
     case "list_contacts":
       return listContacts(ctx.db, ctx.userId, args);
+    case "run_signal_radar":
+      return runSignalRadarTool(ctx, args);
+    case "generate_commercial_leads":
+      return generateCommercialLeadsTool(ctx, args);
     case "source_leads":
       return sourceLeads(ctx, args);
     case "save_sourced_leads":
       return saveSourcedLeads(ctx, String(args.artifactId ?? ""), Array.isArray(args.rowIds) ? (args.rowIds as string[]) : []);
-    case "start_prospecting_run":
-      return startRun(ctx, args);
-    case "start_signal_scout":
-      if (parseTriggers(args.triggers).length === 0) {
-        return { error: "start_signal_scout needs at least one valid trigger (launch, accelerator, hiring, funding_news, social_pain, tech_website)." };
-      }
-      return startRun(ctx, args);
-    case "await_run":
-      return awaitRun(ctx.db, {
-        runId: String(args.runId ?? ""),
-        userId: ctx.userId,
-        maxWaitSeconds: typeof args.maxWaitSeconds === "number" ? args.maxWaitSeconds : undefined,
-        deadlineAt: ctx.deadlineAt,
-        isCancelled: ctx.isCancelled,
-      });
     case "get_prospecting_run":
       return getRun(ctx, args);
     case "cancel_prospecting_run":

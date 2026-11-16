@@ -22,15 +22,15 @@ export async function ProspectsPage({
 
   if (!company) {
     return (
-      <div className="rounded-lg border border-dashed border-neutral-300 bg-white p-10 text-center">
-        <p className="font-medium text-neutral-900">No company blueprint yet</p>
-        <p className="mt-1 text-sm text-neutral-500">
+      <div className="rounded-lg border border-dashed border-neutral-300 bg-white p-10 text-center dark:border-neutral-800 dark:bg-neutral-900">
+        <p className="font-medium text-neutral-900 dark:text-neutral-100">No company blueprint yet</p>
+        <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
           Build and approve your company blueprint before running prospecting.
         </p>
         <div className="mt-4 flex justify-center">
           <Link
             href="/setup"
-            className="inline-flex items-center rounded-full bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+            className="inline-flex items-center rounded-full bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
           >
             Go to Setup
           </Link>

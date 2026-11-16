@@ -74,7 +74,7 @@ export function sourceOf(row: Pick<EventRow, "utm_source" | "referrer_host">): s
   return host || "Direct";
 }
 
-/** "/dashboard/campaigns/123" → "Campaigns"; everything outside the dashboard keeps its first segment. */
+/** "/dashboard/prospects/123" → "Prospects"; everything outside the dashboard keeps its first segment. */
 export function sectionOf(path: string): string {
   const clean = path.split("?")[0].split("#")[0];
   const parts = clean.split("/").filter(Boolean);

@@ -42,13 +42,23 @@ export function resolvedDark(preference: ThemePreference) {
   return preference === "dark" || (preference === "system" && systemPrefersDark());
 }
 
+/** Marketing + auth are light-first; dark only when the user chose dark (or system + prefers dark). */
+function marketingDark(preference: ThemePreference) {
+  try {
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored === null) return false;
+  } catch {
+    return false;
+  }
+  return resolvedDark(preference);
+}
+
 export function applyTheme(preference: ThemePreference, pathname?: string) {
   const path = pathname ?? (typeof window === "undefined" ? "" : window.location.pathname);
   const dark =
     isSetupPath(path) ||
-    (isLandingPath(path) || isAuthPath(path)
-      ? preference !== "light"
-      : isDashboardPath(path) && resolvedDark(preference));
+    isDashboardPath(path) ||
+    (isLandingPath(path) || isAuthPath(path) ? marketingDark(preference) : false);
   document.documentElement.classList.toggle("dark", dark);
   document.documentElement.classList.toggle("app-brand", isAppBrandPath(path));
 }
@@ -62,4 +72,4 @@ export function persistTheme(preference: ThemePreference) {
   applyTheme(preference);
 }
 
-export const THEME_BOOTSTRAP_SCRIPT = `(function(){try{var r=document.documentElement,p=location.pathname;if(p.indexOf("/p/")===0||p==="/demo/embed")return;r.classList.add("app-brand");if(p==="/setup"||p.indexOf("/setup/")===0){r.classList.add("dark");return;}if(p==="/"||p===""||p==="/login"||p==="/signup"){if(localStorage.getItem("${THEME_STORAGE_KEY}")!=="light")r.classList.add("dark");return;}if(p!=="/dashboard"&&p.indexOf("/dashboard/")!==0)return;var t=localStorage.getItem("${THEME_STORAGE_KEY}");var d=t==="dark"||t===null||(t!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);if(d)r.classList.add("dark");}catch(e){}})();`;
+export const THEME_BOOTSTRAP_SCRIPT = `(function(){try{var r=document.documentElement,p=location.pathname;if(p.indexOf("/p/")===0||p==="/demo/embed")return;r.classList.add("app-brand");if(p==="/setup"||p.indexOf("/setup/")===0||p==="/dashboard"||p.indexOf("/dashboard/")===0){r.classList.add("dark");return;}if(p==="/"||p===""||p==="/login"||p==="/signup"){var t=localStorage.getItem("${THEME_STORAGE_KEY}");var d=t==="dark"||(t==="system"&&matchMedia("(prefers-color-scheme: dark)").matches);if(d)r.classList.add("dark");return;}}catch(e){}})();`;

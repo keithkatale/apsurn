@@ -146,8 +146,8 @@ export function ProspectsWorkspace({
   return (
     <div className="flex h-full min-h-0 flex-1 overflow-hidden">
       <div
-        className={`shrink-0 overflow-hidden bg-white md:transition-[width] md:duration-300 md:ease-out ${
-          panelOpen ? "fixed inset-0 z-40 md:static md:w-[420px] md:border-r md:border-neutral-200" : "w-0"
+        className={`shrink-0 overflow-hidden bg-white dark:bg-[#0a0a0a] md:transition-[width] md:duration-300 md:ease-out ${
+          panelOpen ? "fixed inset-0 z-40 md:static md:w-[420px] md:border-r md:border-neutral-200 dark:md:border-neutral-800" : "w-0"
         }`}
       >
         <div className="relative flex h-full w-full flex-col md:w-[420px]">
@@ -155,7 +155,7 @@ export function ProspectsWorkspace({
             type="button"
             onClick={() => setPanelOpen(false)}
             aria-label="Collapse panel"
-            className="absolute right-3 top-3 z-10 rounded-full p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
+            className="absolute right-3 top-3 z-10 rounded-full p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             <X className="size-4" />
           </button>
@@ -196,7 +196,7 @@ export function ProspectsWorkspace({
                   type="button"
                   aria-label="Search prospects"
                   onClick={() => setSearchOpen(true)}
-                  className="rounded-full p-2 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
+                  className="rounded-full p-2 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
                 >
                   <Search className="size-4" />
                 </button>
@@ -210,12 +210,12 @@ export function ProspectsWorkspace({
                     setOpenList(null);
                     setSelected(new Set());
                   }}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium text-neutral-600 hover:bg-neutral-100"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
                 >
                   <ChevronLeft className="size-3.5" />
                   Lists
                 </button>
-                <p className="min-w-0 truncate text-[14px] font-semibold text-neutral-900">{currentList?.name ?? "All prospects"}</p>
+                <p className="min-w-0 truncate text-[14px] font-semibold text-neutral-900 dark:text-neutral-100">{currentList?.name ?? "All prospects"}</p>
                 {currentList ? <span className="shrink-0 text-[12px] text-neutral-400">{LIST_SOURCE_LABEL[currentList.source]}</span> : null}
               </div>
             ) : null}
@@ -235,7 +235,7 @@ export function ProspectsWorkspace({
                     onClick={() => void verifyAll()}
                     disabled={verifying}
                     title="Check every email before it is ever sent to"
-                    className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 px-3 py-1.5 text-[12px] font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-60"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 px-3 py-1.5 text-[12px] font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-60 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-800"
                   >
                     {verifying ? <Loader2 className="size-3.5 animate-spin" /> : <MailCheck className="size-3.5" />}
                     {verifying ? "Verifying…" : "Verify emails"}
@@ -255,8 +255,8 @@ export function ProspectsWorkspace({
           ) : (
             <div className="flex flex-col gap-3">
               {qualified.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-neutral-300 bg-white p-8 text-center">
-                  <p className="text-sm text-neutral-500">
+                <div className="rounded-lg border border-dashed border-neutral-300 bg-white p-8 text-center dark:border-neutral-800 dark:bg-[#121212]">
+                  <p className="text-sm text-neutral-500 dark:text-neutral-400">
                     {active.length === 0 ? "No prospects have been generated yet. Click “Find prospects” to build your first list." : "Nothing in this list yet. Open All prospects and pick a list for a contact in the List column."}
                   </p>
                 </div>
@@ -276,8 +276,8 @@ export function ProspectsWorkspace({
       </div>
 
       <div
-        className={`shrink-0 overflow-hidden bg-white md:transition-[width] md:duration-300 md:ease-out ${
-          profileRow ? "fixed inset-0 z-40 md:static md:w-[420px] md:border-l md:border-neutral-200" : "w-0"
+        className={`shrink-0 overflow-hidden bg-white dark:bg-[#0a0a0a] md:transition-[width] md:duration-300 md:ease-out ${
+          profileRow ? "fixed inset-0 z-40 md:static md:w-[420px] md:border-l md:border-neutral-200 dark:md:border-neutral-800" : "w-0"
         }`}
       >
         <div className="h-full w-full md:w-[420px]">

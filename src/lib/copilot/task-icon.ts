@@ -1,10 +1,9 @@
 /**
  * A stable icon for a Copilot task, picked by keyword from its title + first
- * message — same deterministic, free, instant approach as campaign icons
- * (src/lib/campaigns/icon.ts): no AI call, no drawn SVG, just a Material
- * Symbols ligature chosen from the shared, already-font-loaded set.
+ * message: no AI call, no drawn SVG, just a Material Symbols ligature chosen
+ * from the shared, already-font-loaded set.
  */
-import { MATERIAL_ICON_NAMES, type MaterialIconName } from "@/lib/campaigns/icon";
+import { MATERIAL_ICON_NAMES, type MaterialIconName } from "@/lib/ui/material-icons";
 
 const ICON_SET = new Set<string>(MATERIAL_ICON_NAMES);
 

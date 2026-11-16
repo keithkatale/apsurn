@@ -4,8 +4,6 @@ import { saveCanonicalContact } from "@/lib/prospecting/pipeline";
 import { claimDueSchedules } from "@/lib/prospecting/scheduling";
 import { startProspectingRun } from "@/lib/prospecting/start-run";
 import type { CandidateCompany } from "@/lib/prospecting/types";
-import { runOutreachSendPass } from "@/lib/outreach/pass";
-import { scanAllActiveKeywords, scanAllFollowedAccounts } from "@/lib/market/mutations";
 
 export async function refreshDueProspectIndex() {
   const db = createAdminClient();
@@ -99,29 +97,4 @@ export async function runDueScheduledProspecting() {
     else console.error("[prospecting-schedule] failed to start run", schedule.id, result.error);
   }
   return { claimed: due.length, started };
-}
-
-export async function scanAllCompaniesMarket() {
-  const db = createAdminClient();
-  const [{ data: keywordCompanyIds }, { data: accountCompanyIds }] = await Promise.all([
-    db.from("market_keywords").select("company_id").eq("is_active", true),
-    db.from("market_accounts").select("company_id").eq("is_followed", true),
-  ]);
-  const distinctCompanyIds = [
-    ...new Set([...(keywordCompanyIds ?? []), ...(accountCompanyIds ?? [])].map((row) => row.company_id as string)),
-  ];
-
-  let totalSaved = 0;
-  for (const companyId of distinctCompanyIds) {
-    const [{ saved: keywordSaved }, { saved: accountSaved }] = await Promise.all([
-      scanAllActiveKeywords(db, companyId),
-      scanAllFollowedAccounts(db, companyId),
-    ]);
-    totalSaved += keywordSaved + accountSaved;
-  }
-  return { companies: distinctCompanyIds.length, saved: totalSaved };
-}
-
-export async function runOutreachCron(userId?: string) {
-  return runOutreachSendPass({ userId });
 }

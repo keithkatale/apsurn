@@ -7,6 +7,7 @@ import { persistLead } from "@/lib/prospecting/agent/persist";
 import type { AgentRunContext } from "@/lib/prospecting/agent/context";
 import { recordSignals } from "@/lib/prospecting/signals/run";
 import { normalizeName } from "@/lib/prospecting/signals/tail";
+import { linkedInProfile } from "@/lib/prospecting/reachable";
 import type { CandidateCompany, CandidateContact } from "@/lib/prospecting/types";
 import type { AgentToolContext } from "./types";
 
@@ -87,21 +88,30 @@ export async function saveLeads(ctx: AgentToolContext, args: Record<string, unkn
   const results: Array<Record<string, unknown>> = [];
   for (const row of leads) {
     const domain = String(row.domain ?? "").trim().toLowerCase();
-    const email = String(row.email ?? "").trim().toLowerCase();
+    const emailRaw = String(row.email ?? "").trim().toLowerCase();
+    const linkedinUrl = linkedInProfile(typeof row.linkedinUrl === "string" ? row.linkedinUrl : null);
     const fullName = String(row.fullName ?? "").trim();
     const companyName = String(row.companyName ?? domain).trim();
-    if (!domain || !fullName || !email) {
-      results.push({ company: companyName, saved: false, reason: "company domain, person and email are required" });
+    if (!domain || !fullName || (!emailRaw && !linkedinUrl)) {
+      results.push({ company: companyName, saved: false, reason: "a lead needs a person plus an email or a LinkedIn profile" });
       continue;
     }
-    // Only a mailbox confirmed in this session (or re-confirmed now) may enter the database.
-    if (!isRemembered(ctx.userId, email)) {
-      const check = await verifyEmail(email);
-      if (check.status !== "verified") {
-        results.push({ company: companyName, saved: false, reason: "that email could not be confirmed as a real mailbox" });
+    let email: string | null = null;
+    if (emailRaw) {
+      // Only a mailbox confirmed in this session (or re-confirmed now) may enter the database.
+      if (!isRemembered(ctx.userId, emailRaw)) {
+        const check = await verifyEmail(emailRaw);
+        if (check.status === "verified") {
+          remember(ctx.userId, emailRaw);
+          email = emailRaw;
+        }
+      } else {
+        email = emailRaw;
+      }
+      if (!email && !linkedinUrl) {
+        results.push({ company: companyName, saved: false, reason: "that email could not be confirmed as a real mailbox, and there is no LinkedIn profile" });
         continue;
       }
-      remember(ctx.userId, email);
     }
     const reason = String(row.reason ?? "").trim();
     const signalUrl = typeof row.signalUrl === "string" && row.signalUrl ? row.signalUrl : `https://${domain}`;
@@ -125,9 +135,9 @@ export async function saveLeads(ctx: AgentToolContext, args: Record<string, unkn
       title: typeof row.title === "string" ? row.title : null,
       location: null,
       email,
-      emailStatus: "verified",
+      emailStatus: email ? "verified" : "observed",
       phone: null,
-      linkedinUrl: typeof row.linkedinUrl === "string" ? row.linkedinUrl : null,
+      linkedinUrl,
       origin: "public",
       confidence: 0.85,
       evidence: [{ url: signalUrl, excerpt: reason.slice(0, 500) || fullName, observedAt: now }],

@@ -17,7 +17,7 @@ import { findCompaniesByIcp, translateIcypeasGeography, type FoundCompany } from
 import { translateGeoTokens } from "../sources/vocabulary";
 import { matchIcypeasIndustries } from "../icypeas-industries";
 import { findAtsBoard, matchRoles } from "../sources/ats";
-import { hnWhoIsHiringCompanies } from "../sources/community";
+import { hnWhoIsHiringCompanies, remoteOkCompanies, weWorkRemotelyCompanies } from "../sources/community";
 import { icpSearchPaused } from "../mode";
 import { arbeitnowCompanies, remotiveCompanies } from "../sources/startups";
 import { roleKeywordsFor } from "../sources/vocabulary";
@@ -101,6 +101,8 @@ export async function collectJobBoardSignals(opts: {
     remotiveCompanies({ keywords, limit: want }),
     // Startups announcing their own roles on the monthly Hacker News thread: free, dated, and in their own words.
     hnWhoIsHiringCompanies({ keywords, recencyDays, limit: want }),
+    remoteOkCompanies(keywords, want),
+    weWorkRemotelyCompanies(keywords, want),
   ]);
   const postings = boards.flatMap((board) => (board.status === "fulfilled" ? board.value : []));
 
@@ -115,7 +117,8 @@ export async function collectJobBoardSignals(opts: {
 
   const resolved = await mapPool(fresh, DOMAIN_LOOKUP_CONCURRENCY, shouldStop, async (posting) => {
     // Sources that name the company's own website (Hacker News posts) skip the web-search lookup.
-    const domain = posting.domain ?? (await resolveCompanyDomain(posting.name));
+    const namesItsSite = posting.source === "Remote OK" || posting.source === "We Work Remotely" || posting.source === "Hacker News";
+    const domain = posting.domain ?? (namesItsSite ? null : await resolveCompanyDomain(posting.name));
     if (!domain || known.has(domain)) return null;
     const age = Math.max(0, Math.round((now - Date.parse(posting.signalDate ?? "")) / DAY_MS));
     const title = posting.signalEvidence?.replace(/^Hiring:\s*/, "").replace(/^"|"$/g, "") ?? "a role";

@@ -17,7 +17,7 @@ export function createBatcher(options: {
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
 }): Batcher {
-  const delayMs = options.delayMs ?? 250;
+  const delayMs = options.delayMs ?? 50;
   const setTimer = options.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
   const clearTimer = options.clearTimer ?? ((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>));
   let buffer: RunEvent[] = [];

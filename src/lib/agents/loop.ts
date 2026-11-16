@@ -20,6 +20,8 @@ export interface LoopToolCall {
 
 export interface LoopToolResult extends LoopToolCall {
   result: unknown;
+  /** Gemini thought signature for this call, when the model sent one. */
+  thoughtSignature?: string;
 }
 
 export interface RunAgentLoopOptions {
@@ -219,6 +221,11 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<RunAge
 
     // Outputs go back in the model's original call order.
     const byId = new Map(roundResults.map((result) => [result.id, result]));
+    for (const raw of rawCalls) {
+      const signature = (raw as { thought_signature?: unknown }).thought_signature;
+      const result = byId.get(raw.call_id);
+      if (result && typeof signature === "string" && signature) result.thoughtSignature = signature;
+    }
     for (const raw of rawCalls) {
       const result = byId.get(raw.call_id);
       input.push({

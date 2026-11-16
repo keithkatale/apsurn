@@ -76,7 +76,7 @@ function uid(): string {
 
 const COPILOT_STARTERS = [
   { label: "Find 10 leads for my ICP", prompt: "Find 10 leads that match my approved ICP" },
-  { label: "Create a sequence for my ICP", prompt: "Create a sequence for my ICP" },
+  { label: "Find leads for my ICP", prompt: "Find leads that match my approved ICP" },
   { label: "Show leads not in a campaign", prompt: "Which prospects are not in a campaign yet?" },
   { label: "Search the web for startups that just raised", prompt: "Search the web for B2B SaaS startups that just raised a seed round and read the top result" },
 ] as const;
@@ -85,6 +85,8 @@ export interface CopilotChatProps {
   buildContext?: () => string;
   /** When provided, the conversation is controlled by the parent (e.g. a sidebar). Switching it remounts the chat via `key` below. */
   conversationId?: string | null;
+  /** Increments on New thread so the chat remounts without a URL change. */
+  newChatEpoch?: number;
   onConversationIdChange?: (id: string) => void;
   onTurnComplete?: () => void;
   /** Overrides COPILOT_STARTERS in the empty state — e.g. prompts generated from the account's actual data instead of generic ones. */
@@ -102,25 +104,22 @@ export interface CopilotChatProps {
 }
 
 /**
- * Thin wrapper: remounting on an externally-initiated conversationId change
- * (a sidebar click, "New thread") gives that conversation fresh local state
- * for free instead of resetting it by hand. When the session generates its
- * OWN id (the first send of a new thread), `ownedId` is updated to match
- * without bumping `key` — remounting there would wipe the turn that's still
- * streaming, since the id arrives via `meta` long before the DB has the full
- * turn to reload. This is the documented React pattern for "adjust state
- * when a prop changes" (a conditional setState during render, not an
- * effect) — see https://react.dev/learn/you-might-not-need-an-effect.
+ * Remount when the sidebar picks another thread, or when New thread bumps
+ * newChatEpoch. First send keeps the session mounted and does not touch the URL.
  */
 export function CopilotChat(props: CopilotChatProps = {}) {
-  const { conversationId } = props;
-  const [session, setSession] = useState<{ key: number; ownedId: string | null }>(() => ({
+  const { conversationId, newChatEpoch = 0 } = props;
+  const [session, setSession] = useState<{ key: number; ownedId: string | null; epoch: number }>(() => ({
     key: 0,
     ownedId: conversationId ?? null,
+    epoch: newChatEpoch,
   }));
 
-  if (conversationId !== undefined && conversationId !== session.ownedId) {
-    setSession({ key: session.key + 1, ownedId: conversationId });
+  if (newChatEpoch !== session.epoch) {
+    setSession({ key: session.key + 1, ownedId: null, epoch: newChatEpoch });
+  } else if (conversationId && conversationId !== session.ownedId) {
+    // Sidebar opened an existing task. Ignore parent null after our own first send.
+    setSession({ key: session.key + 1, ownedId: conversationId, epoch: session.epoch });
   }
 
   return (
@@ -263,27 +262,21 @@ function CopilotChatSession({
   }, []);
 
   const onRunFinished = useCallback(
-    async (finished: RunState) => {
-      // Swap the live view for the saved message in one step so nothing flashes or disappears.
-      const id = activeIdRef.current;
-      // Cards the run delivered whole stay usable even if the reload is slow.
+    (finished: RunState) => {
+      // Promote the live timeline into a saved assistant row — no full history refetch.
       const delivered = finished.items.filter((item): item is Extract<TimelineItem, { kind: "artifact" }> => item.kind === "artifact");
       if (delivered.length > 0) {
         setArtifacts((prev) => ({ ...Object.fromEntries(delivered.map((item) => [item.id, item.artifact as unknown as CopilotArtifact])), ...prev }));
       }
-      try {
-        if (!id) throw new Error("no conversation");
-        const loaded = await loadConversation(id);
-        if (!loaded.ok) throw new Error("reload failed");
-      } catch {
-        // Keep what was watched rather than losing it.
+      if (finished.items.length > 0 || finished.error) {
         setMessages((prev) => [...prev, { id: uid(), role: "model", items: finished.items, error: finished.error ?? undefined }]);
       }
       setActiveRunId(null);
+      setRunSeed(null);
       setStopping(false);
       onTurnComplete?.();
     },
-    [loadConversation, onTurnComplete],
+    [onTurnComplete],
   );
 
   const run = useRunStream(activeRunId, onRunFinished, runSeed);
@@ -356,7 +349,10 @@ function CopilotChatSession({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Copilot request failed");
-      if (!activeIdRef.current && data.conversationId) setActiveId(data.conversationId);
+      // Claim ownership before URL/path updates so CopilotChat never remounts mid-stream.
+      if (typeof data.conversationId === "string" && data.conversationId && !activeIdRef.current) {
+        setActiveId(data.conversationId);
+      }
       setRunSeed(null);
       setActiveRunId(data.runId);
     } catch (err) {
@@ -372,7 +368,8 @@ function CopilotChatSession({
     await fetch(`/api/copilot/runs/${activeRunId}/stop`, { method: "POST" }).catch(() => undefined);
   }
 
-  const liveLabel = stopping ? "Stopping…" : starting && !activeRunId ? "Starting…" : run.label || "Working…";
+  // No staged "Starting / Thinking / Working" labels — only real tool status from the run.
+  const liveLabel = stopping ? "Stopping…" : run.label;
 
   return (
     <div className="copilot-panel relative flex h-full w-full">
@@ -404,7 +401,7 @@ function CopilotChatSession({
                 if (m.role === "user") {
                   return (
                     <div key={m.id} className="flex justify-end">
-                      <div className="copilot-user-bubble w-fit max-w-[85%] rounded-2xl rounded-br-md px-3 py-2 text-[16px] leading-snug">{m.content}</div>
+                      <div className="copilot-user-bubble w-fit max-w-[85%] rounded-xl rounded-br-sm px-3.5 py-2 text-sm leading-relaxed">{m.content}</div>
                     </div>
                   );
                 }

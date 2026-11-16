@@ -16,7 +16,7 @@ export function PricingSection() {
       "2,000 AI credits a month",
       "ICP blueprint from your website",
       "Verified prospects",
-      "Personalized email sequences",
+      "Copilot + prospect lists",
     ],
     growth: [
       "Everything in Startup",
@@ -27,8 +27,8 @@ export function PricingSection() {
     pro: PLANS.pro.features,
   };
   const landingCopy: Record<"startup" | "growth", string> = {
-    startup: "For founders sending their first outbound.",
-    growth: "For founders running outbound every week.",
+    startup: "For founders finding their first ICP leads.",
+    growth: "For founders prospecting every week.",
   };
 
   const plans = (["startup", "growth"] as const).map((key) => {
@@ -52,7 +52,7 @@ export function PricingSection() {
     try {
       // Pricing lives on the marketing site — send visitors through signup first.
       trackGoal("start_trial", { plan });
-      window.location.href = `/signup?next=${encodeURIComponent(`/dashboard/campaigns?trial=${plan}`)}`;
+      window.location.href = `/signup?next=${encodeURIComponent(`/dashboard?trial=${plan}`)}`;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start trial");
       setBusyPlan(null);

@@ -1,7 +1,7 @@
 import type { AiToolDeclaration } from "@/lib/ai/openai";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export const SPECIALIST_IDS = ["researcher", "listener", "writer", "operator"] as const;
+export const SPECIALIST_IDS = ["researcher"] as const;
 export type SpecialistId = (typeof SPECIALIST_IDS)[number];
 export type AgentId = "copilot" | SpecialistId;
 
@@ -15,7 +15,7 @@ export interface AgentDefinition {
   starter: string;
 }
 
-export type ArtifactKind = "sequence" | "lead_table" | "run" | "ui" | "document" | "plan";
+export type ArtifactKind = "lead_table" | "run" | "ui" | "document" | "plan";
 
 export interface CopilotArtifact {
   id: string;

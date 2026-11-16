@@ -2,9 +2,6 @@ import type { SpecialistId } from "./types";
 
 export const AGENT_DISPLAY_NAME: Record<SpecialistId, string> = {
   researcher: "Researcher",
-  listener: "Listener",
-  writer: "Writer",
-  operator: "Operator",
 };
 
 export const AGENT_TOOL_LABELS: Record<string, string> = {
@@ -17,9 +14,9 @@ export const AGENT_TOOL_LABELS: Record<string, string> = {
   save_lead: "Saving a lead",
   present_leads: "Putting the leads together",
   render_ui: "Building a view",
-  list_documents: "Looking through the Library",
+  list_documents: "Looking through documents",
   get_document: "Reading a document",
-  save_document: "Saving to the Library",
+  save_document: "Saving a document",
   delete_document: "Deleting a document",
   publish_page: "Updating page sharing",
   get_blueprint: "Reading the blueprint",
@@ -34,26 +31,9 @@ export const AGENT_TOOL_LABELS: Record<string, string> = {
   get_prospecting_run: "Checking prospecting run",
   cancel_prospecting_run: "Cancelling prospecting run",
   set_company_status: "Updating company status",
-  list_market_keywords: "Listing tracked keywords",
-  list_market_accounts: "Listing social accounts",
-  list_market_mentions: "Listing mentions",
-  add_market_keyword: "Adding a keyword",
-  set_keyword_active: "Updating a keyword",
-  follow_account_by_handle: "Following an account",
-  update_market_account_follow: "Updating follow status",
-  update_market_mention: "Updating a mention",
-  trigger_market_scan: "Starting a market scan",
-  convert_mention_to_prospect: "Saving a mention as a lead",
-  get_sequence_overview: "Checking sequences",
-  draft_outreach_email: "Drafting an email",
   update_contact_status: "Updating contact status",
   archive_contacts: "Archiving contacts",
   archive_prospect_companies: "Archiving companies",
-  create_sequence: "Creating sequence",
-  enroll_contacts: "Enrolling contacts",
-  activate_sequence: "Activating sequence",
-  run_send_pass: "Running a send pass",
-  send_email_now: "Sending an email",
 };
 
 /** Copilot does all the work itself now, so no tool is attributed to a sub-agent. */

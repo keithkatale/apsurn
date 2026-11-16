@@ -13,8 +13,8 @@ test("sourceOf prefers utm, then the referring site, else Direct", () => {
 });
 
 test("sectionOf names the dashboard section a path belongs to", () => {
-  assert.equal(sectionOf("/dashboard/campaigns/abc"), "Campaigns");
-  assert.equal(sectionOf("/dashboard/market-insights"), "Market insights");
+  assert.equal(sectionOf("/dashboard/prospects/abc"), "Prospects");
+  assert.equal(sectionOf("/dashboard/settings"), "Settings");
   assert.equal(sectionOf("/"), "Landing page");
   assert.equal(sectionOf("/setup?url=x"), "Setup");
 });
@@ -24,7 +24,7 @@ test("summarize counts new vs returning visitors and repeat sessions", () => {
   const rows = [
     ev({ created_at: "2026-10-01T10:00:00.000Z", visitor_id: "a", session_id: "a1" }), // seen before the period
     ev({ created_at: "2026-10-11T10:00:00.000Z", visitor_id: "a", session_id: "a2", referrer_host: "google.com" }),
-    ev({ created_at: "2026-10-11T10:05:00.000Z", visitor_id: "a", session_id: "a2", path: "/dashboard/campaigns" }),
+    ev({ created_at: "2026-10-11T10:05:00.000Z", visitor_id: "a", session_id: "a2", path: "/dashboard/prospects" }),
     ev({ created_at: "2026-10-11T12:00:00.000Z", visitor_id: "b", session_id: "b1", utm_source: "x" }),
     ev({ created_at: "2026-10-12T12:00:00.000Z", visitor_id: "b", session_id: "b2" }), // two days in the period
     ev({ created_at: "2026-10-12T13:00:00.000Z", visitor_id: "c", session_id: "c1", user_id: "u1" }),
@@ -42,17 +42,17 @@ test("summarize counts new vs returning visitors and repeat sessions", () => {
 
 test("profileOf measures how often a person comes back and what they use", () => {
   const rows = [
-    ev({ created_at: "2026-10-01T10:00:00.000Z", visitor_id: "a", session_id: "s1", path: "/dashboard/campaigns" }),
+    ev({ created_at: "2026-10-01T10:00:00.000Z", visitor_id: "a", session_id: "s1", path: "/dashboard/prospects" }),
     ev({ created_at: "2026-10-03T10:00:00.000Z", visitor_id: "a", session_id: "s2", path: "/dashboard/copilot" }),
-    ev({ created_at: "2026-10-03T10:20:00.000Z", visitor_id: "a", session_id: "s2", path: "/dashboard/campaigns" }),
-    ev({ created_at: "2026-10-07T10:00:00.000Z", visitor_id: "a", session_id: "s3", path: "/dashboard/campaigns" }),
+    ev({ created_at: "2026-10-03T10:20:00.000Z", visitor_id: "a", session_id: "s2", path: "/dashboard/prospects" }),
+    ev({ created_at: "2026-10-07T10:00:00.000Z", visitor_id: "a", session_id: "s3", path: "/dashboard/prospects" }),
   ];
   const p = profileOf(rows, "2026-10-09T10:00:00.000Z");
   assert.equal(p.sessions, 3);
   assert.equal(p.activeDays, 3);
   assert.equal(p.avgDaysBetweenVisits, 3);
   assert.equal(p.daysSinceLastSeen, 2);
-  assert.equal(p.sections[0].label, "Campaigns");
+  assert.equal(p.sections[0].label, "Prospects");
   assert.equal(p.sections[0].count, 3);
   assert.equal(p.recentSessions[0].sessionId, "s3");
   assert.equal(p.recentSessions.find((s) => s.sessionId === "s2")?.minutes, 20);

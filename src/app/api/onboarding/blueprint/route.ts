@@ -1,4 +1,5 @@
 import { after, NextRequest, NextResponse } from "next/server";
+import { runRadarScan } from "@/lib/market/scan-run";
 import { seedListeningKeywords } from "@/lib/market/suggest";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
@@ -134,6 +135,9 @@ export async function PATCH(request: NextRequest) {
     if (field in (body ?? {})) updates[field] = body[field];
   }
   if (body?.approve) updates.approved_at = new Date().toISOString();
+  if (typeof body?.companyName === "string" && body.companyName.trim()) {
+    await supabase.from("companies").update({ name: body.companyName.trim() }).eq("id", companyId);
+  }
 
   const { data, error } = await supabase
     .from("company_blueprints")
@@ -146,8 +150,14 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Approving the ICP also picks the social-listening keywords prospecting and Market research use.
-  if (body?.approve) after(() => seedListeningKeywords(supabase, userId, companyId).then(() => undefined, () => undefined));
+  // Approving the ICP picks listening phrases, then runs the first Radar scan.
+  if (body?.approve) {
+    after(() =>
+      seedListeningKeywords(supabase, userId, companyId)
+        .then(() => runRadarScan(supabase, { userId, companyId, depth: "broad", skipIfFresh: false }))
+        .then(() => undefined, () => undefined),
+    );
+  }
 
   return NextResponse.json({ blueprint: data });
 }

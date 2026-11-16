@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { hasEmailOrLinkedIn } from "@/lib/prospecting/reachable";
 import { listSource, type ProspectListInfo } from "./lists";
 import { describeOutreach, type OutreachState } from "./outreach";
 
@@ -77,7 +78,12 @@ export async function loadProspectCompanies(db: SupabaseClient, companyId: strin
     ...company,
     list_id: typeof company.list_id === "string" ? company.list_id : null,
     list_name: typeof company.list_id === "string" ? (listName.get(company.list_id) ?? null) : null,
-    contacts: (company.contacts ?? []).map((contact) => {
+    contacts: (company.contacts ?? []).filter((contact) =>
+      hasEmailOrLinkedIn({
+        email: typeof contact.email === "string" ? contact.email : null,
+        linkedinUrl: typeof contact.linkedin_url === "string" ? contact.linkedin_url : null,
+      }),
+    ).map((contact) => {
       const rows = byContact.get(contact.id) ?? [];
       const described = describeOutreach(String(contact.lead_status ?? "new"), rows);
       const active = rows.find((row) => row.status === "active") ?? rows[0];

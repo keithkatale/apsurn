@@ -12,19 +12,14 @@ export async function getAccountSnapshot(db: SupabaseClient, userId: string) {
     .eq("company_id", company.id)
     .maybeSingle();
 
-  const [{ count: prospectCount }, { count: sequenceCount }, { count: inboxCount }, { count: siteCount }, { data: contactStatusRows }, { count: activeEnrollments }] =
-    await Promise.all([
-      db.from("prospect_companies").select("id", { count: "exact", head: true }).eq("company_id", company.id).is("archived_at", null),
-      db.from("sequences").select("id", { count: "exact", head: true }).eq("company_id", company.id),
-      db.from("connected_inboxes").select("id", { count: "exact", head: true }).eq("user_id", userId),
-      db.from("analytics_sites").select("id", { count: "exact", head: true }).eq("user_id", userId),
-      db
-        .from("contacts")
-        .select("lead_status, prospect_companies!inner(company_id)")
-        .eq("prospect_companies.company_id", company.id)
-        .is("archived_at", null),
-      db.from("enrollments").select("id, sequences!inner(company_id)", { count: "exact", head: true }).eq("sequences.company_id", company.id).eq("status", "active"),
-    ]);
+  const [{ count: prospectCount }, { data: contactStatusRows }] = await Promise.all([
+    db.from("prospect_companies").select("id", { count: "exact", head: true }).eq("company_id", company.id).is("archived_at", null),
+    db
+      .from("contacts")
+      .select("lead_status, prospect_companies!contacts_prospect_company_id_fkey!inner(company_id)")
+      .eq("prospect_companies.company_id", company.id)
+      .is("archived_at", null),
+  ]);
 
   const leadStatusBreakdown: Record<string, number> = {};
   for (const row of contactStatusRows ?? []) {
@@ -47,10 +42,6 @@ export async function getAccountSnapshot(db: SupabaseClient, userId: string) {
       prospectCompanies: prospectCount ?? 0,
       contactsByLeadStatus: leadStatusBreakdown,
       totalContacts: Object.values(leadStatusBreakdown).reduce((a, b) => a + b, 0),
-      sequences: sequenceCount ?? 0,
-      activeEnrollments: activeEnrollments ?? 0,
-      connectedInboxes: inboxCount ?? 0,
-      analyticsSites: siteCount ?? 0,
     },
   };
 }

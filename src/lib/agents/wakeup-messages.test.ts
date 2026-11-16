@@ -33,8 +33,8 @@ const outcome: RunOutcome = {
 
 const steps: PlanStepLine[] = [
   { idx: 0, title: "Find leads", agent: "researcher", instruction: "x", status: "running" },
-  { idx: 1, title: "Draft emails", agent: "writer", instruction: "y", status: "pending" },
-  { idx: 2, title: "Done already", agent: "operator", instruction: "z", status: "done", resultSummary: "ok" },
+  { idx: 1, title: "Scout signals", agent: "signal_scout", instruction: "y", status: "pending" },
+  { idx: 2, title: "Done already", agent: "researcher", instruction: "z", status: "done", resultSummary: "ok" },
 ];
 
 test("isActiveRunStatus only matches in-flight statuses", () => {
@@ -74,7 +74,7 @@ test("run-completed message only mentions the plan while steps remain", () => {
 test("plan message numbers steps from 1 and tells the agent not to re-ask approval", () => {
   const text = buildPlanMessage("approved", "Fill pipeline", steps);
   assert.match(text, /1\. Find leads \(researcher\)/);
-  assert.match(text, /3\. Done already \(operator\) \[done\] — ok/);
+  assert.match(text, /3\. Done already \(researcher\) \[done\] — ok/);
   assert.match(text, /Do not ask the user to approve again/);
   assert.match(buildPlanMessage("continue", "g", steps), /Continue the approved plan/);
 });

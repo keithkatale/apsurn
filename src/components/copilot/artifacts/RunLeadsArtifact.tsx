@@ -11,7 +11,7 @@ function rowsOf(artifact: CopilotArtifact): PresentedLead[] {
 }
 
 function Cell({ text, lines = 3 }: { text: string | null; lines?: number }) {
-  if (!text) return <span className="text-neutral-400">—</span>;
+  if (!text) return <span className="text-neutral-500">—</span>;
   return (
     <span className={lines === 2 ? "line-clamp-2" : "line-clamp-3"} title={text}>
       {text}
@@ -25,32 +25,32 @@ export function RunLeadsArtifact({ artifact }: { artifact: CopilotArtifact }) {
   const companies = new Set(rows.map((row) => row.domain || row.company)).size;
 
   return (
-    <div className="flex flex-col gap-2 overflow-hidden rounded-[8px] border border-neutral-200 bg-white">
-      <ul className="divide-y divide-neutral-100 md:hidden">
+    <div className="flex flex-col gap-2 overflow-hidden rounded-[8px] border border-neutral-800 bg-[#0d0d0e] text-neutral-100">
+      <ul className="divide-y divide-neutral-800/60 md:hidden">
         {rows.map((row) => (
           <li key={row.id} className="px-3 py-3">
             <div className="flex items-start gap-2.5">
               <ContactAvatar name={row.name} linkedinUrl={row.linkedinUrl} email={row.email} className="size-9" />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-neutral-900">{row.name || "—"}</span>
-                <span className="mt-0.5 block truncate text-[13px] text-neutral-500">{row.title || "Role unknown"}</span>
-                <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[13px] text-neutral-600">
+                <span className="block truncate text-sm font-medium text-neutral-100">{row.name || "—"}</span>
+                <span className="mt-0.5 block truncate text-[13px] text-neutral-400">{row.title || "Role unknown"}</span>
+                <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[13px] text-neutral-300">
                   <CompanyFavicon domain={row.domain} name={row.company} />
                   <span className="truncate">{row.company}</span>
                 </span>
-                <span className="mt-1 block truncate text-[12px] text-neutral-500">{row.email || "No email"}</span>
+                <span className="mt-1 block truncate text-[12px] text-neutral-400">{row.email || "No email"}</span>
               </span>
             </div>
-            {row.description ? <p className="mt-2 text-[12px] leading-snug text-neutral-500">{row.description}</p> : null}
-            {row.reason ? <p className="mt-1.5 text-[12px] leading-snug text-neutral-700"><span className="text-neutral-400">Why: </span>{row.reason}</p> : null}
-            {row.angle ? <p className="mt-1.5 text-[12px] leading-snug text-neutral-700"><span className="text-neutral-400">Angle: </span>{row.angle}</p> : null}
+            {row.description ? <p className="mt-2 text-[12px] leading-snug text-neutral-400">{row.description}</p> : null}
+            {row.reason ? <p className="mt-1.5 text-[12px] leading-snug text-neutral-300"><span className="text-neutral-500">Why: </span>{row.reason}</p> : null}
+            {row.angle ? <p className="mt-1.5 text-[12px] leading-snug text-neutral-300"><span className="text-neutral-500">Angle: </span>{row.angle}</p> : null}
           </li>
         ))}
       </ul>
       <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[980px] border-collapse text-sm leading-tight">
           <thead>
-            <tr className="border-b border-neutral-200 text-left text-[11px] font-medium uppercase tracking-wide text-neutral-400">
+            <tr className="border-b border-neutral-800 text-left text-[11px] font-medium uppercase tracking-wide text-neutral-400">
               <th className="px-3 py-2.5 font-medium">Name</th>
               <th className="px-3 py-2.5 font-medium">Title</th>
               <th className="px-3 py-2.5 font-medium">Company</th>
@@ -69,26 +69,26 @@ export function RunLeadsArtifact({ artifact }: { artifact: CopilotArtifact }) {
               </tr>
             ) : null}
             {rows.map((row) => (
-              <tr key={row.id} className="border-b border-neutral-100 align-top transition-colors last:border-b-0 hover:bg-neutral-100/60">
+              <tr key={row.id} className="border-b border-neutral-800/60 align-top transition-colors last:border-b-0 hover:bg-neutral-900/60">
                 <td className="max-w-[200px] px-3 py-3">
-                  <span className="flex min-w-0 items-center gap-2.5 font-medium text-neutral-900">
+                  <span className="flex min-w-0 items-center gap-2.5 font-medium text-neutral-100">
                     <ContactAvatar name={row.name} linkedinUrl={row.linkedinUrl} email={row.email} className="size-8" />
                     <span className="truncate">{row.name || "—"}</span>
                   </span>
                 </td>
-                <td className="max-w-[160px] px-3 py-3 text-neutral-600">
+                <td className="max-w-[160px] px-3 py-3 text-neutral-300">
                   <Cell text={row.title} lines={2} />
                 </td>
-                <td className="max-w-[170px] px-3 py-3 text-neutral-700">
+                <td className="max-w-[170px] px-3 py-3 text-neutral-300">
                   <span className="flex min-w-0 items-center gap-2">
                     <CompanyFavicon domain={row.domain} name={row.company} />
                     <span className="truncate">{row.company}</span>
                   </span>
                 </td>
-                <td className="w-[220px] min-w-[200px] px-3 py-3 text-[13px] leading-snug text-neutral-600">
+                <td className="w-[220px] min-w-[200px] px-3 py-3 text-[13px] leading-snug text-neutral-400">
                   <Cell text={row.description} />
                 </td>
-                <td className="max-w-[200px] truncate px-3 py-3 text-neutral-600">
+                <td className="max-w-[200px] truncate px-3 py-3 text-neutral-300">
                   {row.email ? (
                     <span>
                       {row.email}
@@ -100,11 +100,11 @@ export function RunLeadsArtifact({ artifact }: { artifact: CopilotArtifact }) {
                     "—"
                   )}
                 </td>
-                <td className="w-[240px] min-w-[220px] px-3 py-3 text-[13px] leading-snug text-neutral-600">
+                <td className="w-[240px] min-w-[220px] px-3 py-3 text-[13px] leading-snug text-neutral-400">
                   <Cell text={row.reason} />
-                  {row.signal ? <span className="mt-1 line-clamp-2 block text-[12px] text-neutral-400" title={row.signal}>{row.signal}</span> : null}
+                  {row.signal ? <span className="mt-1 line-clamp-2 block text-[12px] text-neutral-500" title={row.signal}>{row.signal}</span> : null}
                 </td>
-                <td className="w-[260px] min-w-[220px] px-3 py-3 text-[13px] leading-snug text-neutral-700">
+                <td className="w-[260px] min-w-[220px] px-3 py-3 text-[13px] leading-snug text-neutral-300">
                   <Cell text={row.angle} />
                 </td>
               </tr>
@@ -113,10 +113,10 @@ export function RunLeadsArtifact({ artifact }: { artifact: CopilotArtifact }) {
         </table>
       </div>
       <div className="flex items-center justify-between px-3 pb-2">
-        <p className="text-[11px] text-neutral-400">
+        <p className="text-[11px] text-neutral-500">
           {rows.length} contact{rows.length === 1 ? "" : "s"} · {companies} compan{companies === 1 ? "y" : "ies"}
         </p>
-        <Link href="/dashboard/prospects" className="text-[12px] font-medium text-neutral-700 underline-offset-2 hover:underline">
+        <Link href="/dashboard/prospects" className="text-[12px] font-medium text-neutral-300 underline-offset-2 hover:underline">
           Open in Prospects
         </Link>
       </div>

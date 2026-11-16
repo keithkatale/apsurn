@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Trash2, Download } from "lucide-react";
-import { EnrollInSequenceModal } from "@/components/sequences/EnrollInSequenceModal";
 import { LEAD_STATUSES, type LeadStatus } from "./types";
 import { toCsv, downloadCsv } from "@/lib/prospecting/csv";
 import type { ContactRow, ProspectRow } from "./types";
@@ -67,7 +66,7 @@ export function BulkActionBar({
   }
 
   const btn =
-    "inline-flex h-9 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50";
+    "inline-flex h-9 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800";
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -87,13 +86,13 @@ export function BulkActionBar({
         {statusMenuOpen && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setStatusMenuOpen(false)} />
-            <div className="absolute left-0 z-50 mt-0.5 flex w-28 flex-col overflow-hidden rounded border border-neutral-200 bg-white shadow-sm">
+            <div className="absolute left-0 z-50 mt-0.5 flex w-28 flex-col overflow-hidden rounded border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
               {LEAD_STATUSES.map((status) => (
                 <button
                   key={status}
                   type="button"
                   onClick={() => patchContacts({ lead_status: status })}
-                  className="px-2 py-1 text-left text-[12px] capitalize text-neutral-700 hover:bg-neutral-50"
+                  className="px-2 py-1 text-left text-[12px] capitalize text-neutral-700 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-800"
                 >
                   {status}
                 </button>
@@ -107,16 +106,6 @@ export function BulkActionBar({
         <Download className="size-3" />
         Export CSV
       </button>
-
-      <EnrollInSequenceModal
-        contactIds={selectedContactIds}
-        onDone={onCleared}
-        trigger={(openModal) => (
-          <button type="button" className={btn} onClick={openModal}>
-            Enroll in sequence
-          </button>
-        )}
-      />
 
       <button
         type="button"

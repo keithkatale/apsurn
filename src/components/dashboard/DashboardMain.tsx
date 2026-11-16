@@ -7,16 +7,14 @@ import { cn } from "@/lib/cn";
 
 // Pages that fill the window and scroll inside their own panels. A page with an id in its address (a campaign, a list)
 // counts too, so each panel keeps scrolling on its own.
-const FULL_BLEED = [
-  "/dashboard/campaigns",
-  "/dashboard/prospects",
-  "/dashboard/copilot",
-  "/dashboard/library",
-];
+const FULL_BLEED = ["/dashboard/prospects", "/dashboard/copilot"];
 
 export function DashboardMain({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const fullBleed = FULL_BLEED.some((base) => pathname === base || pathname.startsWith(`${base}/`));
+  const fullBleed =
+    pathname === "/dashboard" ||
+    pathname.startsWith("/dashboard/tasks") ||
+    FULL_BLEED.some((base) => pathname === base || pathname.startsWith(`${base}/`));
 
   useEffect(() => {
     setDashboardContentPending(false);

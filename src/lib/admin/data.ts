@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isGuestUser } from "@/lib/auth/guest";
-import { firstNameOf, nameFromEmail, nameFromMetadata } from "@/lib/outreach/sender-name";
+import { firstNameOf, nameFromEmail, nameFromMetadata } from "@/lib/auth/display-name";
 import type { EventRow } from "./analytics-core";
 
 const PAGE = 1000;

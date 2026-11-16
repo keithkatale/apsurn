@@ -5,8 +5,6 @@ import { useRouter } from "next/navigation";
 import { OUTREACH_OPTIONS, type OutreachState } from "./types";
 
 const TONES: Record<OutreachState, string> = {
-  in_campaign: "bg-[#E8F1FC] text-[#4379EE]",
-  not_in_campaign: "bg-neutral-100 text-neutral-600",
   contacted: "bg-emerald-50 text-emerald-700",
   not_contacted: "bg-amber-50 text-amber-800",
 };
@@ -60,7 +58,7 @@ export function OutreachPicker({ contactId, value }: { contactId: string; value:
       {open ? (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 z-50 mt-1 flex min-w-[11rem] flex-col gap-1 rounded-2xl border border-neutral-200 bg-white p-1.5 shadow-md" role="listbox">
+          <div className="absolute left-0 z-50 mt-1 flex min-w-[11rem] flex-col gap-1 rounded-xl border border-neutral-200 bg-white p-1.5 shadow-md dark:border-neutral-800 dark:bg-neutral-900" role="listbox">
             {OUTREACH_OPTIONS.map((option) => (
               <button
                 key={option.id}

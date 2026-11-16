@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     const client = getDodoClient();
     const returnUrl =
       process.env.DODO_PAYMENTS_RETURN_URL?.trim() ||
-      `${appOrigin()}/dashboard/campaigns?billing=success`;
+      `${appOrigin()}/dashboard?billing=success`;
 
     const cookieStore = await cookies();
     const datafastVisitorId = cookieStore.get("datafast_visitor_id")?.value;

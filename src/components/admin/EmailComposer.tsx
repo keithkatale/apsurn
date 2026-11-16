@@ -115,7 +115,7 @@ export function EmailComposer({ mode, userId, recipientLabel }: Props) {
           </label>
           <label className="block">
             <span className="mb-1 block text-[12px] font-medium text-neutral-600">Button link</span>
-            <input className={INPUT} value={ctaUrl} onChange={(e) => setCtaUrl(e.target.value)} placeholder="https://apsurn.com/dashboard/campaigns" maxLength={500} />
+            <input className={INPUT} value={ctaUrl} onChange={(e) => setCtaUrl(e.target.value)} placeholder="https://apsurn.com/dashboard" maxLength={500} />
           </label>
         </div>
         <label className="block">

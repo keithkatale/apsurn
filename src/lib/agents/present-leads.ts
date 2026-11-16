@@ -1,4 +1,5 @@
 import { publishArtifact } from "@/lib/copilot/artifacts";
+import { hasEmailOrLinkedIn } from "@/lib/prospecting/reachable";
 import type { AgentToolContext } from "./types";
 
 export interface PresentedLead {
@@ -87,10 +88,9 @@ export async function presentLeads(ctx: AgentToolContext, args: Record<string, u
       signal: signalByCompany.get(String(company.domain ?? "").toLowerCase()) ?? null,
       angle,
     };
-    if (contacts.length === 0) {
-      return [{ ...base, id: String(company.id), name: null, title: null, email: null, emailStatus: null, linkedinUrl: null, reason: (company.qualify_reason as string | null) ?? null }];
-    }
-    return contacts.map((contact) => ({
+    const reachable = contacts.filter((contact) => hasEmailOrLinkedIn({ email: contact.email, linkedinUrl: contact.linkedin_url }));
+    if (reachable.length === 0) return [];
+    return reachable.map((contact) => ({
       ...base,
       id: contact.id,
       name: contact.full_name,
@@ -110,5 +110,9 @@ export async function presentLeads(ctx: AgentToolContext, args: Record<string, u
     title: typeof args.title === "string" && args.title.trim() ? args.title.trim().slice(0, 120) : "Leads",
     payload: { presentation: "run", listId, rows },
   });
-  return { presented: rows.length, artifactId: artifact?.id, note: "The table is on screen. Do not repeat the rows in text; add at most two sentences of takeaway." };
+  return {
+    presented: rows.length,
+    artifactId: artifact?.id,
+    note: "These leads are in the interactive card above. In your text reply, you MUST ALSO render a structured Markdown table summarizing these leads (| Company | Domain | Contact / Title | Email | Match Reason |).",
+  };
 }

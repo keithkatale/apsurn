@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BlueprintSim, ContactsSim, SequenceSim } from "@/components/landing/FeatureSimulations";
+import { BlueprintSim, ContactsSim } from "@/components/landing/FeatureSimulations";
 import ScrollStack, { ScrollStackItem } from "@/components/landing/ScrollStack";
 
 const CARDS = [
@@ -25,11 +25,11 @@ const CARDS = [
   },
   {
     index: "03",
-    title: "Reach out and book",
-    description: "Send personalized emails from your own Gmail and get prospects booking calls with you.",
+    title: "Keep working the list",
+    description: "Prospect lists, verified contacts, and Copilot stay in one place so you can keep finding better-fit companies.",
     primary: { href: "/signup?next=/setup", label: "Get 50 credits" },
     secondary: { href: "#pricing", label: "View plans" },
-    sim: SequenceSim,
+    sim: ContactsSim,
     previewClass: "lg:w-[520px] lg:max-w-[48%]",
   },
 ] as const;

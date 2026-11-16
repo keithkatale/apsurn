@@ -317,9 +317,9 @@ export function NewProspectingRun({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-neutral-200 bg-white px-4 py-3 pr-10">
+      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-neutral-200 bg-white px-4 py-3 pr-10 dark:border-neutral-800 dark:bg-neutral-900">
         <div>
-          <h1 className="text-sm font-semibold text-neutral-900">Prospecting run</h1>
+          <h1 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Prospecting run</h1>
           <p className="text-xs text-neutral-500">
             {phase === "running" ? "Working…" : phase === "error" ? "Something went wrong" : "Finished"}
           </p>

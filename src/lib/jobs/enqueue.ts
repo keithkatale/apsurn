@@ -21,7 +21,12 @@ export function enqueueInternalJob(path: string, body: unknown, localTask: () =>
   const secret = process.env.CRON_SECRET?.trim();
 
   if (!base || !secret) {
-    runAfterResponse(localTask);
+    // Start the turn immediately in local/dev. Waiting for Next `after()` only
+    // begins work once the HTTP response has flushed, which adds seconds before
+    // the first model token.
+    void localTask().catch((error) => {
+      console.error("[jobs]", error instanceof Error ? error.message : error);
+    });
     return;
   }
 

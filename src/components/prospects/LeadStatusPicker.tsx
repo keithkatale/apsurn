@@ -54,7 +54,7 @@ export function LeadStatusPicker({ contactId, value }: { contactId: string; valu
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 z-50 mt-1 flex min-w-[8.5rem] flex-col gap-1 rounded-2xl border border-neutral-200 bg-white p-1.5 shadow-md">
+          <div className="absolute left-0 z-50 mt-1 flex min-w-[8.5rem] flex-col gap-1 rounded-xl border border-neutral-200 bg-white p-1.5 shadow-md dark:border-neutral-800 dark:bg-neutral-900">
             {LEAD_STATUSES.map((status) => (
               <button
                 key={status}

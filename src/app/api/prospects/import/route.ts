@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
 import { importCsv } from "@/lib/prospects/csv-import";
-import { enrollContacts } from "@/lib/sequences/mutations";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,7 +33,6 @@ export async function POST(request: NextRequest) {
   if (!/\.csv$/i.test(file.name)) return NextResponse.json({ error: "Only .csv files are supported right now" }, { status: 400 });
 
   const csvText = await file.text();
-  const sequenceId = String(form?.get("sequenceId") ?? "").trim();
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -42,31 +40,9 @@ export async function POST(request: NextRequest) {
       try {
         const result = await importCsv(db, userId, company.id, csvText, (event) => send({ ...event }), {
           name: file.name,
-          kind: sequenceId ? "campaign" : "upload",
+          kind: "upload",
         });
-        let enrolled = 0;
-        if (sequenceId && result.contactIds.length > 0) {
-          send({ type: "status", stage: "save", label: "Adding the table to this campaign…", progress: 96 });
-          const added = await enrollContacts(db, userId, sequenceId, result.contactIds);
-          if (!added.ok) throw new Error(added.error);
-          enrolled = added.data.enrolled;
-          if (enrolled === 0) {
-            const now = new Date().toISOString();
-            const { error } = await db.from("enrollments").upsert(
-              result.contactIds.map((contactId) => ({
-                sequence_id: sequenceId,
-                contact_id: contactId,
-                status: "active",
-                current_step: 0,
-                next_send_at: now,
-              })),
-              { onConflict: "sequence_id,contact_id", ignoreDuplicates: true },
-            );
-            if (error) throw new Error(error.message);
-            enrolled = result.contactIds.length;
-          }
-        }
-        send({ type: "result", ...result, enrolled });
+        send({ type: "result", ...result, enrolled: 0 });
       } catch (error) {
         send({ type: "error", error: error instanceof Error ? error.message : "Import failed" });
       } finally {

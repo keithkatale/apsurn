@@ -8,7 +8,8 @@
  * public tagline alone, whether the company plausibly needs what the user sells, and writes the one-line reason.
  */
 import { getAiClient } from "@/lib/ai/openai";
-import { betaListLaunches, hnShowLaunches, productHuntLaunches, productHuntMakers, ycCompanyFounders, ycLaunches, ycNewBatchCompanies, type CommunityLaunch } from "../sources/community";
+import { betaListLaunches, hnShowLaunches, productHuntLaunches, productHuntMakers, redditLaunches, ycCompanyFounders, ycLaunches, ycNewBatchCompanies, type CommunityLaunch } from "../sources/community";
+import { founderLinkedIn } from "../sources/community-parse";
 import type { ProspectCriteria, TriggerSpec } from "../types";
 import { buildRelevancePrompt, candidateFromLaunch, dedupeLaunches, matchesKeywords, parseRelevance, type RelevanceItem } from "./community-core";
 import type { SignalCandidate } from "./types";
@@ -110,7 +111,7 @@ async function withFounderHints(launches: Array<{ launch: CommunityLaunch; why: 
         try {
           if (ycSlug) {
             const founder = (await ycCompanyFounders(ycSlug))[0];
-            if (founder) candidates[index].personHint = { name: founder.name, title: founder.title, profileUrl: founder.linkedinUrl };
+            if (founder) candidates[index].personHint = { name: founder.name, title: founder.title, profileUrl: founderLinkedIn(founder.linkedinUrl) };
           } else if (source === "product_hunt") {
             const maker = (await productHuntMakers(sourceUrl))[0];
             if (maker) candidates[index].personHint = { name: maker, title: "Founder / maker", profileUrl: null };
@@ -142,6 +143,7 @@ export async function collectLaunchSignals(opts: CollectArgs): Promise<SignalCan
     settled("Show HN", hnShowLaunches(days)),
     settled("Product Hunt", productHuntLaunches(days)),
     settled("BetaList", betaListLaunches()),
+    settled("Reddit", redditLaunches(spec.keywords ?? [])),
   ]);
   if (shouldStop()) return [];
 

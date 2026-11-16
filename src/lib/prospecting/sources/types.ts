@@ -17,6 +17,7 @@ export interface SourcedCompany {
   /** Set only when the source itself named a person — registries often do. */
   contactName: string | null;
   contactTitle: string | null;
+  contactEmail?: string | null;
   source: string;
   sourceUrl: string | null;
   /** A buying signal the source evidences, e.g. an open go-to-market role. */

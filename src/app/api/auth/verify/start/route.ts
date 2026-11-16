@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   const email = typeof body?.email === "string" ? body.email : "";
   const password = typeof body?.password === "string" ? body.password : "";
-  const nextPath = safeNextPath(body?.next, "/dashboard/campaigns");
+  const nextPath = safeNextPath(body?.next, "/dashboard");
 
   try {
     const result = await startEmailVerification({

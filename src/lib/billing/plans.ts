@@ -159,6 +159,8 @@ export const CREDIT_COSTS = {
   prospect_company: 3,
   /** One sourcing pass (registry, page, or social search) before any rows are saved. */
   lead_source_scan: 8,
+  /** Auto-source enrichment (Icypeas, email verification) for one radar signal. */
+  radar_auto_source: 8,
 } as const;
 
 export function isLiveBilling(): boolean {

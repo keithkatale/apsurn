@@ -8,8 +8,13 @@ import {
   parseHiringComment,
   parsePhMakers,
   parseShowHnTitle,
+  parseOverpassElements,
+  parseRedditLaunches,
+  parseRemoteOk,
+  parseWwrRss,
   parseYcFounders,
   recentBatches,
+  founderLinkedIn,
 } from "./community-parse.ts";
 
 test("company domains exclude stores, repos, hosting subdomains and job boards", () => {
@@ -79,6 +84,55 @@ test("YC company pages list founders in embedded page data, CEO first", () => {
   assert.equal(founders[0].linkedinUrl, "https://www.linkedin.com/in/maria/");
   assert.deepEqual(parseYcFounders("<html></html>"), []);
   assert.deepEqual(parseYcFounders('<div data-page="not json"></div>'), []);
+});
+
+test("job boards name the company and keep the job URL, without a person", () => {
+  const remote = parseRemoteOk([
+    { legal: "Legal notice" },
+    { company: "Acme", position: "Engineer", location: "Worldwide", url: "https://remoteok.com/remote-jobs/1", apply_url: "https://acme.com/jobs" },
+    { company: "Acme", position: "Designer", url: "https://remoteok.com/remote-jobs/2", apply_url: "https://acme.com/other" },
+    { company: "Board", position: "Role", url: "https://remoteok.com/x", apply_url: "https://remoteok.com/apply" },
+  ]);
+  assert.equal(remote.length, 2);
+  assert.equal(remote[0].domain, "acme.com");
+  assert.equal(remote[0].sourceUrl, "https://remoteok.com/remote-jobs/1");
+  assert.equal(remote[1].domain, null);
+
+  const rss = `<?xml version="1.0"?><rss><channel><item><title><![CDATA[Northwind: Support lead]]></title><link>https://weworkremotely.com/remote-jobs/northwind</link><region>North America</region><description><![CDATA[Apply at https://northwind.example/jobs]]></description></item></channel></rss>`;
+  const wwr = parseWwrRss(rss);
+  assert.equal(wwr[0].name, "Northwind");
+  assert.equal(wwr[0].description, "Support lead");
+  assert.equal(wwr[0].domain, "northwind.example");
+  assert.equal(wwr[0].sourceUrl, "https://weworkremotely.com/remote-jobs/northwind");
+});
+
+test("reddit launches use the outbound company site, not the poster", () => {
+  const posts = parseRedditLaunches({
+    data: {
+      children: [
+        { data: { title: "We launched Acme, a billing tool", url: "https://acme.com", permalink: "/r/startups/comments/1/we_launched" } },
+        { data: { title: "How do I price a SaaS?", url: "https://www.reddit.com/r/startups/comments/2", permalink: "/r/startups/comments/2" } },
+        { data: { title: "Just shipped a side project", url: "https://github.com/someone/app", permalink: "/r/SaaS/comments/3" } },
+      ],
+    },
+  });
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].domain, "acme.com");
+  assert.equal(posts[0].sourceUrl, "https://www.reddit.com/r/startups/comments/1/we_launched");
+});
+
+test("OpenStreetMap places keep name, website, phone and address only", () => {
+  const places = parseOverpassElements([
+    { tags: { name: "Elm Dental", website: "https://elmdental.com", phone: "+1 512 555 0100", "addr:housenumber": "10", "addr:street": "Main St", "addr:city": "Austin" } },
+    { tags: { name: "No Site Cafe", phone: "555" } },
+  ]);
+  assert.equal(places.length, 2);
+  assert.equal(places[0].domain, "elmdental.com");
+  assert.equal(places[0].phone, "+1 512 555 0100");
+  assert.equal(places[0].location, "10 Main St Austin");
+  assert.equal(places[1].domain, null);
+  assert.equal(founderLinkedIn("https://linkedin.com/company/acme"), null);
+  assert.equal(founderLinkedIn("not a url"), null);
 });
 
 test("Product Hunt makers are read from the embedded page data", () => {

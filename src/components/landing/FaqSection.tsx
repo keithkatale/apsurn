@@ -13,7 +13,7 @@ export function FaqSection() {
   const faqs = [
     {
       q: "Do I need sales experience?",
-      a: "No. apsurn drafts your ICP and your emails. You review and adjust them, which is where most founders learn what works.",
+      a: "No. apsurn drafts your ICP and finds matching companies with verified contacts. You review the lists and keep refining with Copilot.",
     },
     {
       q: "How does apsurn decide who to target?",
@@ -21,11 +21,7 @@ export function FaqSection() {
     },
     {
       q: "How are emails verified?",
-      a: "apsurn only keeps contacts it can verify. Unverifiable addresses are dropped so you don't burn your domain with bounces.",
-    },
-    {
-      q: "Will this hurt my email domain?",
-      a: "apsurn sends at a sensible pace from your own Gmail. We recommend a secondary domain for outbound, which is standard practice for anyone doing cold email.",
+      a: "apsurn only keeps contacts it can verify. Unverifiable addresses are dropped so your lists stay usable.",
     },
     {
       q: "Is there a free plan?",
@@ -37,7 +33,7 @@ export function FaqSection() {
     },
     {
       q: "Can you just do it for me?",
-      a: "apsurn does the work for you: it drafts your ICP, finds verified prospects and writes the emails, and you approve and send. If you want hands-on help running it, talk to us and we'll set it up inside your account.",
+      a: "apsurn drafts your ICP and finds verified prospects into lists you can work with Copilot. If you want hands-on help running it, talk to us and we'll set it up inside your account.",
     },
   ];
 

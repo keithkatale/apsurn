@@ -4,13 +4,11 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Globe } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
-import { CampaignCard, CampaignCardSkeleton } from "@/components/campaigns/CampaignCard";
 import { CompanyFavicon } from "@/components/prospects/CompanyFavicon";
 import { ContactsTable } from "@/components/prospects/ContactsTable";
 import type { ContactRow, LeadStatus, ProspectRow } from "@/components/prospects/types";
 import { ScanOverlay, type ScanLogEntry, type ScanState } from "@/components/progress/ScanOverlay";
 import { PricingCardShell } from "@/components/ui/pricing-card-shell";
-import { type CampaignDefinition } from "@/lib/onboarding/campaign-templates";
 import { trackGoal } from "@/lib/analytics/datafast";
 import { cn } from "@/lib/cn";
 import { SetupStepper } from "./SetupStepper";
@@ -204,8 +202,6 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
   const [productSummary, setProductSummary] = useState("");
   const [competitorsText, setCompetitorsText] = useState("");
   const [competitorDetails, setCompetitorDetails] = useState<Record<string, { domain: string; reason: string }>>({});
-  const [campaigns, setCampaigns] = useState<CampaignDefinition[]>([]);
-  const [campaignLoading, setCampaignLoading] = useState(false);
   const [prospects, setProspects] = useState<ProspectRow[]>([]);
   const [competitorsReady, setCompetitorsReady] = useState(false);
   const [accountsReady, setAccountsReady] = useState(false);
@@ -213,7 +209,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
   /** An earlier step the person clicked in the progress bar. Null means follow the live step. */
   const [viewStep, setViewStep] = useState<number | null>(null);
   const confirmLock = useRef(false);
-  /** When the domain was first submitted, to report time-to-first-sequence. */
+  /** When the domain was first submitted, to report time-to-first-lead. */
   const setupStartedAt = useRef<number | null>(null);
   /** True while the workspace belongs to a guest session (no account yet). */
   const guestWorkspace = useRef(true);
@@ -222,7 +218,6 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
   );
   const advanceRef = useRef({
     approveAndContinue: () => {},
-    loadCampaigns: () => {},
     findAccounts: () => {},
     finishSetup: () => {},
   });
@@ -298,7 +293,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
     );
     try {
       const guest = await ensureGuestSession();
-      // A guest has not made an account yet; they are asked to at the end, before campaigns open.
+      // A guest has not made an account yet; they are asked to at the end, before the workspace opens.
       const guestInfo = (await guest.clone().json().catch(() => null)) as { guest?: boolean } | null;
       guestWorkspace.current = guestInfo?.guest !== false;
       if (!guest.ok) {
@@ -351,8 +346,8 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Could not save blueprint");
       trackGoal("blueprint_approved");
-      // The account search needs only the approved blueprint, so it starts now and runs while competitors and campaigns
-      // are shown; by step 4 the leads are usually already there.
+      // The account search needs only the approved blueprint, so it starts now and runs while competitors
+      // are shown; by the accounts step the leads are usually already there.
       void findAccounts();
       setScan((prev) =>
         prev?.phase === "scanning"
@@ -380,56 +375,6 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
       });
     } finally {
       confirmLock.current = false;
-    }
-  }
-
-  async function loadCampaigns() {
-    if (!blueprint) return;
-    setStep(3);
-    setCampaigns([]);
-    setCampaignLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/onboarding/campaigns", { method: "POST" });
-      if (!res.ok || !res.body) {
-        const payload = await res.json().catch(() => ({}));
-        throw new Error(typeof payload.error === "string" ? payload.error : "Could not define campaigns");
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
-        for (const part of parts) {
-          const line = part.split("\n").find((l) => l.startsWith("data:"));
-          if (!line) continue;
-          try {
-            const event = JSON.parse(line.slice(5).trim()) as {
-              type?: string;
-              campaign?: CampaignDefinition;
-              error?: string;
-            };
-            if (event.type === "campaign" && event.campaign?.segmentKey) {
-              setCampaigns((prev) => {
-                if (prev.some((c) => c.segmentKey === event.campaign!.segmentKey)) return prev;
-                return [...prev, event.campaign!];
-              });
-            }
-            if (event.type === "error") throw new Error(event.error ?? "Could not define campaigns");
-          } catch (err) {
-            if (err instanceof SyntaxError) continue;
-            throw err;
-          }
-        }
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not define campaigns");
-    } finally {
-      setCampaignLoading(false);
     }
   }
 
@@ -584,29 +529,25 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
   }
 
   async function finishSetup() {
-    setStep(5);
-    setScan(scanningState(["Opening your campaigns…"], 70));
+    setStep(4);
+    setScan(scanningState(["Opening your workspace…"], 70));
     try {
-      const res = await fetch("/api/onboarding/campaigns/enroll", { method: "POST" });
-      const data = (await res.json().catch(() => null)) as { campaignId?: string | null } | null;
-      // Land inside the first campaign, not on a list: its leads are in it and their emails start writing at once.
       if (setupStartedAt.current != null) {
         trackGoal("setup_complete", { seconds: Math.round((Date.now() - setupStartedAt.current) / 1000) });
       }
-      const target = data?.campaignId ? `/dashboard/campaigns/${data.campaignId}` : "/dashboard/campaigns";
-      // Someone without an account sees what setup produced first, and signs up right before the campaigns open.
+      const target = "/dashboard";
       router.push(guestWorkspace.current ? `/signup?next=${encodeURIComponent(target)}&from=setup` : target);
     } catch (err) {
       setScan({
         phase: "error",
         progress: 100,
         logs: [],
-        error: err instanceof Error ? err.message : "Could not open campaigns",
+        error: err instanceof Error ? err.message : "Could not open workspace",
       });
     }
   }
 
-  const activeScan = step === 4 ? acctScan : scan;
+  const activeScan = step === 3 ? acctScan : scan;
   const showScan = Boolean(activeScan && (activeScan.phase === "scanning" || activeScan.phase === "error"));
   const blueprintReview = step === 1 && started && Boolean(blueprint) && !showScan;
   // Setup keeps working through `step`; `view` is only what is on screen, so people can look back at an earlier step while it continues.
@@ -619,11 +560,8 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
     approveAndContinue: () => {
       void approveAndContinue();
     },
-    loadCampaigns: () => {
-      void loadCampaigns();
-    },
     findAccounts: () => {
-      setStep(4);
+      setStep(3);
       void findAccounts();
     },
     finishSetup: () => {
@@ -632,20 +570,17 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
   };
 
   const competitorNames = textToList(competitorsText);
-  const scanCentered =
-    (scanHere && view !== 4) || (view === 3 && live && campaignLoading && campaigns.length === 0);
+  const scanCentered = scanHere && view !== 3;
   // The table appears with the first real lead; there are no placeholder rows while the search starts.
   const accountRows = prospects;
 
   const auto = blueprintReview
     ? { key: "review", label: "competitors", go: () => advanceRef.current.approveAndContinue() }
     : step === 2 && competitorsReady && !showScan
-      ? { key: "competitors", label: "campaigns", go: () => advanceRef.current.loadCampaigns() }
-      : step === 3 && !campaignLoading && campaigns.length > 0 && !error
-        ? { key: "campaigns", label: "accounts", go: () => advanceRef.current.findAccounts() }
-        : step === 4 && accountsReady && !showScan
-          ? { key: "accounts", label: "your campaigns", go: () => advanceRef.current.finishSetup() }
-          : null;
+      ? { key: "competitors", label: "accounts", go: () => advanceRef.current.findAccounts() }
+      : step === 3 && accountsReady && !showScan
+        ? { key: "accounts", label: "your workspace", go: () => advanceRef.current.finishSetup() }
+        : null;
 
   // The next step starts after STEP_HOLD_MS, no matter what is on screen.
   const autoKey = auto?.key ?? null;
@@ -683,9 +618,8 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
             className="shrink-0 font-medium underline"
             onClick={() => {
               setError(null);
-              if (step === 3) void loadCampaigns();
-              if (step === 4) void findAccounts(true);
-              if (step === 5) void finishSetup();
+              if (step === 3) void findAccounts(true);
+              if (step === 4) void finishSetup();
             }}
           >
             Try again
@@ -697,7 +631,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
         className={cn(
           "min-h-0 flex-1",
           view === 1 && !started && "flex items-center justify-center pb-[8vh]",
-          scanCentered || view === 4
+          scanCentered || view === 3
             ? "flex flex-col overflow-hidden"
             : reviewShown
               ? "flex items-center justify-center overflow-y-auto"
@@ -855,31 +789,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
         </div>
       )}
 
-      {view === 3 && live && campaignLoading && campaigns.length === 0 && (
-        <SetupScanFrame>
-          <ScanOverlay
-            compact
-            state={scanningState(["Designing campaign angles…"], 28)}
-            kicker="Step 3"
-            title="Defining campaigns"
-            runningLabel="Designing"
-            smooth
-          />
-        </SetupScanFrame>
-      )}
-
-      {view === 3 && campaigns.length > 0 && (
-        <div className="mx-auto grid w-full max-w-[760px] gap-3 md:grid-cols-2">
-          {campaigns.map((campaign) => (
-            <div key={campaign.segmentKey} className="setup-rise">
-              <CampaignCard campaign={campaign} />
-            </div>
-          ))}
-          {campaignLoading && <CampaignCardSkeleton />}
-        </div>
-      )}
-
-      {view === 4 && (
+      {view === 3 && (
         <div className="setup-fade relative flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {accountRows.length > 0 ? (
@@ -900,7 +810,7 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
                 <ScanOverlay
                   compact
                   state={acctScan}
-                  kicker="Step 4"
+                  kicker="Step 3"
                   title="Finding accounts & people"
                   runningLabel="Searching"
                   smooth
@@ -912,14 +822,14 @@ function SetupWizardInner({ initialUrl = "" }: { initialUrl?: string }) {
         </div>
       )}
 
-      {view === 5 && (
+      {view === 4 && (
         <SetupScanFrame>
           <ScanOverlay
             compact
-            state={scan ?? scanningState(["Saving campaigns…"], 55)}
-            kicker="Step 5"
-            title="Opening campaigns"
-            runningLabel="Drafting"
+            state={scan ?? scanningState(["Opening your workspace…"], 55)}
+            kicker="Step 4"
+            title="Opening workspace"
+            runningLabel="Opening"
             smooth
             onRetry={() => void finishSetup()}
           />

@@ -2,20 +2,16 @@ export const LEAD_STATUSES = ["new", "qualified", "contacted", "replied", "won",
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
 
 export const OUTREACH_OPTIONS = [
-  { id: "in_campaign", label: "In campaign" },
-  { id: "not_in_campaign", label: "Not in campaign" },
   { id: "contacted", label: "Contacted" },
   { id: "not_contacted", label: "Not contacted" },
 ] as const;
 export type OutreachState = (typeof OUTREACH_OPTIONS)[number]["id"];
 
 export function matchesOutreachTab(
-  contact: { outreach?: OutreachState; in_campaign?: boolean; contacted?: boolean },
+  contact: { outreach?: OutreachState; contacted?: boolean },
   tab: OutreachState,
 ): boolean {
-  if (tab === "not_in_campaign") return !contact.in_campaign;
   if (tab === "not_contacted") return !contact.contacted;
-  if (tab === "in_campaign") return Boolean(contact.in_campaign);
   return contact.outreach === "contacted" || Boolean(contact.contacted);
 }
 
@@ -58,5 +54,12 @@ export interface ProspectRow {
   archived_at: string | null;
   list_id?: string | null;
   list_name?: string | null;
+  employee_range?: string | null;
+  website_url?: string | null;
+  their_buyer?: string | null;
+  key_insight?: string | null;
+  outreach_angle?: string | null;
+  hiring?: boolean | null;
+  source_url?: string | null;
   contacts: ContactRow[];
 }

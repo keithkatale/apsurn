@@ -35,7 +35,7 @@ export function isVertexConfigured(): boolean {
 }
 
 export function getVertexModel(): string {
-  return process.env.VERTEX_MODEL?.trim() || process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+  return process.env.VERTEX_MODEL?.trim() || process.env.GEMINI_MODEL?.trim() || "gemini-3.1-flash-lite";
 }
 
 /** Parses/validates a pasted service-account key without ever logging its contents. */
@@ -51,6 +51,11 @@ export function parseServiceAccountJson(raw: string): Record<string, unknown> {
     throw new Error('Not a service-account key — expected a JSON file with "type": "service_account".');
   }
   return obj;
+}
+
+/** Env-only Gemini client (ADC / GEMINI_API_KEY) — used by the simple /api/chat route. */
+export function createChatGenAI(): GoogleGenAI {
+  return createGenAI(null, null);
 }
 
 function createGenAI(geminiApiKey: string | null, serviceAccountJson: string | null): GoogleGenAI {
@@ -122,7 +127,41 @@ type GeminiChunk = { candidates?: Array<{ content?: { parts?: GeminiPart[] } }> 
 function thinkingConfigOf(params: CreateParams): Record<string, unknown> | undefined {
   if (params.thinking_budget === undefined) return undefined;
   const thinkingBudget = Math.max(0, Math.floor(params.thinking_budget));
-  return thinkingBudget > 0 ? { thinkingBudget, includeThoughts: true } : { thinkingBudget: 0 };
+  // Gemini 2.5 is the last family that accepts a token budget. Later models
+  // reject thinkingBudget (and thinkingLevel MINIMAL) with HTTP 400.
+  if (/^gemini-2\.5/.test(params.model)) {
+    return thinkingBudget > 0 ? { thinkingBudget, includeThoughts: true } : { thinkingBudget: 0 };
+  }
+  // Budget 0 means no thinking config — sending MINIMAL still burns ~10s on Flash-Lite.
+  if (thinkingBudget === 0) return undefined;
+  // Gemini 4, 3.8, and 3.7 reject MINIMAL. Flash-Lite accepts it.
+  const minimalOk = !/^gemini-4/.test(params.model) && !/^gemini-3\.[78]/.test(params.model) && !/^gemini-3\.1-pro/.test(params.model);
+  const thinkingLevel = thinkingBudget >= 4096 ? "HIGH" : thinkingBudget >= 2048 ? "MEDIUM" : minimalOk ? "MINIMAL" : "LOW";
+  return { thinkingLevel, includeThoughts: true };
+}
+
+/** Gemini 3 and 4 reject a replayed function call that has no signature. This sentinel is the documented bypass for calls whose original signature was not kept. */
+const SKIP_THOUGHT_SIGNATURE = "skip_thought_signature_validator";
+
+function modelRequiresThoughtSignature(model: string): boolean {
+  return !/^gemini-2(\.|$)/.test(model);
+}
+
+function functionCallPart(
+  call: { name: string; arguments: string; thought_signature?: string },
+  model: string,
+  firstInStep: boolean,
+): Record<string, unknown> {
+  let args: Record<string, unknown> = {};
+  try {
+    args = JSON.parse(call.arguments || "{}");
+  } catch {
+    // leave args empty if the model produced malformed JSON
+  }
+  const part: Record<string, unknown> = { functionCall: { name: call.name, args } };
+  if (call.thought_signature) part.thoughtSignature = call.thought_signature;
+  else if (firstInStep && modelRequiresThoughtSignature(model)) part.thoughtSignature = SKIP_THOUGHT_SIGNATURE;
+  return part;
 }
 
 function usesWebSearch(tools: CreateParams["tools"]): boolean {
@@ -136,8 +175,14 @@ function functionDeclarationsOf(tools: CreateParams["tools"]) {
   return fnTools.map((t) => ({ name: t.name, description: t.description ?? undefined, parameters: t.parameters ?? undefined }));
 }
 
-/** Converts our accumulated Responses-API input array into Gemini's Content[] shape. */
-function convertInput(input: CreateParams["input"]): string | { role: string; parts: Record<string, unknown>[] }[] {
+type GeminiContent = { role: string; parts: Record<string, unknown>[] };
+
+/**
+ * Converts our accumulated Responses-API input array into Gemini's Content[] shape.
+ * Parallel function calls stay in one model turn, and their responses stay in the
+ * following user turn. Splitting them makes Gemini 3/4 reject the request.
+ */
+export function convertInput(input: CreateParams["input"], model = ""): string | GeminiContent[] {
   if (typeof input === "string") return input;
 
   const callIdToName = new Map<string, string>();
@@ -147,35 +192,52 @@ function convertInput(input: CreateParams["input"]): string | { role: string; pa
     }
   }
 
-  const contents: { role: string; parts: Record<string, unknown>[] }[] = [];
+  const contents: GeminiContent[] = [];
+  const pendingCalls: { name: string; arguments: string; thought_signature?: string }[] = [];
+  const pendingResponses: { call_id: string; output: string }[] = [];
+
+  const flushCalls = () => {
+    if (pendingCalls.length === 0) return;
+    contents.push({
+      role: "model",
+      parts: pendingCalls.map((call, index) => functionCallPart(call, model, index === 0)),
+    });
+    pendingCalls.length = 0;
+  };
+  const flushResponses = () => {
+    if (pendingResponses.length === 0) return;
+    contents.push({
+      role: "user",
+      parts: pendingResponses.map((out) => {
+        const name = callIdToName.get(out.call_id) ?? "unknown_function";
+        let response: unknown = out.output;
+        try {
+          response = JSON.parse(out.output);
+        } catch {
+          response = { result: out.output };
+        }
+        return { functionResponse: { name, response } };
+      }),
+    });
+    pendingResponses.length = 0;
+  };
+
   for (const item of input) {
     if ("role" in item && typeof (item as { content?: unknown }).content === "string") {
+      flushCalls();
+      flushResponses();
       const role = item.role === "assistant" ? "model" : "user";
       contents.push({ role, parts: [{ text: (item as { content: string }).content }] });
     } else if ("type" in item && item.type === "function_call") {
+      flushResponses();
       const call = item as { name: string; arguments: string; thought_signature?: string };
-      let args: Record<string, unknown> = {};
-      try {
-        args = JSON.parse(call.arguments || "{}");
-      } catch {
-        // leave args empty if the model produced malformed JSON
-      }
-      // Newer Gemini thinking models reject a replayed function call that
-      // lost the signature it was emitted with.
-      const part: Record<string, unknown> = { functionCall: { name: call.name, args } };
-      if (call.thought_signature) part.thoughtSignature = call.thought_signature;
-      contents.push({ role: "model", parts: [part] });
+      pendingCalls.push(call);
     } else if ("type" in item && item.type === "function_call_output") {
-      const out = item as { call_id: string; output: string };
-      const name = callIdToName.get(out.call_id) ?? "unknown_function";
-      let response: unknown = out.output;
-      try {
-        response = JSON.parse(out.output);
-      } catch {
-        response = { result: out.output };
-      }
-      contents.push({ role: "user", parts: [{ functionResponse: { name, response } }] });
+      flushCalls();
+      pendingResponses.push(item as { call_id: string; output: string });
     } else if ("type" in item && item.type === "message") {
+      flushCalls();
+      flushResponses();
       const message = item as { role?: string; content?: unknown };
       const content = message.content;
       const text = Array.isArray(content)
@@ -184,6 +246,8 @@ function convertInput(input: CreateParams["input"]): string | { role: string; pa
       if (text) contents.push({ role: message.role === "user" ? "user" : "model", parts: [{ text }] });
     }
   }
+  flushCalls();
+  flushResponses();
   return contents;
 }
 
@@ -204,7 +268,7 @@ async function createNonStreaming(genAI: GoogleGenAI, params: CreateParams) {
 
   const response = await genAI.models.generateContent({
     model: params.model,
-    contents: convertInput(params.input),
+    contents: convertInput(params.input, params.model),
     config,
   });
 
@@ -223,24 +287,32 @@ async function* createStreaming(genAI: GoogleGenAI, params: CreateParams, option
 
   const stream = await genAI.models.generateContentStream({
     model: params.model,
-    contents: convertInput(params.input),
+    contents: convertInput(params.input, params.model),
     config,
   });
 
   let textAccum = "";
   const calls: { callId: string; name: string; args: Record<string, unknown>; thoughtSignature?: string }[] = [];
+  // A signature can arrive on the thought part just before the function call.
+  let carriedSignature: string | undefined;
 
   try {
     for await (const chunk of stream as AsyncIterable<GeminiChunk>) {
       if (options?.signal?.aborted) throw new Error("Request aborted");
       for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
+        const signature = typeof part.thoughtSignature === "string" && part.thoughtSignature ? part.thoughtSignature : undefined;
         if (part.functionCall?.name) {
           calls.push({
             callId: nextCallId(),
             name: part.functionCall.name,
             args: part.functionCall.args ?? {},
-            thoughtSignature: part.thoughtSignature,
+            thoughtSignature: signature ?? carriedSignature,
           });
+          carriedSignature = undefined;
+        } else if (signature) {
+          const unsigned = calls.find((call) => !call.thoughtSignature);
+          if (unsigned) unsigned.thoughtSignature = signature;
+          else carriedSignature = signature;
         } else if (part.text && part.thought) {
           yield { type: "response.reasoning_summary_text.delta", delta: part.text };
         } else if (part.text) {
@@ -249,6 +321,7 @@ async function* createStreaming(genAI: GoogleGenAI, params: CreateParams, option
         }
       }
     }
+    if (carriedSignature && calls[0] && !calls[0].thoughtSignature) calls[0].thoughtSignature = carriedSignature;
   } catch (error) {
     yield { type: "error", message: error instanceof Error ? error.message : "Vertex stream failed" };
     return;

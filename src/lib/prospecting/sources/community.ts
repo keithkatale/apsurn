@@ -21,8 +21,12 @@ import {
   parseAtomEntries,
   parseBetaListHome,
   parseHiringComment,
+  parseOverpassElements,
   parsePhMakers,
+  parseRedditLaunches,
+  parseRemoteOk,
   parseShowHnTitle,
+  parseWwrRss,
   parseYcFounders,
   recentBatches,
   type HiringPost,
@@ -37,7 +41,7 @@ import type { SourcedCompany } from "./types";
 const USER_AGENT = "ApsurnBot/1.0 (+https://apsurn.com/bot; contact: privacy@apsurn.com)";
 const DAY_MS = 86_400_000;
 
-export type LaunchSource = "yc_launches" | "yc_batch" | "hn_show" | "product_hunt" | "betalist";
+export type LaunchSource = "yc_launches" | "yc_batch" | "hn_show" | "product_hunt" | "betalist" | "reddit";
 
 export interface CommunityLaunch {
   name: string;
@@ -289,7 +293,7 @@ export async function hnWhoIsHiringCompanies(opts: { keywords?: string[]; recenc
 
 const RESOLVE_CONCURRENCY = 5;
 
-async function mapLimit<T, R>(items: T[], limit: number, work: (item: T) => Promise<R>): Promise<R[]> {
+async function mapLimit<T, R>(items: readonly T[], limit: number, work: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = [];
   let cursor = 0;
   await Promise.all(
@@ -345,4 +349,146 @@ export async function productHuntMakers(productUrl: string): Promise<string[]> {
   if (!/^https:\/\/www\.producthunt\.com\/products\//.test(productUrl)) return [];
   const res = await fetchText(productUrl);
   return res && res.status === 200 ? parsePhMakers(res.text) : [];
+}
+
+const REDDIT_SUBS = ["startups", "SaaS", "indiehackers", "smallbusiness"] as const;
+
+function jobCompanies(
+  jobs: Array<{ name: string; domain: string | null; description: string; location: string | null; sourceUrl: string; postedAt: string | null }>,
+  keywords: string[],
+  limit: number,
+  board: string,
+): SourcedCompany[] {
+  return jobs
+    .filter((job) => !keywords.length || keywords.some((word) => `${job.name} ${job.description}`.toLowerCase().includes(word.toLowerCase())))
+    .slice(0, limit)
+    .map((job) => ({
+      name: job.name,
+      domain: job.domain,
+      description: job.description,
+      location: job.location,
+      employeeBand: null,
+      phone: null,
+      contactName: null,
+      contactTitle: null,
+      source: board,
+      sourceUrl: job.sourceUrl,
+      signal: "Hiring" as const,
+      signalEvidence: `Hiring: "${job.description}"`,
+      signalDate: job.postedAt,
+    }));
+}
+
+/** Remote OK's public job JSON. The job URL is kept and the board is named. */
+export async function remoteOkCompanies(keywords: string[], limit: number): Promise<SourcedCompany[]> {
+  const rows = await fetchJson<unknown[]>("https://remoteok.com/api");
+  return jobCompanies(parseRemoteOk(Array.isArray(rows) ? rows : []), keywords, limit, "Remote OK");
+}
+
+/** We Work Remotely's public RSS. The job URL is kept and the board is named. */
+export async function weWorkRemotelyCompanies(keywords: string[], limit: number): Promise<SourcedCompany[]> {
+  const rss = await fetchText("https://weworkremotely.com/remote-jobs.rss");
+  if (!rss || rss.status !== 200) return [];
+  return jobCompanies(parseWwrRss(rss.text), keywords, limit, "We Work Remotely");
+}
+
+/** Launch posts from a fixed set of startup subreddits. The poster is not a founder. */
+export async function redditLaunchCompanies(keywords: string[], limit: number): Promise<SourcedCompany[]> {
+  const perSub = await mapLimit(REDDIT_SUBS, 2, async (sub) => {
+    const payload = await fetchJson(`https://www.reddit.com/r/${sub}/new.json?limit=25`);
+    return payload ? parseRedditLaunches(payload) : [];
+  });
+  const seen = new Set<string>();
+  const out: SourcedCompany[] = [];
+  for (const post of perSub.flat()) {
+    if (seen.has(post.domain) || out.length >= limit) continue;
+    if (keywords.length && !keywords.some((word) => post.title.toLowerCase().includes(word.toLowerCase()))) continue;
+    seen.add(post.domain);
+    out.push({
+      name: post.name,
+      domain: post.domain,
+      description: post.title,
+      location: null,
+      employeeBand: null,
+      phone: null,
+      contactName: null,
+      contactTitle: null,
+      source: "Reddit",
+      sourceUrl: post.sourceUrl,
+      signal: "Launched",
+      signalEvidence: post.title,
+      signalDate: post.postedAt,
+    });
+  }
+  return out;
+}
+
+/** Reddit launch posts as community launches. The poster is not attached as a founder. */
+export async function redditLaunches(keywords: string[], max = 30): Promise<CommunityLaunch[]> {
+  const rows = await redditLaunchCompanies(keywords, max);
+  return rows.flatMap((row): CommunityLaunch[] =>
+    row.domain
+      ? [{
+          name: row.name,
+          domain: row.domain,
+          tagline: row.description ?? "",
+          sourceUrl: row.sourceUrl ?? "",
+          date: row.signalDate,
+          source: "reddit",
+          tags: [],
+          strength: 0.45,
+        }]
+      : [],
+  );
+}
+
+const OSM_CATEGORIES: Record<string, string> = {
+  restaurant: '["amenity"="restaurant"]',
+  cafe: '["amenity"="cafe"]',
+  dentist: '["amenity"="dentist"]',
+  clinic: '["amenity"="clinic"]',
+  shop: '["shop"]',
+  office: '["office"]',
+};
+
+/** Local businesses from OpenStreetMap: name, website, phone and address. Credit OpenStreetMap. */
+export async function overpassBusinesses(place: string, category: string, limit: number): Promise<SourcedCompany[]> {
+  const query = place.trim();
+  if (!query) return [];
+  const geocode = await fetchJson<Array<{ lat?: string; lon?: string }>>(
+    `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`,
+  );
+  const hit = geocode?.[0];
+  if (!hit?.lat || !hit?.lon) return [];
+  const tag = OSM_CATEGORIES[category.toLowerCase()] ?? '["office"="company"]';
+  const ql = `[out:json][timeout:25];(nwr${tag}["name"]["website"](around:20000,${hit.lat},${hit.lon}););out tags ${Math.min(Math.max(limit, 1), 40)};`;
+  const response = await fetch("https://overpass-api.de/api/interpreter", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": USER_AGENT,
+      Accept: "application/json",
+    },
+    body: `data=${encodeURIComponent(ql)}`,
+    signal: AbortSignal.timeout(30_000),
+  }).catch(() => null);
+  if (!response?.ok) return [];
+  const payload = (await response.json().catch(() => null)) as { elements?: unknown[] } | null;
+  return parseOverpassElements(payload?.elements ?? [])
+    .slice(0, limit)
+    .map((placeRow) => ({
+      name: placeRow.name,
+      domain: placeRow.domain,
+      description: null,
+      location: placeRow.location,
+      employeeBand: null,
+      phone: placeRow.phone,
+      contactName: null,
+      contactTitle: null,
+      source: "OpenStreetMap",
+      sourceUrl: placeRow.website ?? "https://www.openstreetmap.org",
+      signal: null,
+      signalEvidence: "Listed on OpenStreetMap",
+      signalDate: null,
+    }));
 }

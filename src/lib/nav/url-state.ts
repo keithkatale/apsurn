@@ -1,4 +1,4 @@
-/** The id after `base` in a pathname, e.g. idFromPath("/dashboard/campaigns/abc", "/dashboard/campaigns") is "abc". */
+/** The id after `base` in a pathname, e.g. idFromPath("/dashboard/prospects/abc", "/dashboard/prospects") is "abc". */
 export function idFromPath(pathname: string, base: string): string | null {
   if (!pathname.startsWith(`${base}/`)) return null;
   const rest = pathname.slice(base.length + 1).split("/")[0];

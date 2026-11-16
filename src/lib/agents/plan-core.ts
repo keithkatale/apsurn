@@ -3,7 +3,7 @@
  * runtime `@/` imports, so it runs under node:test (see plan-core.test.ts).
  */
 
-export const PLAN_AGENT_IDS = ["researcher", "listener", "writer", "operator", "signal_scout"] as const;
+export const PLAN_AGENT_IDS = ["researcher", "signal_scout"] as const;
 export type PlanAgentId = (typeof PLAN_AGENT_IDS)[number];
 
 export const MAX_PLAN_STEPS = 8;
@@ -72,7 +72,6 @@ export function validatePlan(args: Record<string, unknown>): { ok: true; plan: V
 
 // "25 SaaS companies", "10 new Series A accounts": up to three descriptor words between number and noun.
 const LEAD_COUNT = /\b(\d{1,3})\s+(?:[\w-]+\s+){0,3}?(?:leads?|compan(?:y|ies)|contacts?|prospects?|accounts?|businesses|founders|people)\b/i;
-const DRAFT_COUNT = /\b(\d{1,3})\s+(?:[\w-]+\s+){0,2}?(?:emails?|drafts?|messages?)\b/i;
 
 /** How many leads a step will try to save: explicit args first, then a number in the instruction. */
 export function leadTargetOf(step: PlanStep): number {
@@ -80,11 +79,6 @@ export function leadTargetOf(step: PlanStep): number {
   if (Number.isFinite(fromArgs) && fromArgs > 0) return Math.min(200, Math.floor(fromArgs));
   const match = step.instruction.match(LEAD_COUNT) ?? step.title.match(LEAD_COUNT);
   return match ? Math.min(200, Number(match[1])) : 10;
-}
-
-function draftCountOf(step: PlanStep): number {
-  const match = step.instruction.match(DRAFT_COUNT) ?? step.title.match(DRAFT_COUNT);
-  return match ? Math.min(200, Number(match[1])) : 5;
 }
 
 /**
@@ -112,13 +106,6 @@ export function estimatePlanCost(steps: PlanStep[], costs: PlanCreditCosts): Pla
         stepHigh += costs.lead_source_scan * 2;
         stepLow += costs.lead_source_scan;
       }
-    } else if (step.agent === "listener") {
-      stepHigh += costs.market_scan;
-      stepLow += costs.market_scan;
-    } else if (step.agent === "writer") {
-      const drafts = draftCountOf(step);
-      stepHigh += drafts * costs.email_draft;
-      stepLow += drafts * costs.email_draft;
     }
 
     perStep.push(stepHigh);

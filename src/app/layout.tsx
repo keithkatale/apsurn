@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Script from "next/script";
-import { Fraunces, Geist, Manrope, Poppins } from "next/font/google";
+import { Fraunces, Geist, Manrope, Newsreader, Poppins } from "next/font/google";
 import { PostHogProvider } from "@/components/analytics/PostHogProvider";
 import { ProductTracker } from "@/components/analytics/ProductTracker";
 import { SupportChat } from "@/components/support/SupportChat";
 import { ThemeProvider } from "@/components/theme/theme-provider";
-import { materialSymbolsStylesheet } from "@/lib/campaigns/icon";
+import { materialSymbolsStylesheet } from "@/lib/ui/material-icons";
 import { THEME_BOOTSTRAP_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
@@ -37,11 +37,19 @@ const poppins = Poppins({
   preload: false,
 });
 
+const newsreader = Newsreader({
+  subsets: ["latin"],
+  variable: "--font-newsreader",
+  display: "swap",
+  preload: false,
+  style: ["normal", "italic"],
+});
+
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://apsurn.com"),
-  title: "apsurn | Outbound for founders who'd rather be building",
+  title: "apsurn | Find who should buy, from your website",
   description:
-    "Paste your website. apsurn finds who should buy, gets their verified emails, and writes the sequence you send from your own Gmail. Built for seed-stage B2B founders.",
+    "Paste your website. apsurn drafts your ICP, finds matching companies, and only keeps contacts it can verify.",
   icons: {
     icon: [
       { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
@@ -52,23 +60,23 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "apsurn",
-    title: "apsurn | Outbound for founders who'd rather be building",
+    title: "apsurn | Find who should buy, from your website",
     description:
-      "Paste your website. apsurn finds who should buy, gets their verified emails, and writes the sequence you send from your own Gmail. Built for seed-stage B2B founders.",
+      "Paste your website. apsurn drafts your ICP, finds matching companies, and only keeps contacts it can verify.",
     images: [
       {
         url: "/landing/socialshare.png",
         width: 3478,
         height: 2104,
-        alt: "apsurn — Distribution engine for B2B SaaS startups",
+        alt: "apsurn — Find who should buy, from your website",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "apsurn | Outbound for founders who'd rather be building",
+    title: "apsurn | Find who should buy, from your website",
     description:
-      "Paste your website. apsurn finds who should buy, gets their verified emails, and writes the sequence you send from your own Gmail. Built for seed-stage B2B founders.",
+      "Paste your website. apsurn drafts your ICP, finds matching companies, and only keeps contacts it can verify.",
     images: ["/landing/socialshare.png"],
   },
 };
@@ -79,7 +87,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${geist.variable} ${manrope.variable} ${fraunces.variable} ${poppins.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${geist.variable} ${manrope.variable} ${fraunces.variable} ${poppins.variable} ${newsreader.variable}`}>
       <head>
         {/* Supabase public config, served at request time by app/runtime-config.js so pages can be built statically.
             A plain blocking script: it must run before any client component creates a Supabase client. */}

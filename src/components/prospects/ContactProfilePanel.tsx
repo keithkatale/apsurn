@@ -3,11 +3,11 @@
 import { useState } from "react";
 import { Pencil, Trash2, X } from "lucide-react";
 import { ThreeDButton } from "@/components/buttons/three-d-button";
-import { EnrollInSequenceModal } from "@/components/sequences/EnrollInSequenceModal";
 import { CompanyFavicon } from "./CompanyFavicon";
 import { ContactAvatar } from "./ContactAvatar";
 import { LeadStatusPicker } from "./LeadStatusPicker";
-import type { ContactRow, ProspectRow } from "./types";
+import { OutreachPicker } from "./OutreachPicker";
+import type { ContactRow, OutreachState, ProspectRow } from "./types";
 
 interface EditableFields {
   full_name: string;
@@ -86,7 +86,7 @@ export function ContactProfilePanel({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-start justify-between gap-4 border-b border-neutral-200 bg-white px-4 py-3 pr-10">
+      <div className="flex shrink-0 items-start justify-between gap-4 border-b border-neutral-200 bg-white px-4 py-3 pr-10 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="flex min-w-0 items-center gap-3">
           <ContactAvatar
             name={contact.full_name}
@@ -104,8 +104,8 @@ export function ContactProfilePanel({
               />
             ) : (
               <>
-                <h2 className="truncate text-base font-semibold text-neutral-900">{contact.full_name || "Unnamed contact"}</h2>
-                {contact.title && <p className="text-xs text-neutral-500">{contact.title}</p>}
+                <h2 className="truncate text-base font-semibold text-neutral-900 dark:text-neutral-100">{contact.full_name || "Unnamed contact"}</h2>
+                {contact.title && <p className="text-xs text-neutral-500 dark:text-neutral-400">{contact.title}</p>}
               </>
             )}
           </div>
@@ -114,7 +114,7 @@ export function ContactProfilePanel({
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="shrink-0 rounded-full p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
+          className="shrink-0 rounded-full p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
         >
           <X className="size-4" />
         </button>
@@ -122,10 +122,11 @@ export function ContactProfilePanel({
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         <div className="flex flex-col gap-4">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <LeadStatusPicker contactId={contact.id} value={contact.lead_status} />
+            <OutreachPicker contactId={contact.id} value={(contact.outreach ?? "not_contacted") as OutreachState} />
             <span className="text-xs text-neutral-400">
-              {contact.contact_origin}
+              Fit {company.icp_fit_score ?? "—"}
               {contact.confidence != null ? ` · ${Math.round(contact.confidence * 100)}% confidence` : ""}
             </span>
           </div>
@@ -222,7 +223,7 @@ export function ContactProfilePanel({
         </div>
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-neutral-200 bg-white p-3">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
         {editing ? (
           <>
             <ThreeDButton type="button" variant="solid" size="sm" disabled={saving} onClick={save}>
@@ -238,14 +239,6 @@ export function ContactProfilePanel({
               <Pencil className="size-3.5" />
               <span>Edit</span>
             </ThreeDButton>
-            <EnrollInSequenceModal
-              contactIds={[contact.id]}
-              trigger={(openModal) => (
-                <ThreeDButton type="button" variant="soft" size="sm" onClick={openModal}>
-                  Enroll in sequence
-                </ThreeDButton>
-              )}
-            />
             <ThreeDButton type="button" variant="destructive" size="sm" onClick={deleteContact}>
               <Trash2 className="size-3.5" />
               <span>{confirmingDelete ? "Confirm delete?" : "Delete"}</span>

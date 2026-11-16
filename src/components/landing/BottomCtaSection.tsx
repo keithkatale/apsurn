@@ -20,7 +20,7 @@ export function BottomCtaSection() {
             </h2>
 
             <p className="mt-4 sm:mt-5 text-base sm:text-lg text-[#605F5F] max-w-xl font-medium leading-relaxed tracking-tight">
-              Paste your URL, approve your ICP and send your first sequence in about 10 minutes.
+              Paste your URL, approve your ICP, and get verified prospects in about 10 minutes.
             </p>
 
             <div className="mt-6 sm:mt-7 flex flex-wrap items-center justify-center gap-3 sm:gap-3.5 w-full sm:w-auto">
@@ -45,7 +45,7 @@ export function BottomCtaSection() {
               <div className="relative aspect-[16/7] overflow-hidden rounded-t-[14px] sm:rounded-t-[22px] bg-white">
                 <Image
                   src="/landing/dashboard.png"
-                  alt="Apsurn campaign workspace"
+                  alt="Apsurn prospecting workspace"
                   width={3478}
                   height={2104}
                   className="absolute inset-x-0 top-0 w-full h-auto max-w-none"

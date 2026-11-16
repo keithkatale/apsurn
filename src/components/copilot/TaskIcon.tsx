@@ -2,9 +2,9 @@ import { cn } from "@/lib/cn";
 import { taskMaterialIcon } from "@/lib/copilot/task-icon";
 
 const STATUS_DOT: Record<string, { className: string; label: string; pulse?: boolean }> = {
-  queued: { className: "bg-[#4379EE]", label: "Starting", pulse: true },
-  running: { className: "bg-[#4379EE]", label: "Running", pulse: true },
-  waiting: { className: "bg-[#4379EE]", label: "Waiting on a run", pulse: true },
+  queued: { className: "bg-neutral-900 dark:bg-neutral-100", label: "Starting", pulse: true },
+  running: { className: "bg-neutral-900 dark:bg-neutral-100", label: "Running", pulse: true },
+  waiting: { className: "bg-neutral-900 dark:bg-neutral-100", label: "Waiting on a run", pulse: true },
   cancelling: { className: "bg-neutral-400", label: "Cancelling", pulse: true },
   awaiting_approval: { className: "bg-amber-400", label: "Needs approval" },
   paused: { className: "bg-amber-400", label: "Needs your input" },

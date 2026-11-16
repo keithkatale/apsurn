@@ -1,6 +1,6 @@
 # Apsurn
 
-Apsurn is a source-backed AI prospecting application. It turns an approved company blueprint into durable prospecting runs, discovers matching companies with Gemini Google Search grounding, crawls public company pages, extracts professional contacts, and stores evidence and confidence alongside every result.
+Apsurn is a source-backed AI prospecting application. It turns an approved company blueprint into durable prospecting runs, discovers matching companies with grounded web search, crawls public company pages, extracts professional contacts, and stores evidence and confidence alongside every result. Copilot and artifacts help you research, save leads into lists, and keep working the pipeline.
 
 ## Local setup
 
@@ -9,7 +9,7 @@ Apsurn is a source-backed AI prospecting application. It turns an approved compa
 3. Run `npm install` and `npm run dev`.
 4. Configure `EMAIL_VERIFIER_URL`, `EMAIL_VERIFIER_SECRET`, and `SUPPRESSION_HASH_SECRET`. Run `npm run verifier:dev` locally, or deploy the verifier to a host with outbound TCP/25 for production.
 
-The app requires a real Supabase Auth session. Create an account at `/login`, generate and approve a blueprint at `/setup`, then start a search under `/dashboard/prospects`. Website analytics lives under `/dashboard/analytics`.
+The app requires a real Supabase Auth session. Create an account at `/login`, generate and approve a blueprint at `/setup`, then start a search under `/dashboard/prospects` or ask Copilot on `/dashboard`.
 
 ## Prospecting architecture
 
@@ -20,10 +20,6 @@ The app requires a real Supabase Auth session. Create an account at `/login`, ge
 - Known and inferred email addresses are checked by the dedicated verifier. Inference tries a learned company pattern first, then common business-email patterns; only a definitive mailbox result is exposed.
 - A company is saved and counted only when at least one named person has a verified email address or public phone number.
 - Background jobs run as Cloud Run HTTP handlers (`/api/jobs/*`, `/api/cron/*`) after the user-facing request returns, or on Cloud Scheduler.
-
-## Website analytics
-
-Privacy-friendly first-party analytics is available at `/dashboard/analytics`. Add a site, then drop the generated `trackify.js` snippet on any page. The browser posts pageviews to `/api/ingest` (CORS-open, no auth cookie). The dashboard covers overview charts, pages, referrers, locations, devices, and a live visitor globe.
 
 ## Email verifier
 

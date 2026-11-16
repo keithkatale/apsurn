@@ -68,7 +68,7 @@ function RowMenu({
             <div
               onClick={(e) => e.stopPropagation()}
               style={{ top: pos.top, left: pos.left }}
-              className="fixed z-50 flex w-40 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white py-1 shadow-lg"
+              className="fixed z-50 flex w-40 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-800 dark:bg-neutral-900"
             >
               <button
                 type="button"
@@ -76,7 +76,7 @@ function RowMenu({
                   setOpen(false);
                   onRename();
                 }}
-                className="flex items-center gap-2 px-3 py-2 text-left text-[13px] text-neutral-700 hover:bg-neutral-50"
+                className="flex items-center gap-2 px-3 py-2 text-left text-[13px] text-neutral-700 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-800"
               >
                 <Pencil size={13} />
                 Rename
@@ -87,7 +87,7 @@ function RowMenu({
                   setOpen(false);
                   onDelete();
                 }}
-                className="flex items-center gap-2 px-3 py-2 text-left text-[13px] text-red-600 hover:bg-neutral-50"
+                className="flex items-center gap-2 px-3 py-2 text-left text-[13px] text-red-600 hover:bg-neutral-50 dark:text-red-400 dark:hover:bg-neutral-800"
               >
                 <Trash2 size={13} />
                 Delete
@@ -122,7 +122,7 @@ export function CopilotThreadsMenu() {
           onClick={() => select(null)}
           aria-label="New thread"
           title="New thread"
-          className="inline-flex size-5 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
+          className="inline-flex size-5 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
         >
           <Plus size={13} />
         </button>
@@ -147,7 +147,7 @@ export function CopilotThreadsMenu() {
                       if (e.key === "Escape") setEditingId(null);
                     }}
                     maxLength={80}
-                    className="w-full rounded-md border border-[#4379EE] bg-white px-2 py-1 text-[12px] text-neutral-900 outline-none"
+                    className="w-full rounded-md border border-neutral-300 bg-white px-2 py-1 text-[12px] text-neutral-900 outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-neutral-100"
                   />
                 </li>
               ) : (
@@ -158,8 +158,8 @@ export function CopilotThreadsMenu() {
                     title={c.title ?? "New task"}
                     className={`flex min-w-0 flex-1 items-center gap-1.5 truncate rounded-md px-3 py-1.5 text-left text-[12px] transition-colors ${
                       activeId === c.id
-                        ? "bg-neutral-100 font-medium text-neutral-900"
-                        : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
+                        ? "bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-900 dark:text-neutral-100"
+                        : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
                     }`}
                   >
                     <TaskIcon text={c.title ?? ""} storedIcon={c.icon} status={c.taskStatus} className="size-3.5 opacity-70" />
@@ -190,7 +190,7 @@ export function CopilotThreadsChips() {
       <button
         type="button"
         onClick={() => select(null)}
-        className="inline-flex shrink-0 items-center gap-1 rounded-full bg-neutral-100 px-2.5 py-1 text-[12px] font-medium text-neutral-700"
+        className="inline-flex shrink-0 items-center gap-1 rounded-full bg-neutral-100 px-2.5 py-1 text-[12px] font-medium text-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
       >
         <Plus size={12} />
         New
@@ -201,7 +201,9 @@ export function CopilotThreadsChips() {
           type="button"
           onClick={() => select(c.id)}
           className={`flex max-w-40 shrink-0 items-center gap-1 truncate rounded-full px-2.5 py-1 text-[12px] ${
-            activeId === c.id ? "bg-neutral-100 font-medium text-neutral-900" : "text-neutral-500"
+            activeId === c.id
+              ? "bg-neutral-100 font-medium text-neutral-900 dark:bg-neutral-900 dark:text-neutral-100"
+              : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
           }`}
         >
           <TaskIcon text={c.title ?? ""} storedIcon={c.icon} status={c.taskStatus} className="size-3 opacity-70" />

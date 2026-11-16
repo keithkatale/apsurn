@@ -9,7 +9,7 @@ const ROWS = [
     others: ["$70K+ a year", "Monthly retainer", "Priced for larger teams"],
   },
   {
-    label: "Time to first campaign",
+    label: "Time to first leads",
     apsurn: "About 10 minutes",
     others: ["Months to ramp", "Weeks", "Days of setup"],
   },
@@ -19,9 +19,9 @@ const ROWS = [
     others: ["You train them", "Sometimes", "You bring the ICP"],
   },
   {
-    label: "Where email sends",
-    apsurn: "Your own Gmail",
-    others: ["Their process", "Their process", "A separate stack"],
+    label: "What you get",
+    apsurn: "Verified contacts + evidence",
+    others: ["Manual research", "Mixed lists", "A separate stack"],
   },
   {
     label: "Built for founder-led sales",

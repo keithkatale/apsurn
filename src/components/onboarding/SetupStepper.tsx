@@ -5,9 +5,8 @@ import { cn } from "@/lib/cn";
 export const SETUP_STEPS = [
   { n: 1, label: "Research company" },
   { n: 2, label: "Explore competitors" },
-  { n: 3, label: "Define campaigns" },
-  { n: 4, label: "Find accounts" },
-  { n: 5, label: "Open campaigns" },
+  { n: 3, label: "Find accounts" },
+  { n: 4, label: "Open workspace" },
 ];
 
 /**

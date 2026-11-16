@@ -60,14 +60,14 @@ export function CreditsBalance({ className, variant = "pill" }: { className?: st
   }, [refresh]);
 
   if (balance === null && variant === "meter") {
-    return <span className={cn("block h-[74px] w-full animate-pulse rounded-lg bg-neutral-100", className)} aria-hidden />;
+    return <span className={cn("block h-[74px] w-full animate-pulse rounded-lg bg-neutral-100 dark:bg-neutral-800", className)} aria-hidden />;
   }
 
   if (balance === null) {
     return (
       <span
         className={cn(
-          "hidden h-8 min-w-[4.5rem] animate-pulse rounded-full bg-neutral-100 sm:inline-block",
+          "hidden h-8 min-w-[4.5rem] animate-pulse rounded-full bg-neutral-100 dark:bg-neutral-800 sm:inline-block",
           className,
         )}
         aria-hidden
@@ -90,19 +90,19 @@ export function CreditsBalance({ className, variant = "pill" }: { className?: st
         href="/dashboard/settings"
         title={active ? "Credits left of everything you've bought — open Settings for top-ups" : "Start a plan to get credits"}
         className={cn(
-          "block rounded-lg bg-neutral-100 px-3 py-2.5 transition-colors hover:bg-neutral-200/80",
+          "block rounded-lg bg-neutral-100 px-3 py-2.5 transition-colors hover:bg-neutral-200/80 dark:bg-neutral-900 dark:hover:bg-neutral-800",
           className,
         )}
       >
         <div className="flex items-center justify-between text-[12px]">
-          <span className="inline-flex items-center gap-1.5 font-semibold text-neutral-900">
-            <Coins className="size-3.5 text-[#4379EE]" aria-hidden />
+          <span className="inline-flex items-center gap-1.5 font-semibold text-neutral-900 dark:text-neutral-100">
+            <Coins className="size-3.5 text-neutral-900 dark:text-neutral-100" aria-hidden />
             Credits
           </span>
-          <span className="tabular-nums text-neutral-500">{balance.toLocaleString()} left</span>
+          <span className="tabular-nums text-neutral-500 dark:text-neutral-400">{balance.toLocaleString()} left</span>
         </div>
         <div
-          className="mt-2 h-2 overflow-hidden rounded-full bg-neutral-200"
+          className="mt-2 h-2 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800"
           role="meter"
           aria-label="Credits remaining"
           aria-valuemin={0}
@@ -110,11 +110,11 @@ export function CreditsBalance({ className, variant = "pill" }: { className?: st
           aria-valuenow={balance}
         >
           <div
-            className={cn("h-full rounded-full transition-[width]", critical ? "bg-red-500" : warn ? "bg-amber-500" : "bg-[#4379EE]")}
+            className={cn("h-full rounded-full transition-[width]", critical ? "bg-red-500" : warn ? "bg-amber-500" : "bg-neutral-900 dark:bg-neutral-100")}
             style={{ width: `${remainingPct}%` }}
           />
         </div>
-        <div className="mt-1.5 flex justify-between text-[11px] tabular-nums text-neutral-500">
+        <div className="mt-1.5 flex justify-between text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400">
           <span>{used.toLocaleString()} used</span>
           <span>of {total.toLocaleString()}</span>
         </div>
@@ -129,14 +129,14 @@ export function CreditsBalance({ className, variant = "pill" }: { className?: st
       className={cn(
         "inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-semibold tabular-nums transition-colors",
         low
-          ? "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
-          : "border-neutral-200 bg-neutral-50 text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900",
+          ? "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200"
+          : "border-neutral-200 bg-neutral-50 text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-neutral-100",
         className,
       )}
     >
-      <Coins className="size-3.5 shrink-0 text-[#4379EE]" aria-hidden />
+      <Coins className="size-3.5 shrink-0 text-neutral-900 dark:text-neutral-100" aria-hidden />
       <span>{balance.toLocaleString()}</span>
-      <span className="font-medium text-neutral-500">credits</span>
+      <span className="font-medium text-neutral-500 dark:text-neutral-400">credits</span>
     </Link>
   );
 }

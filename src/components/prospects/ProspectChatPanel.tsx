@@ -192,9 +192,9 @@ export function ProspectChatPanel({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="shrink-0 border-b border-neutral-200 bg-white px-4 py-3 pr-10">
-        <h1 className="text-sm font-semibold text-neutral-900">Talk to the AI</h1>
-        <p className="text-xs text-neutral-500">Tell it who you&apos;re looking for — it&apos;ll ask questions before it starts searching.</p>
+      <div className="shrink-0 border-b border-neutral-200 bg-white px-4 py-3 pr-10 dark:border-neutral-800 dark:bg-neutral-900">
+        <h1 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Talk to the AI</h1>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">Tell it who you&apos;re looking for — it&apos;ll ask questions before it starts searching.</p>
       </div>
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
@@ -204,7 +204,7 @@ export function ProspectChatPanel({
         <div className="flex flex-col gap-4">
           {turns.map((turn) => (
             <div key={turn.id} className="flex flex-col gap-2">
-              <div className="self-end rounded-2xl bg-neutral-900 px-3 py-1.5 text-[13px] text-white">{turn.userText}</div>
+              <div className="self-end rounded-xl bg-neutral-900 px-3 py-1.5 text-[13px] text-white dark:bg-neutral-100 dark:text-neutral-900">{turn.userText}</div>
 
               <div className="flex flex-col gap-2.5">
                 {turn.status === "interpreting" && (
@@ -216,7 +216,7 @@ export function ProspectChatPanel({
                 )}
 
                 {turn.assistantReply && (
-                  <div className="self-start rounded-2xl bg-neutral-100 px-3 py-1.5 text-[13px] text-neutral-800">
+                  <div className="self-start rounded-xl bg-neutral-100 px-3 py-1.5 text-[13px] text-neutral-800 dark:bg-neutral-800 dark:text-neutral-200">
                     {turn.assistantReply}
                   </div>
                 )}
@@ -231,10 +231,10 @@ export function ProspectChatPanel({
                   )
                 )}
 
-                {turn.error && <p className="text-sm text-red-600">{turn.error}</p>}
+                {turn.error && <p className="text-sm text-red-600 dark:text-red-400">{turn.error}</p>}
 
                 {turn.summary && (
-                  <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-[13px] text-neutral-700">
+                  <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-[13px] text-neutral-700 dark:border-neutral-800 dark:bg-neutral-800/50 dark:text-neutral-300">
                     Found {turn.summary.found} compan{turn.summary.found === 1 ? "y" : "ies"} · {turn.summary.contactCount}{" "}
                     contact{turn.summary.contactCount === 1 ? "" : "s"}
                     {turn.summary.warnings > 0 ? ` · ${turn.summary.warnings} skipped` : ""}
@@ -246,7 +246,7 @@ export function ProspectChatPanel({
         </div>
       </div>
 
-      <form onSubmit={send} className="flex shrink-0 items-center gap-2 border-t border-neutral-200 bg-white p-3">
+      <form onSubmit={send} className="flex shrink-0 items-center gap-2 border-t border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
         <input
           className="input flex-1"
           placeholder="Describe who you're looking for…"
@@ -267,7 +267,7 @@ export function ProspectChatPanel({
           <button
             type="submit"
             disabled={!draft.trim()}
-            className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-neutral-900 text-white hover:bg-neutral-800 disabled:opacity-40"
+            className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-neutral-900 text-white hover:bg-neutral-800 disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
             aria-label="Send"
           >
             <Send className="size-4" />

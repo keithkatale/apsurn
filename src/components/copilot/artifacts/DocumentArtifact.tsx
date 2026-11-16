@@ -1,11 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { Check, Copy, ExternalLink, FileText } from "lucide-react";
 import type { CopilotArtifact } from "@/lib/agents/types";
 
-/** A saved Library document, shown where Copilot created or changed it. */
+/** A saved Copilot document, shown where Copilot created or changed it. */
 export function DocumentArtifact({ artifact }: { artifact: CopilotArtifact }) {
   const p = artifact.payload;
   const [copied, setCopied] = useState(false);
@@ -27,11 +26,11 @@ export function DocumentArtifact({ artifact }: { artifact: CopilotArtifact }) {
 
   return (
     <div className="flex items-start gap-3">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#E8F1FC] text-[#4379EE]">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100">
         <FileText className="size-4" aria-hidden />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-[#4379EE]">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
           {typeof p.folder === "string" && p.folder ? p.folder.replace(/\//g, " / ") : kindLabel}
           {typeof p.version === "number" && p.version > 1 ? ` · v${p.version}` : ""}
         </p>
@@ -40,21 +39,15 @@ export function DocumentArtifact({ artifact }: { artifact: CopilotArtifact }) {
         </h3>
         {excerpt ? <p className="mt-1 line-clamp-3 text-[13px] leading-snug text-[var(--copilot-muted)]">{excerpt}</p> : null}
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Link
-            href={documentId ? `/dashboard/library?doc=${documentId}` : "/dashboard/library"}
-            className="inline-flex items-center gap-1.5 rounded-full bg-[#4379EE] px-3 py-1.5 text-[12px] font-medium text-white hover:bg-[#3567D6]"
-          >
-            Open in Library
-          </Link>
           {shareUrl ? (
             <>
               <a
                 href={shareUrl}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-3 py-1.5 text-[12px] font-medium text-neutral-700 hover:bg-neutral-200/80"
+                className="inline-flex items-center gap-1.5 rounded-full bg-neutral-900 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
               >
-                <ExternalLink className="size-3" aria-hidden /> View page
+                <ExternalLink className="size-3" aria-hidden /> Open page
               </a>
               <button
                 type="button"
@@ -65,6 +58,10 @@ export function DocumentArtifact({ artifact }: { artifact: CopilotArtifact }) {
                 {copied ? "Copied" : "Copy link"}
               </button>
             </>
+          ) : documentId ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-3 py-1.5 text-[12px] font-medium text-neutral-700">
+              Saved in Copilot
+            </span>
           ) : null}
         </div>
       </div>
