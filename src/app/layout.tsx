@@ -116,6 +116,11 @@ export default function RootLayout({
         {/* Material Symbols — campaign marks and the send control */}
         {/* eslint-disable-next-line @next/next/no-page-custom-font */}
         <link rel="stylesheet" href={materialSymbolsStylesheet()} />
+        <Script
+          src="https://www.ship-or-die.com/hackathon/verify.js"
+          strategy="afterInteractive"
+          data-site="46e6545aa7b2113991d5f71cea903f770a9b3929"
+        />
       </head>
       <body className="antialiased font-sans">
         <ThemeProvider>
