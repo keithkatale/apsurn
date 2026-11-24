@@ -1,0 +1,133 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { Check } from "lucide-react";
+import { BrandLogo } from "@/components/brand/BrandLogo";
+
+export function Footer() {
+  const [subscribed, setSubscribed] = useState(false);
+  const [email, setEmail] = useState("");
+
+  const handleSubscribe = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) return;
+    setSubscribed(true);
+  };
+
+  return (
+    <footer className="bg-white py-10 sm:py-14 lg:py-16 overflow-hidden">
+      <div className="mx-auto max-w-[1300px] px-5 sm:px-8 lg:px-20">
+        <div className="flex flex-col lg:flex-row items-start justify-between gap-12 lg:gap-16">
+          {/* Brand & Subscribe Column */}
+          <div className="flex flex-col gap-7 sm:gap-8 w-full max-w-[450px]">
+            {/* Logo */}
+            <BrandLogo href="/" size={40} withWordmark={false} />
+
+            {/* Subscribe Box */}
+            <div className="flex flex-col gap-2 w-full">
+              <h3 className="text-[20px] sm:text-[22px] font-semibold text-black tracking-[-0.88px] font-heading leading-snug">
+                Stay connected
+              </h3>
+
+              {subscribed ? (
+                <div className="flex items-center gap-2 text-sm text-emerald-600 font-medium py-3">
+                  <Check className="size-4" />
+                  <span>You&apos;re subscribed! Stay tuned for updates.</span>
+                </div>
+              ) : (
+                <form
+                  onSubmit={handleSubscribe}
+                  className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full mt-1"
+                >
+                  <input
+                    type="email"
+                    required
+                    placeholder="name@email.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="h-11 sm:h-12 flex-1 rounded-xl bg-[#F4F4F4] px-4 text-sm sm:text-base text-neutral-900 placeholder:text-[#605F5F] tracking-[-0.02em] border border-transparent focus:border-neutral-300 focus:bg-white focus:outline-none transition-all"
+                  />
+                  <button
+                    type="submit"
+                    className="h-11 shrink-0 whitespace-nowrap rounded-xl bg-black px-5 text-sm font-medium text-white shadow-[0px_4px_10px_0px_rgba(0,0,0,0.25)] transition-all hover:bg-neutral-900 active:scale-[0.98] sm:h-12 sm:text-base"
+                  >
+                    Subscribe
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+
+          {/* Right Navigation & Credits Column */}
+          <div className="flex flex-col justify-between gap-10 sm:gap-12 w-full lg:w-auto flex-1">
+            {/* Nav Columns */}
+            <div className="flex flex-wrap sm:flex-nowrap gap-10 sm:gap-14 lg:justify-end">
+              {/* Product */}
+              <div className="flex flex-col gap-3 min-w-[70px]">
+                <span className="text-[16px] font-medium text-black tracking-[-0.64px]">
+                  Product
+                </span>
+                <div className="flex flex-col gap-2.5 text-[15px] sm:text-[16px] text-[#605F5F] tracking-[-0.64px]">
+                  <Link href="#hero" className="hover:text-black transition-colors">
+                    Home
+                  </Link>
+                  <Link href="#pricing" className="hover:text-black transition-colors">
+                    Pricing
+                  </Link>
+                  <Link href="#how-it-works" className="hover:text-black transition-colors">
+                    How it works
+                  </Link>
+                  <Link href="#faq" className="hover:text-black transition-colors">
+                    FAQ
+                  </Link>
+                </div>
+              </div>
+
+              {/* Company */}
+              <div className="flex flex-col gap-3 min-w-[70px]">
+                <span className="text-[16px] font-medium text-black tracking-[-0.64px]">
+                  Company
+                </span>
+                <div className="flex flex-col gap-2.5 text-[15px] sm:text-[16px] text-[#605F5F] tracking-[-0.64px]">
+                  <Link href="#founder" className="hover:text-black transition-colors">
+                    About
+                  </Link>
+                  <a href="mailto:hello@apsurn.com" className="hover:text-black transition-colors">
+                    Contact
+                  </a>
+                </div>
+              </div>
+
+              {/* More */}
+              <div className="flex flex-col gap-3 min-w-[90px]">
+                <span className="text-[16px] font-medium text-black tracking-[-0.64px]">
+                  More
+                </span>
+                <div className="flex flex-col gap-2.5 text-[15px] sm:text-[16px] text-[#605F5F] tracking-[-0.64px]">
+                  <Link href="/privacy" className="hover:text-black transition-colors">
+                    Privacy Policy
+                  </Link>
+                  <Link href="/terms" className="hover:text-black transition-colors">
+                    Terms
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            {/* Copyright / Credits */}
+            <div className="lg:text-right text-left text-[14px] sm:text-[16px] text-[#605F5F] tracking-[-0.64px]">
+              <p>
+                Made by Keith Katale ·{" "}
+                <a href="mailto:hello@apsurn.com" className="hover:text-black transition-colors">
+                  hello@apsurn.com
+                </a>
+              </p>
+              <p>All rights reserved.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+}

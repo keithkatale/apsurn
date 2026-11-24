@@ -1,8 +1,15 @@
+import dns from 'node:dns'
+import net from 'node:net'
+
+dns.setDefaultResultOrder('ipv4first')
+net.setDefaultAutoSelectFamily(false)
+
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36'
 
 const SUBPAGE_PATTERN = /(about|pricing|price|plans|product|features|solutions|customers|use-cases|how-it-works|services)/i
-const MAX_PAGE_CHARS = 9000
+const MAX_PAGE_CHARS = 5000
+const MAX_SUBPAGE_CHARS = 2500
 
 export function normalizeUrl(input: string): URL {
   const trimmed = input.trim()
@@ -23,11 +30,11 @@ function isPrivateHost(hostname: string) {
   return false
 }
 
-async function fetchHtml(url: string) {
+async function fetchHtml(url: string, timeoutMs = 6000) {
   const res = await fetch(url, {
     headers: { 'User-Agent': USER_AGENT, Accept: 'text/html,application/xhtml+xml' },
     redirect: 'follow',
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(timeoutMs),
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const type = res.headers.get('content-type') ?? ''
@@ -84,23 +91,25 @@ function findSubpages(html: string, base: URL) {
       // ignore malformed hrefs
     }
   }
-  return [...links].slice(0, 3)
+  return [...links].slice(0, 2)
 }
 
 export async function scrapeBusinessSite(input: string) {
   const url = normalizeUrl(input)
-  const home = await fetchHtml(url.toString())
+  const home = await fetchHtml(url.toString(), 5000)
   const finalUrl = new URL(home.finalUrl)
   const meta = extractMeta(home.html)
+  const homeText = htmlToText(home.html).slice(0, MAX_PAGE_CHARS)
 
   const pages: { url: string; text: string }[] = [
-    { url: finalUrl.toString(), text: htmlToText(home.html).slice(0, MAX_PAGE_CHARS) },
+    { url: finalUrl.toString(), text: homeText },
   ]
 
+  // Only wait up to 1.5s for subpages so slow secondary pages never bottleneck analysis
   const subpages = await Promise.allSettled(
     findSubpages(home.html, finalUrl).map(async (link) => {
-      const { html } = await fetchHtml(link)
-      return { url: link, text: htmlToText(html).slice(0, 4000) }
+      const { html } = await fetchHtml(link, 1500)
+      return { url: link, text: htmlToText(html).slice(0, MAX_SUBPAGE_CHARS) }
     }),
   )
   for (const result of subpages) {

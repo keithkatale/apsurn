@@ -17,9 +17,49 @@ const TIERS = [
 
 function toCsv(data: ListenResponse['posts']) {
   const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
-  const header = ['score', 'intent', 'source', 'community', 'author', 'created_at', 'title', 'text', 'url', 'reason', 'outreach_angle']
+  const header = [
+    'score',
+    'intent',
+    'source',
+    'full_name',
+    'job_title',
+    'email',
+    'phone',
+    'linkedin_url',
+    'company',
+    'company_website',
+    'industry',
+    'company_size',
+    'location',
+    'title',
+    'text',
+    'url',
+    'reason',
+    'outreach_angle',
+  ]
   const rows = data.map((p) =>
-    [p.score, p.intent, p.source, p.community, p.author, p.createdAt, p.title, p.text, p.url, p.reason, p.outreachAngle].map(escape).join(','),
+    [
+      p.score,
+      p.intent,
+      p.source,
+      p.lead?.fullName ?? p.author,
+      p.lead?.jobTitle ?? '',
+      p.lead?.email ?? '',
+      p.lead?.phone ?? '',
+      p.lead?.linkedinUrl ?? '',
+      p.lead?.companyName ?? p.community,
+      p.lead?.companyWebsite ?? '',
+      p.lead?.companyIndustry ?? '',
+      p.lead?.companySize ?? '',
+      p.lead?.location ?? '',
+      p.title,
+      p.text,
+      p.url,
+      p.reason,
+      p.outreachAngle,
+    ]
+      .map(escape)
+      .join(','),
   )
   return [header.join(','), ...rows].join('\n')
 }

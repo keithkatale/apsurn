@@ -1,5 +1,11 @@
+import dns from 'node:dns'
+import net from 'node:net'
+import { fetchApifyLeads, type ApifyLeadSearchParams } from './apify-leads'
 import { htmlToText } from './scrape-site'
 import type { RawPost, SourceId } from './types'
+
+dns.setDefaultResultOrder('ipv4first')
+net.setDefaultAutoSelectFamily(false)
 
 const UA = 'Mozilla/5.0 (compatible; SignalGTM/1.0; social listening)'
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
@@ -12,7 +18,7 @@ async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
     headers: { 'User-Agent': UA, Accept: 'application/json', ...init?.headers },
-    signal: AbortSignal.timeout(9000),
+    signal: AbortSignal.timeout(4500),
     cache: 'no-store',
   })
   if (!res.ok) throw new Error(res.status === 403 || res.status === 429 ? `Blocked (HTTP ${res.status})` : `HTTP ${res.status}`)
@@ -233,7 +239,7 @@ async function mastodonTag(tag: string): Promise<RawPost[]> {
     }))
 }
 
-const keywordFetchers: Record<Exclude<SourceId, 'mastodon'>, { fetch: Fetcher; maxKeywords: number }> = {
+const keywordFetchers: Record<Exclude<SourceId, 'mastodon' | 'apify'>, { fetch: Fetcher; maxKeywords: number }> = {
   reddit: { fetch: reddit, maxKeywords: 6 },
   hackernews: { fetch: hackernews, maxKeywords: 10 },
   bluesky: { fetch: bluesky, maxKeywords: 10 },
@@ -242,9 +248,21 @@ const keywordFetchers: Record<Exclude<SourceId, 'mastodon'>, { fetch: Fetcher; m
   github: { fetch: github, maxKeywords: 4 },
 }
 
-export async function runListening(keywords: string[], hashtags: string[], enabled: SourceId[]) {
+export async function runListening(
+  keywords: string[],
+  hashtags: string[],
+  enabled: SourceId[],
+  apifyParams?: ApifyLeadSearchParams,
+) {
   const since = sinceDate()
   const tasks: { source: SourceId; run: () => Promise<RawPost[]> }[] = []
+
+  if (enabled.includes('apify') && apifyParams) {
+    tasks.push({
+      source: 'apify',
+      run: () => fetchApifyLeads(apifyParams),
+    })
+  }
 
   for (const [source, config] of Object.entries(keywordFetchers) as [SourceId, { fetch: Fetcher; maxKeywords: number }][]) {
     if (!enabled.includes(source)) continue
@@ -265,7 +283,10 @@ export async function runListening(keywords: string[], hashtags: string[], enabl
     const entry = statusMap.get(source) ?? { ok: 0, failed: 0, count: 0 }
     if (result.status === 'fulfilled') {
       entry.ok++
-      const fresh = result.value.filter((p) => new Date(p.createdAt).getTime() >= since.getTime() && p.text.length > 20)
+      const fresh =
+        source === 'apify'
+          ? result.value
+          : result.value.filter((p) => new Date(p.createdAt).getTime() >= since.getTime() && p.text.length > 20)
       entry.count += fresh.length
       posts.push(...fresh)
     } else {

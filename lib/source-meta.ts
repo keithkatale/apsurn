@@ -1,6 +1,7 @@
 import type { IntentType, SourceId } from './types'
 
 export const SOURCES: { id: SourceId; label: string; note: string }[] = [
+  { id: 'apify', label: 'Apify B2B Leads', note: 'peakydev/leads-scraper-ppe · Verified emails, phones & LinkedIn' },
   { id: 'reddit', label: 'Reddit', note: 'Public JSON search · Reddit often blocks cloud server IPs' },
   { id: 'hackernews', label: 'Hacker News', note: 'Stories & comments via public Algolia index' },
   { id: 'bluesky', label: 'Bluesky', note: 'Public AppView search' },
@@ -13,10 +14,10 @@ export const SOURCES: { id: SourceId; label: string; note: string }[] = [
 export const sourceLabel = (id: SourceId) => SOURCES.find((s) => s.id === id)?.label ?? id
 
 export const INTENT_LABELS: Record<IntentType, string> = {
-  buying: 'Ready to buy',
+  buying: 'High ICP fit',
   recommendation: 'Asking for recs',
   comparison: 'Comparing options',
-  pain: 'Expressing pain',
-  'competitor-churn': 'Churning competitor',
-  other: 'Other',
+  pain: 'Pain-point match',
+  'competitor-churn': 'Competitor user',
+  other: 'General match',
 }

@@ -1,38 +1,72 @@
 import { Analytics } from '@vercel/analytics/next'
-import type { Metadata, Viewport } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import type { Metadata } from 'next'
+import { Fraunces, Geist, Geist_Mono, Manrope, Newsreader, Poppins } from 'next/font/google'
+import { ThemeProvider } from '@/components/theme/theme-provider'
+import { THEME_BOOTSTRAP_SCRIPT } from '@/lib/theme'
 import './globals.css'
 
-const geistSans = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
+const geist = Geist({ subsets: ['latin'], variable: '--font-geist' })
 const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' })
+const manrope = Manrope({ subsets: ['latin'], variable: '--font-manrope' })
+
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  axes: ['SOFT', 'opsz'],
+  variable: '--font-fraunces',
+  display: 'swap',
+  preload: false,
+})
+
+const poppins = Poppins({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-poppins',
+  display: 'swap',
+  preload: false,
+})
+
+const newsreader = Newsreader({
+  subsets: ['latin'],
+  variable: '--font-newsreader',
+  display: 'swap',
+  preload: false,
+  style: ['normal', 'italic'],
+})
 
 export const metadata: Metadata = {
-  title: 'Signal — AI GTM & Social Listening',
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://apsurn.com'),
+  title: 'apsurn | Find who should buy, from your website',
   description:
-    'Paste your business URL. Signal maps your business model and ICP, then listens across the open web for buyers showing intent in the last 7 days.',
-  generator: 'v0.app',
+    'Paste your website. apsurn drafts your ICP, finds matching companies, and only keeps contacts it can verify.',
   icons: {
     icon: [
+      { url: '/favicon-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/favicon-48.png', sizes: '48x48', type: 'image/png' },
+    ],
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
+  },
+  openGraph: {
+    type: 'website',
+    siteName: 'apsurn',
+    title: 'apsurn | Find who should buy, from your website',
+    description:
+      'Paste your website. apsurn drafts your ICP, finds matching companies, and only keeps contacts it can verify.',
+    images: [
       {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
+        url: '/landing/socialshare.png',
+        width: 3478,
+        height: 2104,
+        alt: 'apsurn — Find who should buy, from your website',
       },
     ],
-    apple: '/apple-icon.png',
   },
-}
-
-export const viewport: Viewport = {
-  colorScheme: 'dark',
-  themeColor: '#1a1b1f',
+  twitter: {
+    card: 'summary_large_image',
+    title: 'apsurn | Find who should buy, from your website',
+    description:
+      'Paste your website. apsurn drafts your ICP, finds matching companies, and only keeps contacts it can verify.',
+    images: ['/landing/socialshare.png'],
+  },
 }
 
 export default function RootLayout({
@@ -41,9 +75,18 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body className="antialiased">
-        {children}
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${geist.variable} ${geistMono.variable} ${manrope.variable} ${fraunces.variable} ${poppins.variable} ${newsreader.variable}`}
+    >
+      <head>
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script src="/runtime-config.js" />
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
+      </head>
+      <body className="antialiased font-sans">
+        <ThemeProvider>{children}</ThemeProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

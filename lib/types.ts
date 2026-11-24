@@ -32,7 +32,20 @@ export const businessProfileSchema = z.object({
 
 export type BusinessProfile = z.infer<typeof businessProfileSchema>
 
-export type SourceId = 'reddit' | 'hackernews' | 'bluesky' | 'stackexchange' | 'lemmy' | 'mastodon' | 'github'
+export type SourceId = 'apify' | 'reddit' | 'hackernews' | 'bluesky' | 'stackexchange' | 'lemmy' | 'mastodon' | 'github'
+
+export const SENIORITY_OPTIONS = [
+  { id: 'founder', label: 'Founder' },
+  { id: 'owner', label: 'Owner' },
+  { id: 'c_suite', label: 'C-Suite' },
+  { id: 'vp', label: 'VP' },
+  { id: 'head', label: 'Head' },
+  { id: 'director', label: 'Director' },
+  { id: 'manager', label: 'Manager' },
+  { id: 'senior', label: 'Senior' },
+] as const
+
+export type SeniorityId = (typeof SENIORITY_OPTIONS)[number]['id']
 
 export type RawPost = {
   id: string
@@ -45,6 +58,22 @@ export type RawPost = {
   createdAt: string
   keyword: string
   engagement: number | null
+  lead?: {
+    fullName: string
+    jobTitle: string | null
+    seniority: string | null
+    department: string | null
+    email: string | null
+    phone: string | null
+    linkedinUrl: string | null
+    location: string | null
+    companyName: string | null
+    companyWebsite: string | null
+    companyLinkedinUrl: string | null
+    companyIndustry: string | null
+    companySize: string | null
+    companyRevenue: string | null
+  }
 }
 
 export const intentTypes = ['buying', 'recommendation', 'comparison', 'pain', 'competitor-churn', 'other'] as const
@@ -73,6 +102,79 @@ export type ListenResponse = {
 
 export type AnalyzeResponse = {
   url: string
+  companyId?: string
   profile: BusinessProfile
   pagesRead: string[]
+}
+
+export const competitorAnalysisSchema = z.object({
+  positioningStrategy: z.object({
+    categoryAnchor: z.string().describe('The exact market category buyers put you in'),
+    statusQuoProblem: z.string().describe('Why existing competitors frustrate buyers'),
+    primaryWedge: z.string().describe('Your sharpest positioning wedge to win deals'),
+    messagingHook: z.string().describe('A 1-sentence hero positioning statement that sets you apart'),
+    differentiationPillars: z.array(
+      z.object({
+        title: z.string(),
+        them: z.string().describe('What competitors typically do'),
+        us: z.string().describe('How this business does it better/differently'),
+      }),
+    ),
+  }),
+  competitors: z.array(
+    z.object({
+      name: z.string(),
+      domain: z.string().describe('Clean root domain e.g. apollo.io, hubspot.com'),
+      categoryTag: z.string().describe('e.g. Legacy Incumbent, Point Solution, All-in-One'),
+      heroHeadline: z.string().describe('Their main website hero pitch / headline'),
+      subheadline: z.string().describe('Their supporting website subheadline'),
+      ctaText: z.string().describe('Their primary website CTA button text e.g. Book a Demo, Start Free'),
+      overlap: z.string().describe('What they offer that overlaps with this business'),
+      theirWeakness: z.string().describe('Specific gap, complexity, or pricing weakness buyers complain about'),
+      howWeDifferentiate: z.string().describe('How to position against them to win'),
+      winPlay: z.string().describe('1-sentence sales rebuttal when a prospect mentions this competitor'),
+    }),
+  ),
+})
+
+export type CompetitorAnalysisResult = {
+  positioningStrategy: z.infer<typeof competitorAnalysisSchema>['positioningStrategy']
+  competitors: Array<
+    z.infer<typeof competitorAnalysisSchema>['competitors'][number] & {
+      screenshotUrl: string
+      faviconUrl: string
+      liveScraped?: boolean
+    }
+  >
+}
+
+export const campaignsSchema = z.object({
+  campaigns: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      angleType: z.enum(['pain-point', 'competitor-wedge', 'buying-trigger', 'executive-value']).catch('pain-point'),
+      targetPersona: z.string(),
+      targetSegment: z.string(),
+      positioningHook: z.string().describe('1-sentence hook explaining why this campaign converts'),
+      whyItWorks: z.string(),
+      sequence: z.array(
+        z.object({
+          stepNumber: z.number().int(),
+          delayDays: z.number().int(),
+          label: z.string().describe('e.g. Day 1 · Cold Intro, Day 3 · Value Follow-up, Day 7 · Breakup'),
+          subject: z.string().describe('Email subject line using {{firstName}} or {{companyName}}'),
+          body: z.string().describe('Concise, non-spammy 50-75 word plain-text email using {{firstName}}, {{companyName}}, {{jobTitle}}'),
+        }),
+      ),
+    }),
+  ),
+})
+
+export type GeneratedCampaign = z.infer<typeof campaignsSchema>['campaigns'][number] & {
+  matchedLeadCount?: number
+}
+
+export type CampaignsResponse = {
+  campaigns: GeneratedCampaign[]
 }
