@@ -12,7 +12,7 @@ import {
   type RawPost,
   type ScoredPost,
 } from './types'
-import { createVertexClient, getVertexModel, isVertexConfigured } from './ai/vertex'
+import { createVertexClient, generateGeminiContent, getVertexModel, isVertexConfigured } from './ai/vertex'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import type { GoogleGenAI } from '@google/genai'
 
@@ -40,7 +40,8 @@ function getVertexGenAI(): GoogleGenAI {
 }
 
 function shouldUseVertex(): boolean {
-  const provider = process.env.AI_PROVIDER?.trim()?.toLowerCase() || 'anthropic'
+  // Like Elevate: with no explicit AI_PROVIDER, a Gemini key or Google Cloud project selects Gemini.
+  const provider = process.env.AI_PROVIDER?.trim()?.toLowerCase() || (isVertexConfigured() ? 'vertex' : 'anthropic')
   if (provider === 'vertex') {
     if (isVertexConfigured()) {
       return true
@@ -84,7 +85,7 @@ async function generateVertexJson<TSchema extends z.ZodType>(options: {
 }): Promise<z.infer<TSchema>> {
   const model = getVertexModel()
   const client = getVertexGenAI()
-  const response = await client.models.generateContent({
+  const response = await generateGeminiContent(client, {
     model,
     contents: options.prompt,
     config: {

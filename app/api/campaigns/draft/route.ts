@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { createVertexClient, getVertexModel, isVertexConfigured } from '@/lib/ai/vertex'
+import { createVertexClient, generateGeminiContent, getVertexModel, isVertexConfigured } from '@/lib/ai/vertex'
 import { getCurrentUserId } from '@/lib/auth/session'
 import { creditCost, getBillingState, spendCredits } from '@/lib/billing/credits'
 import { COLD_EMAIL_PLAYBOOK, formatEmailBody } from '@/lib/outreach/copywriting'
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
     try {
       const client = createVertexClient()
       const model = getVertexModel()
-      const response = await client.models.generateContent({
+      const response = await generateGeminiContent(client, {
         model,
         contents: `You are an elite B2B cold email copywriter. Write one first-touch cold email for this campaign and recipient.
 

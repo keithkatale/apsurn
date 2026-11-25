@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { scorePosts } from '@/lib/ai'
-import { createVertexClient, getVertexModel } from '@/lib/ai/vertex'
+import { createVertexClient, generateGeminiContent, getVertexModel } from '@/lib/ai/vertex'
 import { fetchApifyLeads } from '@/lib/apify-leads'
 import { getCurrentUserId } from '@/lib/auth/session'
 import { creditCost, requirePaidCredits, spendCredits } from '@/lib/billing/credits'
@@ -165,7 +165,7 @@ Return strict JSON only matching this schema:
   "score": number
 }`
 
-    const response = await ai.models.generateContent({
+    const response = await generateGeminiContent(ai, {
       model: getVertexModel(),
       contents: prompt,
       config: { responseMimeType: 'application/json' },
@@ -914,7 +914,7 @@ ${JSON.stringify(
 
 Return strict JSON: { "enriched": [ { "id": string, "whatTheyDo": string, "howWeCanHelp": string, "industry": string, "score": number, "inferredEmail": string | null } ] }`
 
-      const response = await ai.models.generateContent({
+      const response = await generateGeminiContent(ai, {
         model: getVertexModel(),
         contents: prompt,
         config: {
