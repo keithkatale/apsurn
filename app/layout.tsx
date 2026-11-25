@@ -1,6 +1,7 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata } from 'next'
 import { Fraunces, Geist, Geist_Mono, Manrope, Newsreader, Poppins } from 'next/font/google'
+import { PostHogProvider } from '@/components/analytics/PostHogProvider'
 import { ThemeProvider } from '@/components/theme/theme-provider'
 import { THEME_BOOTSTRAP_SCRIPT } from '@/lib/theme'
 import './globals.css'
@@ -86,7 +87,9 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
       </head>
       <body className="antialiased font-sans">
-        <ThemeProvider>{children}</ThemeProvider>
+        <PostHogProvider>
+          <ThemeProvider>{children}</ThemeProvider>
+        </PostHogProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

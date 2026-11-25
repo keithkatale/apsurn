@@ -7,5 +7,10 @@ export async function GET() {
   const { data } = await supabase.auth.getUser();
   if (!data.user) return NextResponse.json({ user: false, guest: false });
   const guest = isGuestUser(data.user);
-  return NextResponse.json({ user: true, guest, email: guest ? null : (data.user.email ?? null) });
+  return NextResponse.json({
+    user: true,
+    guest,
+    userId: guest ? null : data.user.id,
+    email: guest ? null : (data.user.email ?? null),
+  });
 }

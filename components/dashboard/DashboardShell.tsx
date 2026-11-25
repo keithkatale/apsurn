@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
+import posthog from 'posthog-js'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
@@ -80,6 +81,7 @@ export function DashboardShell({
     try {
       const supabase = createClient()
       await supabase.auth.signOut()
+      posthog.reset()
       setUserEmail(null)
     } catch {
       // ignore

@@ -30,6 +30,7 @@
     "next": "16.4.6",
     "nodemailer": "^10.6.1",
     "ogl": "^1.0.11",
+    "posthog-js": "^1.455.2",
     "react": "^19",
     "react-dom": "^19",
     "resend": "^6.26.0",

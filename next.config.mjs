@@ -15,11 +15,25 @@ const nextConfig = {
       { source: '/dashboard/:path*', destination: '/leads', permanent: false },
     ]
   },
+  // PostHog calls go through our own domain (US cloud) so ad blockers do not drop them.
+  skipTrailingSlashRedirect: true,
   async rewrites() {
     return [
       {
         source: '/favicon.ico',
         destination: '/icon.svg',
+      },
+      {
+        source: '/ingest/static/:path*',
+        destination: 'https://us-assets.i.posthog.com/static/:path*',
+      },
+      {
+        source: '/ingest/array/:path*',
+        destination: 'https://us-assets.i.posthog.com/array/:path*',
+      },
+      {
+        source: '/ingest/:path*',
+        destination: 'https://us.i.posthog.com/:path*',
       },
     ]
   },
