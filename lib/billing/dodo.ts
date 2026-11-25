@@ -1,5 +1,5 @@
 import DodoPayments from "dodopayments";
-import { UNLOCK, dodoBrandId, isLiveBilling, unlockProductId } from "@/lib/billing/plans";
+import { UNLOCK, isLiveBilling, unlockProductId } from "@/lib/billing/plans";
 
 let client: DodoPayments | null = null;
 
@@ -49,7 +49,6 @@ export function ensureUnlockProductId(): Promise<string> {
           purchasing_power_parity: false,
         },
         tax_category: "saas",
-        brand_id: dodoBrandId(),
       });
       return created.product_id;
     })().catch((error) => {
