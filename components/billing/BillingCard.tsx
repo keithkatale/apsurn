@@ -151,8 +151,8 @@ export function BillingCard() {
 
   if (signedOut) {
     return (
-      <section className="rounded-2xl border border-neutral-200 bg-white p-5">
-        <p className="text-sm text-neutral-700">Create an account to choose a plan and get credits.</p>
+      <section className="rounded-2xl border border-[color-mix(in_srgb,var(--mh-fg)_16%,transparent)] bg-[color-mix(in_srgb,var(--mh-fg)_4%,var(--mh-bg))] p-5 shadow-sm">
+        <p className="text-sm text-[var(--mh-fg)]">Create an account to choose a plan and get credits.</p>
         <div className="mt-3">
           <ThreeDButton href="/signup?next=%2Fsettings" variant="solid" size="sm">
             Create account
@@ -164,30 +164,32 @@ export function BillingCard() {
 
   if (!billing) {
     return (
-      <section className="rounded-2xl border border-neutral-200 bg-white p-5 text-sm text-neutral-600">
+      <section className="rounded-2xl border border-[color-mix(in_srgb,var(--mh-fg)_16%,transparent)] bg-[color-mix(in_srgb,var(--mh-fg)_4%,var(--mh-bg))] p-5 shadow-sm text-sm text-[var(--mh-muted)]">
         {error ?? 'Loading billing…'}
       </section>
     )
   }
 
+  const outlineBtn =
+    "inline-flex h-8 items-center justify-center rounded-lg border border-[color-mix(in_srgb,var(--mh-fg)_28%,transparent)] bg-[var(--mh-bg)] px-3 text-[13px] font-medium text-[var(--mh-fg)] shadow-sm transition-colors hover:bg-[color-mix(in_srgb,var(--mh-fg)_8%,var(--mh-bg))] disabled:cursor-not-allowed disabled:opacity-50"
   const current = billing.planKey ? PLANS[billing.planKey] : null
   const renews = formatDate(billing.currentPeriodEnd)
 
   return (
-    <section className="space-y-5 rounded-2xl border border-neutral-200 bg-white p-5">
+    <section className="space-y-5 rounded-2xl border border-[color-mix(in_srgb,var(--mh-fg)_16%,transparent)] bg-[color-mix(in_srgb,var(--mh-fg)_4%,var(--mh-bg))] p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h3 className="text-sm font-semibold text-neutral-900">
+          <h3 className="text-sm font-semibold text-[var(--mh-fg)]">
             {current ? `${current.name} plan` : 'No plan yet'}
           </h3>
-          <p className="mt-0.5 text-[13px] text-neutral-600">
+          <p className="mt-0.5 text-[13px] text-[var(--mh-muted)]">
             {statusLabel(billing)}
             {billing.active && !billing.cancelAtPeriodEnd && renews ? ` · renews ${renews}` : ''}
           </p>
         </div>
         <div className="text-right">
-          <p className="text-2xl font-semibold tracking-tight text-neutral-900">{billing.credits.toLocaleString()}</p>
-          <p className="text-[12px] text-neutral-600">
+          <p className="text-2xl font-semibold tracking-tight text-[var(--mh-fg)]">{billing.credits.toLocaleString()}</p>
+          <p className="text-[12px] text-[var(--mh-muted)]">
             credits
             {billing.topupCredits > 0 ? ` · ${billing.topupCredits.toLocaleString()} from top-ups` : ''}
           </p>
@@ -195,11 +197,11 @@ export function BillingCard() {
       </div>
 
       {!billing.billingEnabled && (
-        <p className="rounded-lg bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+        <p className="rounded-lg border border-amber-300 bg-amber-100 px-3 py-2 text-[12px] text-amber-900">
           Billing isn&apos;t configured on this server yet (missing Dodo Payments keys).
         </p>
       )}
-      {notice && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-[12px] text-emerald-800">{notice}</p>}
+      {notice && <p className="rounded-lg border border-emerald-300 bg-emerald-100 px-3 py-2 text-[12px] text-emerald-900">{notice}</p>}
       {error && <p className="text-[12px] text-red-600">{error}</p>}
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -209,29 +211,40 @@ export function BillingCard() {
           return (
             <div
               key={key}
-              className={`rounded-xl border p-4 ${isCurrent ? 'border-neutral-900' : 'border-neutral-200'}`}
+              className={`rounded-xl border bg-[var(--mh-bg)] p-4 shadow-sm ${isCurrent ? 'border-2 border-[var(--mh-fg)]' : 'border-[color-mix(in_srgb,var(--mh-fg)_18%,transparent)]'}`}
             >
               <div className="flex items-baseline justify-between">
-                <span className="text-sm font-semibold text-neutral-900">{plan.name}</span>
-                <span className="text-sm text-neutral-900">
+                <span className="text-sm font-semibold text-[var(--mh-fg)]">{plan.name}</span>
+                <span className="text-sm text-[var(--mh-fg)]">
                   ${plan.priceUsd}
-                  <span className="text-[12px] text-neutral-500">/mo</span>
+                  <span className="text-[12px] text-[var(--mh-muted)]">/mo</span>
                 </span>
               </div>
-              <p className="mt-1 text-[12px] text-neutral-600">{plan.creditsPerMonth.toLocaleString()} credits every month</p>
+              <p className="mt-1 text-[12px] text-[var(--mh-muted)]">{plan.creditsPerMonth.toLocaleString()} credits every month</p>
               <div className="mt-3">
                 {isCurrent ? (
-                  <span className="text-[12px] font-medium text-neutral-500">Current plan</span>
+                  <span className="text-[12px] font-semibold text-[var(--mh-fg)]">✓ Current plan</span>
                 ) : (
-                  <ThreeDButton
-                    type="button"
-                    variant={billing.active ? 'soft' : 'solid'}
-                    size="sm"
-                    disabled={busy !== null || !billing.billingEnabled}
-                    onClick={() => void startCheckout({ kind: 'plan', plan: key }, `plan:${key}`)}
-                  >
-                    {busy === `plan:${key}` ? 'Opening…' : billing.active ? `Switch to ${plan.name}` : `Start ${plan.name}`}
-                  </ThreeDButton>
+                  billing.active ? (
+                    <button
+                      type="button"
+                      className={outlineBtn}
+                      disabled={busy !== null || !billing.billingEnabled}
+                      onClick={() => void startCheckout({ kind: 'plan', plan: key }, `plan:${key}`)}
+                    >
+                      {busy === `plan:${key}` ? 'Opening…' : `Switch to ${plan.name}`}
+                    </button>
+                  ) : (
+                    <ThreeDButton
+                      type="button"
+                      variant="solid"
+                      size="sm"
+                      disabled={busy !== null || !billing.billingEnabled}
+                      onClick={() => void startCheckout({ kind: 'plan', plan: key }, `plan:${key}`)}
+                    >
+                      {busy === `plan:${key}` ? 'Opening…' : `Start ${plan.name}`}
+                    </ThreeDButton>
+                  )
                 )}
               </div>
             </div>
@@ -240,28 +253,27 @@ export function BillingCard() {
       </div>
 
       {billing.active && (
-        <div className="flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-4">
-          <span className="mr-1 text-[12px] text-neutral-600">Need more?</span>
+        <div className="flex flex-wrap items-center gap-2 border-t border-[color-mix(in_srgb,var(--mh-fg)_12%,transparent)] pt-4">
+          <span className="mr-1 text-[12px] text-[var(--mh-muted)]">Need more?</span>
           {(Object.keys(TOPUPS) as TopupKey[]).map((key) => (
-            <ThreeDButton
+            <button
               key={key}
               type="button"
-              variant="soft"
-              size="sm"
+              className={outlineBtn}
               disabled={busy !== null}
               onClick={() => void startCheckout({ kind: 'topup', topup: key }, `topup:${key}`)}
             >
-              {busy === `topup:${key}` ? 'Opening…' : `+${TOPUPS[key].credits.toLocaleString()} credits · $${TOPUPS[key].priceUsd}`}
-            </ThreeDButton>
+              {busy === `topup:${key}` ? 'Opening…' : `+${TOPUPS[key].credits.toLocaleString()} credits · ${TOPUPS[key].priceUsd}`}
+            </button>
           ))}
         </div>
       )}
 
       {billing.dodoCustomerId && (
-        <div className="border-t border-neutral-100 pt-4">
-          <ThreeDButton type="button" variant="muted" size="sm" disabled={busy !== null} onClick={() => void openPortal()}>
+        <div className="border-t border-[color-mix(in_srgb,var(--mh-fg)_12%,transparent)] pt-4">
+          <button type="button" className={outlineBtn} disabled={busy !== null} onClick={() => void openPortal()}>
             {busy === 'portal' ? 'Opening…' : 'Manage billing'}
-          </ThreeDButton>
+          </button>
         </div>
       )}
     </section>
