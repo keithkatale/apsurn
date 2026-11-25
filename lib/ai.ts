@@ -1,5 +1,6 @@
 import { generateText, Output } from 'ai'
 import { z } from 'zod'
+import { COLD_EMAIL_PLAYBOOK, formatEmailBody } from '@/lib/outreach/copywriting'
 import {
   businessProfileSchema,
   campaignsSchema,
@@ -382,7 +383,7 @@ export async function generateCampaigns(params: {
   const { profile, positioning, competitors = profile.competitors, leadsCount = 50 } = params
 
   const instructions =
-    'You are an elite B2B outbound copywriter for founder-led sales. Write concise, human, high-converting multi-step email sequences (50-75 words per email, zero fluff, specific value). Use merge tags {{firstName}}, {{companyName}}, and {{jobTitle}}.'
+    `You are an elite B2B outbound copywriter for founder-led sales. Write human, high-converting multi-step email sequences with zero fluff and specific value.\n\n${COLD_EMAIL_PLAYBOOK}`
 
   const prompt = `Company: ${profile.companyName} — ${profile.oneLiner}
 Category: ${profile.category}
@@ -405,6 +406,8 @@ Each campaign MUST include a 3-step email sequence:
 - stepNumber 1 (delayDays: 0, label: "Day 1 · Initial Outreach")
 - stepNumber 2 (delayDays: 3, label: "Day 3 · Value Follow-up")
 - stepNumber 3 (delayDays: 7, label: "Day 7 · Polite Breakup")
+
+Every "body" is plain text with real paragraph breaks: a blank line between the greeting, each short paragraph, the question and the sign-off (use "\n\n" inside the JSON string, and "\n" between "Best," and the sender name). Sign off as the team at ${profile.companyName}.
 
 Return valid JSON matching:
 {
@@ -439,6 +442,7 @@ Return valid JSON matching:
 
   return parsed.campaigns.map((c, idx) => ({
     ...c,
+    sequence: c.sequence.map((step) => ({ ...step, body: formatEmailBody(step.body) })),
     id: c.id || `campaign-${idx + 1}`,
     matchedLeadCount: Math.max(8, Math.round(leadsCount / (idx === 0 ? 1.4 : idx === 1 ? 1.8 : 2.2))),
   }))

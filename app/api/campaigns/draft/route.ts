@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { createVertexClient, getVertexModel, isVertexConfigured } from '@/lib/ai/vertex'
 import { getCurrentUserId } from '@/lib/auth/session'
 import { creditCost, getBillingState, spendCredits } from '@/lib/billing/credits'
+import { COLD_EMAIL_PLAYBOOK, formatEmailBody } from '@/lib/outreach/copywriting'
 import { tokenizeLeadMentions } from '@/lib/outreach/merge-fields'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -52,7 +53,11 @@ export async function POST(req: Request) {
       const model = getVertexModel()
       const response = await client.models.generateContent({
         model,
-        contents: `Write a short, high-converting founder-to-founder B2B cold email (55-75 words) for this campaign and recipient.
+        contents: `You are an elite B2B cold email copywriter. Write one first-touch cold email for this campaign and recipient.
+
+${COLD_EMAIL_PLAYBOOK}
+
+CONTEXT
 Sender Company: ${senderCompanyName}
 Campaign Name: ${campaignName}
 Campaign Angle: ${campaignDescription || 'Helping growing B2B teams find qualified buyers'}
@@ -62,12 +67,8 @@ Recipient Company: ${company} (${lead.companyDomain || ''})
 Recipient Industry: ${lead.industry || 'B2B'}
 Specific Angle: ${lead.outreachAngle || ''}
 
-Rules:
-1. Subject line: 2 to 4 lowercase words (e.g. "scaling new buyers", "quick question on ${company}").
-2. Open with "Hi {{first_name}} ,"
-3. In the first paragraph, naturally reference their role as "{{title}}" and company "{{company}}" (use the exact tokens {{first_name}}, {{title}}, {{company}} with spaces around them so they render as merge chips).
-4. Keep paragraphs 1-2 sentences each. End with a low-friction question like "Is this something on your radar at {{company}} , or am I off base?" and sign off "Best,\\nKeith".
-Return JSON: {"subject": string, "body": string}`,
+Use the tokens {{first_name}}, {{title}} and {{company}} for the recipient's details. Sign off as the team at ${senderCompanyName}.
+Return JSON: {"subject": string, "body": string}. The body must contain real paragraph breaks: a blank line between paragraphs, written as \\n\\n inside the JSON string.`,
         config: {
           responseMimeType: 'application/json',
           thinkingConfig: { thinkingBudget: 0 },
@@ -78,7 +79,7 @@ Return JSON: {"subject": string, "body": string}`,
       if (response.text) {
         const json = JSON.parse(response.text) as { subject?: string; body?: string }
         if (json.subject) subject = json.subject.trim()
-        if (json.body) body = tokenizeLeadMentions(json.body.trim(), lead)
+        if (json.body) body = tokenizeLeadMentions(formatEmailBody(json.body), lead)
         aiUsed = true
       }
     } catch (err) {

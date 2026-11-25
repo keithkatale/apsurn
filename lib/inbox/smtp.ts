@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer'
-import { htmlToPlain, sanitizeEmailHtml, wrapEmailHtml } from '@/lib/outreach/email-html'
+import { htmlToPlain, plainToEmailHtml, sanitizeEmailHtml, wrapEmailHtml } from '@/lib/outreach/email-html'
 import { decryptToken } from './token-crypto'
 
 export const SMTP_SCOPE = 'smtp'
@@ -64,7 +64,8 @@ export async function sendSmtpMessage(
   const password = decryptToken(inbox.refresh_token_enc)
   const transport = gmailTransport(inbox.email_address, password)
   const plain = htmlToPlain(opts.body) || opts.body
-  const html = wrapEmailHtml(sanitizeEmailHtml(opts.body))
+  // Plain-text bodies must become paragraph blocks, or the HTML part collapses every line break.
+  const html = wrapEmailHtml(sanitizeEmailHtml(plainToEmailHtml(opts.body)))
   try {
     const info = await transport.sendMail({
       from: inbox.email_address,
