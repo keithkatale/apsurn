@@ -46,7 +46,7 @@ export function LoginForm({ mode = "signin" }: { mode?: "signin" | "signup" }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = useMemo(
-    () => safeNext(searchParams.get("next"), mode === "signup" ? "/setup" : "/dashboard"),
+    () => safeNext(searchParams.get("next"), mode === "signup" ? "/setup" : "/auth/continue"),
     [searchParams, mode],
   );
   const [email, setEmail] = useState(() => searchParams.get("email") ?? "");
