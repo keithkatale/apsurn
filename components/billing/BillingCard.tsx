@@ -109,7 +109,7 @@ export function BillingCard() {
     const wanted = params.get('plan') as PlanKey | null
     if (!billing || autoStarted.current || !wanted || !(OFFERED_PLAN_KEYS as readonly string[]).includes(wanted)) return
     autoStarted.current = true
-    if (!billing.active) void startCheckout({ kind: 'plan', plan: wanted }, `plan:${wanted}`)
+    if (!(billing.planKey && billing.active)) void startCheckout({ kind: 'plan', plan: wanted }, `plan:${wanted}`)
   }, [billing, params, startCheckout])
 
   // Back from Dodo: the webhook can lag a few seconds, so poll until the account reflects the purchase.
@@ -225,7 +225,7 @@ export function BillingCard() {
                 {isCurrent ? (
                   <span className="text-[12px] font-semibold text-[var(--mh-fg)]">✓ Current plan</span>
                 ) : (
-                  billing.active ? (
+                  billing.planKey && billing.active ? (
                     <button
                       type="button"
                       className={outlineBtn}

@@ -36,7 +36,8 @@ export async function getBillingState(userId: string): Promise<BillingState> {
   return {
     planKey: (data?.plan_key as PlanKey | null) ?? null,
     status,
-    active: Boolean(data?.plan_key) && ACCESS_STATUSES.has(status ?? ""),
+    // Paid features open with a live subscription, or with any credits (e.g. the $1 unlock / top-ups).
+    active: (Boolean(data?.plan_key) && ACCESS_STATUSES.has(status ?? "")) || planCredits + topupCredits > 0,
     planCredits,
     topupCredits,
     credits: planCredits + topupCredits,
@@ -128,4 +129,17 @@ export async function grantCredits(
 
 export function monthlyCreditsFor(plan: PlanKey): number {
   return PLANS[plan].creditsPerMonth;
+}
+
+/** True once this account has bought the $1 unlock (it can only be bought once). */
+export async function hasUnlocked(userId: string): Promise<boolean> {
+  const db = createAdminClient();
+  const { data } = await db
+    .from("billing_credit_ledger")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("reason", "unlock")
+    .limit(1)
+    .maybeSingle();
+  return Boolean(data?.id);
 }

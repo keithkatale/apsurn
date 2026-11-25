@@ -1,6 +1,6 @@
 import { grantCredits, monthlyCreditsFor } from "@/lib/billing/credits";
 import { getDodo, isDodoConfigured } from "@/lib/billing/dodo";
-import { STARTER_CREDITS, TOPUPS, planKeyFromProductId, type PlanKey, type TopupKey } from "@/lib/billing/plans";
+import { STARTER_CREDITS, TOPUPS, UNLOCK, planKeyFromProductId, type PlanKey, type TopupKey } from "@/lib/billing/plans";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -148,6 +148,12 @@ async function handleEvent(type: string, data: Payload, webhookId: string) {
 
     case "payment.succeeded": {
       // Subscription charges also arrive here; only credit top-ups matter.
+      if (data.metadata?.kind === "unlock") {
+        const unlockUser = await resolveUserId(data);
+        if (!unlockUser || !data.payment_id) return;
+        await grantCredits(unlockUser, "topup", UNLOCK.credits, "unlock", `unlock:${data.payment_id}`);
+        return;
+      }
       if (data.metadata?.kind !== "topup") return;
       const userId = await resolveUserId(data);
       const key = data.metadata?.topup_key as TopupKey | undefined;

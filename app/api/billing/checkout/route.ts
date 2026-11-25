@@ -1,13 +1,15 @@
 import { z } from "zod";
 import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
 import { AccountRequiredError, accountRequiredResponse, assertRegisteredUser } from "@/lib/auth/guest";
-import { getBillingState } from "@/lib/billing/credits";
+import { getBillingState, hasUnlocked } from "@/lib/billing/credits";
+import { isLiveBilling } from "@/lib/billing/plans";
 import { appUrl, getDodo, isDodoConfigured } from "@/lib/billing/dodo";
-import { OFFERED_PLAN_KEYS, TOPUPS, productIdForPlan, productIdForTopup } from "@/lib/billing/plans";
+import { OFFERED_PLAN_KEYS, TOPUPS, UNLOCK, productIdForPlan, productIdForTopup, unlockProductId } from "@/lib/billing/plans";
 import { rateLimit } from "@/lib/rate-limit";
 
 const bodySchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("plan"), plan: z.enum(["startup", "growth", "pro"]) }),
+  z.object({ kind: z.literal("unlock"), returnTo: z.string().optional() }),
   z.object({ kind: z.literal("topup"), topup: z.enum(["credits_500", "credits_2000"]) }),
 ]);
 
@@ -30,6 +32,26 @@ export async function POST(req: Request) {
     const state = await getBillingState(userId);
     const dodo = getDodo();
     const back = `${appUrl()}/settings`;
+
+    // $1 unlock: one-time, for registered accounts that have not unlocked yet.
+    if (parsed.data.kind === "unlock") {
+      const productId = unlockProductId();
+      if (!productId) return Response.json({ error: "The unlock offer is not configured yet." }, { status: 503 });
+      if (await hasUnlocked(userId)) {
+        return Response.json({ error: "Your sending credits are already unlocked.", code: "already_unlocked" }, { status: 409 });
+      }
+      const rt = parsed.data.returnTo;
+      const returnTo = rt && rt.startsWith("/") && !rt.startsWith("//") ? rt : "/settings";
+      const sep = returnTo.includes("?") ? "&" : "?";
+      const session = await dodo.checkoutSessions.create({
+        product_cart: [{ product_id: productId, quantity: 1 }],
+        customer: state.dodoCustomerId ? { customer_id: state.dodoCustomerId } : { email, name: user.user_metadata?.name ?? null },
+        metadata: { user_id: userId, kind: "unlock" },
+        return_url: `${appUrl()}${returnTo}${sep}unlocked=1`,
+      });
+      if (!session.checkout_url) throw new Error("Dodo did not return a checkout URL");
+      return Response.json({ url: session.checkout_url, mode: isLiveBilling() ? "live" : "test", credits: UNLOCK.credits });
+    }
 
     // Plan: change an existing subscription in place instead of creating a second one.
     if (parsed.data.kind === "plan") {

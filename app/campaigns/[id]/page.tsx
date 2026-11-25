@@ -21,6 +21,7 @@ import { MergeFieldText } from '@/components/campaigns/MergeFieldText'
 import { DashboardShell } from '@/components/dashboard/DashboardShell'
 import { CompanyFavicon } from '@/components/prospects/CompanyFavicon'
 import { ContactAvatar } from '@/components/prospects/ContactAvatar'
+import { useUnlockFlow } from '@/lib/billing/use-unlock'
 import { ConnectGoogleModal } from '@/components/inbox/ConnectGoogleModal'
 import {
   MERGE_FIELD_KEYS,
@@ -103,6 +104,9 @@ function CampaignSendingWorkspace() {
   const [newCompany, setNewCompany] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [peopleFilter, setPeopleFilter] = useState('')
+
+  const unlock = useUnlockFlow(`/campaigns/${encodeURIComponent(campaignId)}`)
+  const unlockPulse = 'animate-pulse shadow-[0_0_0_4px_color-mix(in_srgb,var(--mh-fg)_18%,transparent)]'
 
   const autoWriteStarted = useRef(false)
 
@@ -331,6 +335,7 @@ function CampaignSendingWorkspace() {
   }
 
   const handleSendAll = async () => {
+    if (unlock.needsUnlock) return unlock.start()
     if (!connectedEmail) {
       setConnectOpen(true)
       return
@@ -344,6 +349,7 @@ function CampaignSendingWorkspace() {
   }
 
   const handleSendSingle = () => {
+    if (unlock.needsUnlock) return unlock.start()
     if (!connectedEmail) {
       setConnectOpen(true)
       return
@@ -444,14 +450,16 @@ function CampaignSendingWorkspace() {
 
                 <button
                   type="button"
-                  disabled={sendingAll}
+                  disabled={sendingAll || unlock.busy}
                   onClick={() => void handleSendAll()}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[var(--mh-fg)] px-3 text-xs font-medium text-[var(--mh-bg)] transition-opacity hover:opacity-90 disabled:opacity-60"
+                  className={`inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[var(--mh-fg)] px-3 text-xs font-medium text-[var(--mh-bg)] transition-opacity hover:opacity-90 disabled:opacity-60 ${unlock.needsUnlock ? unlockPulse : ''}`}
                 >
                   {sendingAll ? (
                     <Loader2 className="size-3.5 animate-spin" />
                   ) : (
-                    !connectedEmail ? (
+                    unlock.needsUnlock ? (
+                      <span>Get $30 of Sending Credits</span>
+                    ) : !connectedEmail ? (
                       <>
                         <Mail className="size-3" />
                         <span>Connect Gmail to send</span>
@@ -668,14 +676,17 @@ function CampaignSendingWorkspace() {
                 {/* Card Bottom Bar: one button that sends, or asks to connect Gmail first */}
                 <div className="flex items-center justify-between gap-3 border-t border-[var(--mh-soft)] px-6 py-3.5">
                   <p className="min-w-0 truncate text-[12px] text-[var(--mh-muted)]">
-                    {connectedEmail ? `Connected as ${connectedEmail} · Ready to send.` : ''}
+                    {unlock.error ?? (connectedEmail ? `Connected as ${connectedEmail} · Ready to send.` : '')}
                   </p>
                   <button
                     type="button"
                     onClick={handleSendSingle}
-                    className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] bg-[var(--mh-fg)] px-5 text-[13px] font-medium text-[var(--mh-bg)] transition-opacity hover:opacity-90"
+                    disabled={unlock.busy}
+                    className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] bg-[var(--mh-fg)] px-5 text-[13px] font-medium text-[var(--mh-bg)] transition-opacity hover:opacity-90 disabled:opacity-60 ${unlock.needsUnlock ? unlockPulse : ''}`}
                   >
-                    {connectedEmail ? (
+                    {unlock.needsUnlock ? (
+                      <span>Get $30 of Sending Credits</span>
+                    ) : connectedEmail ? (
                       <>
                         <span>Send to {selectedLead?.fullName?.split(' ')[0] || 'Lead'}</span>
                         <Send className="size-3.5" />

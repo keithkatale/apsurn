@@ -163,6 +163,17 @@ export const CREDIT_COSTS = {
   radar_auto_source: 8,
 } as const;
 
+/**
+ * One-time unlock: a visitor pays $1 once and gets $30 of sending credits (2,000 credits, the Startup allowance).
+ * Create a one-time $1 product in Dodo and set DODO_UNLOCK_PRODUCT_ID (test) / DODO_UNLOCK_PRODUCT_ID_LIVE (live).
+ */
+export const UNLOCK = { priceUsd: 1, creditsValueUsd: 30, credits: 2_000 } as const;
+
+export function unlockProductId(): string | null {
+  const id = isLiveBilling() ? process.env.DODO_UNLOCK_PRODUCT_ID_LIVE : process.env.DODO_UNLOCK_PRODUCT_ID;
+  return id?.trim() || null;
+}
+
 export function isLiveBilling(): boolean {
   return process.env.DODO_PAYMENTS_ENVIRONMENT === "live_mode";
 }

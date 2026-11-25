@@ -56,3 +56,12 @@ For local testing, expose localhost with a tunnel and register that URL for test
 | AI email drafts | free template | AI draft, 1 credit |
 | More leads (`generate_more`) | blocked (402) | 3 credits per lead |
 | Lead enrichment | blocked (402) | 5 credits per lead |
+
+## $1 → $30 sending-credits unlock (visitor flow)
+
+Guests finish setup, click the pulsing **Get $30 of Sending Credits** button on a campaign, sign up (their workspace
+is kept), and a Dodo checkout popup charges $1 once and grants 2,000 credits (`UNLOCK` in `lib/billing/plans.ts`).
+
+1. In Dodo → Products, create a **One-Time** product priced **$1** (name e.g. "Sending credits unlock").
+2. Set its ID as `DODO_UNLOCK_PRODUCT_ID` (test) / `DODO_UNLOCK_PRODUCT_ID_LIVE` (live) on the server.
+3. The existing webhook must receive `payment.succeeded`; it grants the credits (idempotent per payment).

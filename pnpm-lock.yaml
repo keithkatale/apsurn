@@ -53,6 +53,9 @@ importers:
       dodopayments:
         specifier: ^2.63.1
         version: 2.63.1
+      dodopayments-checkout:
+        specifier: ^2.2.0
+        version: 2.2.0
       lucide-react:
         specifier: ^1.16.0
         version: 1.17.0(react@19.2.4)
@@ -899,6 +902,10 @@ packages:
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
+
+  dodopayments-checkout@2.2.0:
+    resolution: {integrity: sha512-liwOkSzNI8BqufzXC5x7fOwqo2QBJA32ppdT/WlbbhlQGbiihUCOKn85n2LwOrQ7LJw3FoHwLnG+tfwUS6pVwA==}
+    engines: {node: '>=18.0.0'}
 
   dodopayments@2.63.1:
     resolution: {integrity: sha512-8tlZTOM//+pjtfIqzLHXfDwq+zAIe/uyRtXJ0ezbJUBNEUHREqy6LHvzSdalUoWaorgkoSaDK3TY7oo+PjC61g==}
@@ -2301,6 +2308,8 @@ snapshots:
   dequal@2.0.3: {}
 
   detect-libc@2.1.2: {}
+
+  dodopayments-checkout@2.2.0: {}
 
   dodopayments@2.63.1:
     dependencies:
