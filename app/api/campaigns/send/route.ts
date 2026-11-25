@@ -12,6 +12,8 @@ const bodySchema = z.object({
   to: z.string().trim().email().max(200),
   subject: z.string().trim().min(1).max(300),
   body: z.string().trim().min(1).max(20_000),
+  campaignId: z.string().trim().min(1).max(100),
+  contactId: z.string().trim().min(1).max(100),
 });
 
 /** Sends one campaign email through the user's connected Gmail (SMTP + App Password). */
@@ -52,7 +54,35 @@ export async function POST(request: Request) {
       return Response.json({ error: "Connect Gmail before sending.", code: "inbox_required" }, { status: 409 });
     }
 
-    const result = await sendSmtpMessage(inbox as ConnectedInbox, parsed.data);
+    const { campaignId, contactId, ...message } = parsed.data;
+    const { data: already } = await db
+      .from("campaign_sends")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("campaign_id", campaignId)
+      .eq("contact_id", contactId)
+      .maybeSingle();
+    if (already?.id) {
+      return Response.json({ error: "Already sent to this lead.", code: "already_sent" }, { status: 409 });
+    }
+
+    const result = await sendSmtpMessage(inbox as ConnectedInbox, message);
+
+    // Record it so "Sent" survives reloads. A tracking failure must not turn a delivered email into an error.
+    const { error: trackError } = await db.from("campaign_sends").upsert(
+      {
+        user_id: userId,
+        campaign_id: campaignId,
+        contact_id: contactId,
+        to_email: message.to,
+        from_email: inbox.email_address,
+        subject: message.subject,
+        message_id: result.providerMessageId,
+      },
+      { onConflict: "user_id,campaign_id,contact_id" },
+    );
+    if (trackError) console.error("[campaigns/send] could not record send:", trackError.message);
+
     return Response.json({ ok: true, from: inbox.email_address, messageId: result.providerMessageId });
   } catch (error) {
     if (error instanceof AuthenticationError) {

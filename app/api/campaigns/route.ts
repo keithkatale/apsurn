@@ -18,7 +18,7 @@ export async function GET() {
       return Response.json({ companyName: 'Apsurn', campaigns: [], leads: [], drafts: {} })
     }
 
-    const [{ data: prospectCos }, { data: sequences }, { data: savedDrafts }] = await Promise.all([
+    const [{ data: prospectCos }, { data: sequences }, { data: savedDrafts }, { data: sentRows }] = await Promise.all([
       supabase
         .from('prospect_companies')
         .select(
@@ -38,6 +38,8 @@ export async function GET() {
         .from('outreach_drafts')
         .select('contact_id, sequence_id, sequence_step_id, subject, body')
         .eq('user_id', userId),
+      // Missing table (migration not run yet) just means nothing is tracked as sent.
+      supabase.from('campaign_sends').select('contact_id, campaign_id').eq('user_id', userId),
     ])
 
     const leads = (prospectCos ?? []).flatMap((co) => {
@@ -97,11 +99,14 @@ export async function GET() {
       }
     }
 
+    const sent = (sentRows ?? []).map((r) => `${r.contact_id}:${r.campaign_id}`)
+
     return Response.json({
       companyName: company.name || 'Apsurn',
       campaigns,
       leads,
       drafts,
+      sent,
     })
   } catch {
     return Response.json({ companyName: 'Apsurn', campaigns: [], leads: [], drafts: {} })

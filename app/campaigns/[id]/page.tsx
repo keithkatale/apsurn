@@ -212,6 +212,9 @@ function CampaignSendingWorkspace() {
         setCampaign(matchedCampaign)
         setLeads(allLeads)
         setDrafts(dbDrafts)
+        const sentKeys = (data?.sent ?? []) as string[]
+        const suffix = `:${campaignId}`
+        setSentLeadIds(new Set(sentKeys.filter((k) => k.endsWith(suffix)).map((k) => k.slice(0, -suffix.length))))
         if (allLeads[0]?.id) setSelectedLeadId(allLeads[0].id)
         if (matchedCampaign.steps.length > 1) {
           setFollowups(matchedCampaign.steps.slice(1))
@@ -337,12 +340,12 @@ function CampaignSendingWorkspace() {
   }
 
   /** Sends one resolved email through the connected Gmail (SMTP). Returns an error message, or null on success. */
-  const sendEmail = async (to: string, subj: string, bodyText: string): Promise<{ error: string | null; code?: string }> => {
+  const sendEmail = async (contactId: string, to: string, subj: string, bodyText: string): Promise<{ error: string | null; code?: string }> => {
     try {
       const res = await fetch('/api/campaigns/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to, subject: subj, body: bodyText }),
+        body: JSON.stringify({ to, subject: subj, body: bodyText, campaignId, contactId }),
       })
       const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string }
       if (!res.ok) return { error: data.error || 'Could not send the email.', code: data.code }
@@ -386,6 +389,7 @@ function CampaignSendingWorkspace() {
       setSendStatus(`Sending ${sent + 1} of ${targets.length} from ${connectedEmail}…`)
       const draft = draftFor(lead)
       const result = await sendEmail(
+        lead.id,
         lead.email as string,
         resolveMergeFields(draft.subject, lead),
         resolveMergeFields(draft.body, lead),
@@ -417,11 +421,17 @@ function CampaignSendingWorkspace() {
     setSendingOne(true)
     setSendStatus(`Sending to ${selectedLead.email}…`)
     const result = await sendEmail(
+      selectedLead.id,
       selectedLead.email,
       resolveMergeFields(subject, selectedLead),
       resolveMergeFields(body, selectedLead),
     )
     setSendingOne(false)
+    if (result.code === 'already_sent') {
+      setSentLeadIds((prev) => new Set(prev).add(selectedLead.id))
+      setSendStatus('You already emailed this lead.')
+      return
+    }
     if (result.error) {
       handleSendFailure(result)
       return
@@ -465,7 +475,9 @@ function CampaignSendingWorkspace() {
     ])
   }
 
-  const readyCount = leads.filter((l) => l.email).length || leads.length
+  const readyCount = leads.filter((l) => l.email && !sentLeadIds.has(l.id)).length
+  const allSent = leads.some((l) => l.email) && readyCount === 0
+  const selectedSent = Boolean(selectedLead && sentLeadIds.has(selectedLead.id))
 
   return (
     <DashboardShell activeUrl={senderCompanyName} fixedHeight>
@@ -516,7 +528,7 @@ function CampaignSendingWorkspace() {
 
                 <button
                   type="button"
-                  disabled={sendingAll || unlock.busy}
+                  disabled={sendingAll || unlock.busy || (allSent && !unlock.needsUnlock)}
                   onClick={() => void handleSendAll()}
                   className={`inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[var(--mh-fg)] px-3 text-xs font-medium text-[var(--mh-bg)] transition-opacity hover:opacity-90 disabled:opacity-60 ${unlock.needsUnlock ? unlockPulse : ''}`}
                 >
@@ -525,6 +537,11 @@ function CampaignSendingWorkspace() {
                   ) : (
                     unlock.needsUnlock ? (
                       <span>Get $30 of Sending Credits</span>
+                    ) : allSent ? (
+                      <>
+                        <Check className="size-3" />
+                        <span>All sent</span>
+                      </>
                     ) : !connectedEmail ? (
                       <>
                         <Mail className="size-3" />
@@ -747,11 +764,18 @@ function CampaignSendingWorkspace() {
                   <button
                     type="button"
                     onClick={() => void handleSendSingle()}
-                    disabled={unlock.busy || sendingOne}
+                    disabled={unlock.busy || sendingOne || sendingAll || (selectedSent && !unlock.needsUnlock)}
                     className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] bg-[var(--mh-fg)] px-5 text-[13px] font-medium text-[var(--mh-bg)] transition-opacity hover:opacity-90 disabled:opacity-60 ${unlock.needsUnlock ? unlockPulse : ''}`}
                   >
-                    {unlock.needsUnlock ? (
+                    {sendingOne ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : unlock.needsUnlock ? (
                       <span>Get $30 of Sending Credits</span>
+                    ) : selectedSent ? (
+                      <>
+                        <Check className="size-3.5" />
+                        <span>Sent</span>
+                      </>
                     ) : connectedEmail ? (
                       <>
                         <span>Send to {selectedLead?.fullName?.split(' ')[0] || 'Lead'}</span>
