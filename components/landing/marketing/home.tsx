@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check } from "lucide-react";
+import { ThreeDButton } from "@/components/buttons/three-d-button";
 import { ContactAvatar } from "@/components/prospects/ContactAvatar";
 import { CompanyFavicon } from "@/components/prospects/CompanyFavicon";
 import { FadeIn, ScaleUnblur } from "@/components/landing/portfolio/motion-primitives";
@@ -18,45 +19,6 @@ import { trackGoal } from "@/lib/analytics/datafast";
 import { ENTERPRISE_PLAN, PLANS, STARTER_CREDITS, type PlanKey } from "@/lib/billing/plans";
 
 const ROTATING_LINES = ["hiring an SDR", "an agency", "a bigger stack"];
-
-const FITS = [
-  "You run a pre-seed or seed B2B SaaS or AI startup",
-  "You have a live product and a website that explains it",
-  "You, the founder, are still the one doing sales",
-  "You have a small team and no dedicated sales hire yet",
-];
-
-const MISFITS = [
-  "You already have an SDR team and an outbound stack",
-  "You're pre-product",
-  "You sell to consumers",
-  "You want to blast thousands of emails a day",
-];
-
-const COSTS = [
-  { name: "Hire an SDR", detail: "$70k+ a year" },
-  { name: "Agency", detail: "A monthly retainer" },
-  { name: "Bigger platforms", detail: "Priced for a team" },
-  { name: "apsurn", detail: "From $30 a month", ours: true },
-] as const;
-
-const COMPARE_CARDS = [
-  {
-    title: "apsurn vs hiring an SDR",
-    body: "An SDR takes months to ramp, and you still have to teach them who to call. apsurn drafts that from your site and returns named people it can verify.",
-    line: "About 10 minutes, from $30 a month",
-  },
-  {
-    title: "apsurn vs an agency",
-    body: "An agency is a retainer and a list you don't fully own. The companies apsurn finds stay in your account, with the page each contact came from.",
-    line: "Cancel anytime",
-  },
-  {
-    title: "apsurn vs a bigger platform",
-    body: "Those tools expect you to bring the ICP and assemble the rest. apsurn starts from the website you already have and drops any address it cannot verify.",
-    line: "You approve the ICP first",
-  },
-] as const;
 
 const FAQS = [
   {
@@ -375,13 +337,13 @@ function BentoLeadsVisual() {
 
 const FEATURE_BENTO_ITEMS = [
   {
-    title: "Paste your site",
-    description: "apsurn reads your public pages first",
+    title: "Grow your business",
+    description: "Find more deals and customers",
     visual: "analytics" as const,
   },
   {
-    title: "Approve the ICP",
-    description: "Edit industries, size, regions, and roles",
+    title: "Find leads consistently",
+    description: "Apsurn helps you find qualified leads consistently",
     visual: "dashboard" as const,
   },
   {
@@ -392,20 +354,20 @@ const FEATURE_BENTO_ITEMS = [
     rowSpan: 2,
   },
   {
-    title: "ICP from your site",
-    description: "A draft of who should buy, before prospecting starts",
+    title: "Setup that runs itself",
+    description: "Paste your site and apsurn builds your profile, finds leads and writes your campaigns",
     visual: "automation" as const,
     colSpan: 2,
     rowSpan: 2,
   },
   {
-    title: "Evidence on the row",
-    description: "Public page and excerpt stay with each contact",
+    title: "Intent from every source",
+    description: "apsurn finds buying intent on LinkedIn, Reddit, X and Gmail",
     visual: "integration" as const,
   },
   {
-    title: "Copilot on the list",
-    description: "Ask for more companies or a tighter ICP",
+    title: "Leads that keep coming",
+    description: "Radar finds new prospects and verifies their emails",
     visual: "security" as const,
   },
 ];
@@ -425,15 +387,6 @@ export function MarketingHome() {
       links: [
         { label: 'How it works', href: '#how-it-works' },
         { label: 'Pricing', href: '#pricing' }
-      ]
-    },
-    {
-      label: 'Compare',
-      description: 'apsurn next to the other ways to start',
-      links: [
-        { label: 'vs SDR', href: '#compare' },
-        { label: 'vs Agency', href: '#compare' },
-        { label: 'vs Platforms', href: '#compare' }
       ]
     },
     {
@@ -597,102 +550,62 @@ export function MarketingHome() {
           </div>
         </section>
 
-        {/* Compare */}
-        <section id="compare" className="scroll-mt-28 mt-20 sm:mt-28">
-          <div className="grid items-start gap-10 lg:grid-cols-[1.15fr_0.85fr] lg:gap-16">
-            <div>
-              <p className="text-[13px] text-[var(--mh-muted)]">Compare</p>
-              <h2 className="mt-3 max-w-[16ch] text-[clamp(36px,4.6vw,56px)] font-medium leading-[1.05] tracking-tight text-[var(--mh-fg)]">
-                apsurn next to the other ways to start
-              </h2>
-              <p className="mt-5 max-w-[48ch] text-[16px] leading-relaxed text-[color:color-mix(in_srgb,var(--mh-fg)_60%,transparent)]">
-                What it costs to get the first names, how long that takes, and what you walk away with.
-              </p>
-              <div className="mt-8 grid gap-6 sm:grid-cols-2">
-                <div>
-                  <h3 className="text-[14px] font-medium text-[var(--mh-fg)]">This is you</h3>
-                  <ul className="mt-3 flex flex-col gap-2.5">
-                    {FITS.map((item) => (
-                      <li key={item} className="text-[14px] leading-relaxed text-[color:color-mix(in_srgb,var(--mh-fg)_60%,transparent)]">
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <h3 className="text-[14px] font-medium text-[var(--mh-fg)]">This isn’t</h3>
-                  <ul className="mt-3 flex flex-col gap-2.5">
-                    {MISFITS.map((item) => (
-                      <li key={item} className="text-[14px] leading-relaxed text-[var(--mh-muted)]">
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </div>
-
-            <aside className="rounded-3xl border border-[var(--mh-soft)] bg-[var(--mh-bg)] p-5 sm:p-6">
-              <p className="text-[14px] text-[color:color-mix(in_srgb,var(--mh-fg)_60%,transparent)]">What getting started costs</p>
-              <ul className="mt-4 flex flex-col">
-                {COSTS.map((row) => (
-                  <li
-                    key={row.name}
-                    className={`flex items-baseline justify-between gap-4 border-t border-[var(--mh-soft)] py-3.5 first:border-t-0 ${
-                      "ours" in row && row.ours
-                        ? "-mx-3 rounded-xl border-transparent bg-[color:color-mix(in_srgb,var(--mh-fg)_5%,transparent)] px-3 text-[var(--mh-fg)]"
-                        : "text-[color:color-mix(in_srgb,var(--mh-fg)_55%,transparent)]"
-                    }`}
-                  >
-                    <span className="text-[15px]">{row.name}</span>
-                    <span className={`text-right text-[15px] ${"ours" in row && row.ours ? "font-medium text-[var(--mh-fg)]" : ""}`}>
-                      {row.detail}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-3 text-[12px] leading-relaxed text-[var(--mh-muted)]">Categories, not a price quoted by those companies.</p>
-            </aside>
-          </div>
-
-          <ul className="mt-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
-            {COMPARE_CARDS.map((card) => (
-              <li key={card.title} className="project-card flex flex-col rounded-3xl border border-[var(--mh-soft)] bg-[var(--mh-bg)] p-5 sm:p-6">
-                <h3 className="text-[18px] font-medium text-[var(--mh-fg)]">{card.title}</h3>
-                <p className="mt-3 flex-1 text-[15px] leading-relaxed text-[color:color-mix(in_srgb,var(--mh-fg)_60%,transparent)]">{card.body}</p>
-                <p className="mt-5 text-[13px] text-[var(--mh-fg)]">{card.line}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
-
         {/* Founder */}
         <section id="founder" className="scroll-mt-28 mt-20 sm:mt-28">
-          <div className="mx-auto w-full max-w-[680px]">
-            <h2 className="font-display text-[clamp(32px,4vw,48px)] font-medium leading-[1.08] tracking-tight text-[var(--mh-fg)]">
-              Why I built apsurn
-            </h2>
-            <div className="mt-8 flex flex-col gap-5 text-[17px] leading-[1.7] text-[color:color-mix(in_srgb,var(--mh-fg)_62%,transparent)]">
-              <p>I’m Keith. I spent a year building SaaS products that nobody paid for. I’d launch, and then nothing would happen.</p>
-              <p>
-                I wanted something that would tell me who to sell to and find them, without a sales hire I couldn’t afford. It didn’t exist at my stage, so I built it.
-              </p>
-              <p>
-                apsurn reads your public site, waits for you to approve the ICP, and only saves a company when a named person has a verified email or a LinkedIn profile. The page that contact came from stays on the row.
-              </p>
-              <p>If you’re stuck on the same problem, write to me. You’ll get a reply from me directly.</p>
-            </div>
-            <div className="mt-8 flex items-center justify-between gap-4 border-t border-[var(--mh-soft)] pt-6">
-              <div>
-                <p className="text-[15px] font-medium text-[var(--mh-fg)]">Keith Katale</p>
-                <p className="text-[13px] text-[var(--mh-muted)]">Founder, apsurn</p>
+          <div className="overflow-hidden rounded-[32px] border border-[var(--mh-soft)] bg-[color:color-mix(in_srgb,var(--mh-fg)_3%,var(--mh-bg))]">
+            <div className="grid items-stretch lg:grid-cols-[0.8fr_1.2fr]">
+              <div className="relative min-h-[360px] sm:min-h-[460px] lg:min-h-full">
+                <Image
+                  src="/branding/dp.jpeg"
+                  alt="Keith Katale, founder of apsurn"
+                  fill
+                  sizes="(min-width: 1024px) 40vw, 100vw"
+                  className="object-cover object-[50%_30%]"
+                />
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/70 to-transparent" />
+                <div className="absolute inset-x-0 bottom-0 p-6 sm:p-8">
+                  <p className="text-[20px] font-medium leading-tight text-white">Keith Katale</p>
+                  <p className="mt-1 text-[14px] text-white/75">Founder, apsurn</p>
+                </div>
               </div>
-              <a
-                href="mailto:hello@apsurn.com"
-                className="mh-focus rounded-sm text-[14px] text-[var(--mh-fg)] underline decoration-[var(--mh-soft)] underline-offset-4 hover:decoration-[var(--mh-fg)]"
-              >
-                hello@apsurn.com
-              </a>
+
+              <div className="flex flex-col justify-center p-7 sm:p-10 lg:p-14">
+                <p className="text-[13px] font-medium uppercase tracking-[0.12em] text-[var(--mh-muted)]">The founder</p>
+                <h2 className="font-display mt-3 text-[clamp(32px,4vw,48px)] font-medium leading-[1.08] tracking-tight text-[var(--mh-fg)]">
+                  Why I built apsurn
+                </h2>
+
+                <p className="mt-6 text-[clamp(19px,2vw,22px)] font-medium leading-[1.45] tracking-tight text-[var(--mh-fg)]">
+                  I spent a year building SaaS products that nobody paid for. I’d launch, and then nothing would happen.
+                </p>
+
+                <div className="mt-5 flex flex-col gap-4 text-[16px] leading-[1.7] text-[color:color-mix(in_srgb,var(--mh-fg)_66%,transparent)]">
+                  <p>
+                    I wanted something that would tell me who to sell to and find them, without a sales hire I couldn’t afford. It didn’t exist at my stage, so I built it.
+                  </p>
+                  <p>
+                    apsurn reads your public site, waits for you to approve the ICP, and only saves a company when a named person has a verified email or a LinkedIn profile. The page that contact came from stays on the row.
+                  </p>
+                </div>
+
+                <figure className="mt-7 border-l-2 border-[var(--mh-fg)] pl-5">
+                  <blockquote className="text-[16px] leading-[1.6] text-[var(--mh-fg)]">
+                    If you’re stuck on the same problem, write to me. You’ll get a reply from me directly.
+                  </blockquote>
+                </figure>
+
+                <div className="mt-8 flex flex-wrap items-center gap-3">
+                  <ThreeDButton href="mailto:hello@apsurn.com" variant="solid" size="md">
+                    Write to Keith
+                  </ThreeDButton>
+                  <a
+                    href="mailto:hello@apsurn.com"
+                    className="mh-focus rounded-sm text-[14px] text-[var(--mh-muted)] underline decoration-[var(--mh-soft)] underline-offset-4 transition-colors hover:text-[var(--mh-fg)] hover:decoration-[var(--mh-fg)]"
+                  >
+                    hello@apsurn.com
+                  </a>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -832,7 +745,6 @@ export function MarketingHome() {
                 title="Product"
                 links={[
                   ["#how-it-works", "How it works"],
-                  ["#compare", "Compare"],
                   ["#pricing", "Pricing"],
                   ["#faq", "Questions"],
                 ]}

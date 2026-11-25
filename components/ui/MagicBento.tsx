@@ -4,14 +4,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import {
-  FigmaIcon,
-  FingerPrintIcon,
   GitBranchIcon,
-  GithubIcon,
-  Key01Icon,
-  NotionIcon,
-  SlackIcon,
-  SparklesIcon,
+  MailValidation01Icon,
+  Radar01Icon,
   Tick02Icon
 } from '@hugeicons/core-free-icons';
 
@@ -115,6 +110,9 @@ const inkFor = rgb => {
 };
 
 const CHART = [3.1, 3.8, 3.5, 4.9, 4.4, 5.8, 5.3, 6.9, 6.5, 8.2, 9.4, 12.4];
+// The chart reads as revenue: the latest point is +$48.2k.
+const CHART_SCALE = 48.2 / 12.4;
+const chartLabel = (value) => `+$${(value * CHART_SCALE).toFixed(1)}k`;
 
 const curve = (values, width, height) => {
   const top = 6;
@@ -229,13 +227,13 @@ const AnalyticsVisual = () => {
     chart.dataset.scrub = '';
     line.style.transform = `translateX(${x.toFixed(1)}px)`;
     dot.style.transform = `translateY(${y.toFixed(1)}px)`;
-    label.textContent = `${value.toFixed(1)}k`;
+    label.textContent = chartLabel(value);
     note.textContent = `Oct ${Math.round(position) + 1}`;
   };
 
   const rest = () => {
     if (chartRef.current) delete chartRef.current.dataset.scrub;
-    if (valueRef.current) valueRef.current.textContent = `${CHART[CHART.length - 1].toFixed(1)}k`;
+    if (valueRef.current) valueRef.current.textContent = chartLabel(CHART[CHART.length - 1]);
     if (noteRef.current) noteRef.current.textContent = '+18%';
   };
 
@@ -249,7 +247,7 @@ const AnalyticsVisual = () => {
     >
       <div className="magic-bento__figure">
         <span ref={valueRef} className="magic-bento__figure-value">
-          {CHART[CHART.length - 1].toFixed(1)}k
+          {chartLabel(CHART[CHART.length - 1])}
         </span>
         <span ref={noteRef} className="magic-bento__figure-note">
           +18%
@@ -275,7 +273,7 @@ const BARS = [42, 58, 49, 71, 63, 88, 76];
 const DashboardVisual = () => (
   <div className="magic-bento__bars">
     <div className="magic-bento__figure">
-      <span className="magic-bento__figure-value">$48.2k</span>
+      <span className="magic-bento__figure-value">12.4k</span>
       <span className="magic-bento__figure-note">Weekly</span>
     </div>
     <div className="magic-bento__bars-plot">
@@ -335,10 +333,10 @@ const CollaborationVisual = () => (
 );
 
 const STEPS = [
-  { label: 'Install', time: '8s' },
-  { label: 'Build', time: '12s' },
-  { label: 'Test', time: '48s' },
-  { label: 'Deploy', time: '9s' }
+  { label: 'Read your site', time: '14s' },
+  { label: 'Map competitors', time: '18s' },
+  { label: 'Find leads', time: '35s' },
+  { label: 'Write campaigns', time: '22s' }
 ];
 
 const AutomationVisual = () => (
@@ -348,8 +346,8 @@ const AutomationVisual = () => (
         <HugeiconsIcon icon={GitBranchIcon} size={15} strokeWidth={1.8} />
       </span>
       <span className="magic-bento__flow-copy">
-        <span className="magic-bento__flow-name">Push to main</span>
-        <span className="magic-bento__flow-meta magic-bento__flow-hash">a1c9f3e</span>
+        <span className="magic-bento__flow-name">Paste your website</span>
+        <span className="magic-bento__flow-meta magic-bento__flow-hash">yourcompany.com</span>
       </span>
     </div>
     <ol className="magic-bento__steps magic-bento__well">
@@ -373,11 +371,12 @@ const AutomationVisual = () => (
   </div>
 );
 
+// Real brand marks (simple-icons paths). X uses currentColor so it stays legible in dark mode.
 const APPS = [
-  { icon: SlackIcon, x: '17%', y: '24%' },
-  { icon: GithubIcon, x: '83%', y: '24%' },
-  { icon: FigmaIcon, x: '17%', y: '78%' },
-  { icon: NotionIcon, x: '83%', y: '78%' }
+  { name: 'LinkedIn', logo: <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="#0A66C2" d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" /></svg>, x: '17%', y: '24%' },
+  { name: 'Reddit', logo: <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="#FF4500" d="M12 0C5.373 0 0 5.373 0 12c0 3.314 1.343 6.314 3.515 8.485l-2.286 2.286C.775 23.225 1.097 24 1.738 24H12c6.627 0 12-5.373 12-12S18.627 0 12 0Zm4.388 3.199c1.104 0 1.999.895 1.999 1.999 0 1.105-.895 2-1.999 2-.946 0-1.739-.657-1.947-1.539v.002c-1.147.162-2.032 1.15-2.032 2.341v.007c1.776.067 3.4.567 4.686 1.363.473-.363 1.064-.58 1.707-.58 1.547 0 2.802 1.254 2.802 2.802 0 1.117-.655 2.081-1.601 2.531-.088 3.256-3.637 5.876-7.997 5.876-4.361 0-7.905-2.617-7.998-5.87-.954-.447-1.614-1.415-1.614-2.538 0-1.548 1.255-2.802 2.803-2.802.645 0 1.239.218 1.712.585 1.275-.79 2.881-1.291 4.64-1.365v-.01c0-1.663 1.263-3.034 2.88-3.207.188-.911.993-1.595 1.959-1.595Zm-8.085 8.376c-.784 0-1.459.78-1.506 1.797-.047 1.016.64 1.429 1.426 1.429.786 0 1.371-.369 1.418-1.385.047-1.017-.553-1.841-1.338-1.841Zm7.406 0c-.786 0-1.385.824-1.338 1.841.047 1.017.634 1.385 1.418 1.385.785 0 1.473-.413 1.426-1.429-.046-1.017-.721-1.797-1.506-1.797Zm-3.703 4.013c-.974 0-1.907.048-2.77.135-.147.015-.241.168-.183.305.483 1.154 1.622 1.964 2.953 1.964 1.33 0 2.47-.81 2.953-1.964.057-.137-.037-.29-.184-.305-.863-.087-1.795-.135-2.769-.135Z" /></svg>, x: '83%', y: '24%' },
+  { name: 'X', logo: <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z" /></svg>, x: '17%', y: '78%' },
+  { name: 'Gmail', logo: <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="#EA4335" d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548l6.545-4.91 1.528-1.145C21.69 2.28 24 3.434 24 5.457z" /></svg>, x: '83%', y: '78%' }
 ];
 
 const IntegrationVisual = () => (
@@ -400,21 +399,24 @@ const IntegrationVisual = () => (
         className="magic-bento__hub-node magic-bento__tile"
         style={vars({ '--x': app.x, '--y': app.y, '--s': '26px', '--i': index + 1 })}
       >
-        <HugeiconsIcon icon={app.icon} size={14} strokeWidth={1.8} />
+        <span title={app.name} style={{ display: 'inline-flex' }}>
+          {app.logo}
+        </span>
       </span>
     ))}
     <span
       className="magic-bento__hub-node magic-bento__tile"
       style={vars({ '--x': '50%', '--y': '51%', '--s': '34px', '--i': 0 })}
     >
-      <HugeiconsIcon icon={SparklesIcon} size={17} strokeWidth={1.8} />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/branding/apsurn-gtm.png" alt="apsurn" width={20} height={20} style={{ width: 20, height: 20, objectFit: 'contain' }} />
     </span>
   </div>
 );
 
 const SETTINGS = [
-  { icon: Key01Icon, label: 'SSO' },
-  { icon: FingerPrintIcon, label: '2FA' }
+  { icon: Radar01Icon, label: 'Auto-source leads' },
+  { icon: MailValidation01Icon, label: 'Verified emails' }
 ];
 
 const SecurityVisual = () => (
