@@ -3,6 +3,9 @@ pmOnFail: ignore
 minimumReleaseAgeExclude:
   - '@next/*'
   - next
+  - '@posthog/browser-common@0.14.2'
+  - '@posthog/types@1.427.2'
+  - posthog-js@1.455.2
 
 allowBuilds:
   protobufjs: false
