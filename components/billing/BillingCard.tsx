@@ -263,7 +263,7 @@ export function BillingCard() {
               disabled={busy !== null}
               onClick={() => void startCheckout({ kind: 'topup', topup: key }, `topup:${key}`)}
             >
-              {busy === `topup:${key}` ? 'Opening…' : `+${TOPUPS[key].credits.toLocaleString()} credits · ${TOPUPS[key].priceUsd}`}
+              {busy === `topup:${key}` ? 'Opening…' : `+${TOPUPS[key].credits.toLocaleString()} credits · $${TOPUPS[key].priceUsd}`}
             </button>
           ))}
         </div>
