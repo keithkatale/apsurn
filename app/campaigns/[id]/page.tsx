@@ -98,6 +98,8 @@ function CampaignSendingWorkspace() {
   const [connectedEmail, setConnectedEmail] = useState<string | null>(null)
   const [sendStatus, setSendStatus] = useState<string | null>(null)
   const [sendingAll, setSendingAll] = useState(false)
+  const [sendingOne, setSendingOne] = useState(false)
+  const [sentLeadIds, setSentLeadIds] = useState<Set<string>>(() => new Set())
   const [addPersonOpen, setAddPersonOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [newTitle, setNewTitle] = useState('')
@@ -334,34 +336,98 @@ function CampaignSendingWorkspace() {
     }
   }
 
+  /** Sends one resolved email through the connected Gmail (SMTP). Returns an error message, or null on success. */
+  const sendEmail = async (to: string, subj: string, bodyText: string): Promise<{ error: string | null; code?: string }> => {
+    try {
+      const res = await fetch('/api/campaigns/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, subject: subj, body: bodyText }),
+      })
+      const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string }
+      if (!res.ok) return { error: data.error || 'Could not send the email.', code: data.code }
+      return { error: null }
+    } catch {
+      return { error: 'Network error. Please try again.' }
+    }
+  }
+
+  const draftFor = (lead: CampaignLead) => {
+    if (!campaign) return { subject: '', body: '' }
+    const saved = drafts[`${lead.id}:${campaign.id}`]
+    if (saved) return saved
+    const step1 = campaign.steps[0]
+    return {
+      subject: tokenizeLeadMentions(step1?.subject || 'scaling new buyers', lead),
+      body: tokenizeLeadMentions(step1?.body || DEFAULT_OPENER_BODY, lead),
+    }
+  }
+
+  const handleSendFailure = (result: { error: string | null; code?: string }) => {
+    if (result.code === 'inbox_required') setConnectOpen(true)
+    if (result.code === 'plan_required') unlock.start()
+    setSendStatus(result.error)
+  }
+
   const handleSendAll = async () => {
     if (unlock.needsUnlock) return unlock.start()
     if (!connectedEmail) {
       setConnectOpen(true)
       return
     }
+    const targets = leads.filter((l) => l.email && !sentLeadIds.has(l.id))
+    if (targets.length === 0) {
+      setSendStatus('Nothing left to send. Add email addresses or enrich your leads first.')
+      return
+    }
     setSendingAll(true)
-    const count = leads.filter((l) => l.email).length || leads.length
-    setSendStatus(`Sending 1 of ${count} from ${connectedEmail}…`)
-    await new Promise((r) => setTimeout(r, 1400))
+    let sent = 0
+    for (const lead of targets) {
+      setSendStatus(`Sending ${sent + 1} of ${targets.length} from ${connectedEmail}…`)
+      const draft = draftFor(lead)
+      const result = await sendEmail(
+        lead.email as string,
+        resolveMergeFields(draft.subject, lead),
+        resolveMergeFields(draft.body, lead),
+      )
+      if (result.error) {
+        handleSendFailure(result)
+        setSendingAll(false)
+        if (sent > 0) setSendStatus(`Sent ${sent} of ${targets.length}. Stopped: ${result.error}`)
+        return
+      }
+      sent += 1
+      setSentLeadIds((prev) => new Set(prev).add(lead.id))
+      await new Promise((r) => setTimeout(r, 1200))
+    }
     setSendingAll(false)
-    setSendStatus(`Queued ${count} personalized emails via ${connectedEmail}.`)
+    setSendStatus(`Sent ${sent} personalized email${sent === 1 ? '' : 's'} from ${connectedEmail}.`)
   }
 
-  const handleSendSingle = () => {
+  const handleSendSingle = async () => {
     if (unlock.needsUnlock) return unlock.start()
     if (!connectedEmail) {
       setConnectOpen(true)
       return
     }
-    if (!selectedLead?.email) return
-    const resolvedSubj = resolveMergeFields(subject, selectedLead)
-    const resolvedBody = resolveMergeFields(body, selectedLead)
-    window.open(
-      `mailto:${selectedLead.email}?subject=${encodeURIComponent(resolvedSubj)}&body=${encodeURIComponent(resolvedBody)}`,
-      '_blank',
+    if (!selectedLead?.email) {
+      setSendStatus('This lead has no email address yet.')
+      return
+    }
+    setSendingOne(true)
+    setSendStatus(`Sending to ${selectedLead.email}…`)
+    const result = await sendEmail(
+      selectedLead.email,
+      resolveMergeFields(subject, selectedLead),
+      resolveMergeFields(body, selectedLead),
     )
-    setSendStatus(`Opened email to ${selectedLead.email} (${connectedEmail})`)
+    setSendingOne(false)
+    if (result.error) {
+      handleSendFailure(result)
+      return
+    }
+    setSentLeadIds((prev) => new Set(prev).add(selectedLead.id))
+    setSendStatus(`Sent to ${selectedLead.email} from ${connectedEmail}.`)
   }
 
   const handleAddPerson = (e: React.FormEvent) => {
@@ -676,12 +742,12 @@ function CampaignSendingWorkspace() {
                 {/* Card Bottom Bar: one button that sends, or asks to connect Gmail first */}
                 <div className="flex items-center justify-between gap-3 border-t border-[var(--mh-soft)] px-6 py-3.5">
                   <p className="min-w-0 truncate text-[12px] text-[var(--mh-muted)]">
-                    {unlock.error ?? (connectedEmail ? `Connected as ${connectedEmail} · Ready to send.` : '')}
+                    {unlock.error ?? sendStatus ?? (connectedEmail ? `Connected as ${connectedEmail} · Ready to send.` : '')}
                   </p>
                   <button
                     type="button"
-                    onClick={handleSendSingle}
-                    disabled={unlock.busy}
+                    onClick={() => void handleSendSingle()}
+                    disabled={unlock.busy || sendingOne}
                     className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] bg-[var(--mh-fg)] px-5 text-[13px] font-medium text-[var(--mh-bg)] transition-opacity hover:opacity-90 disabled:opacity-60 ${unlock.needsUnlock ? unlockPulse : ''}`}
                   >
                     {unlock.needsUnlock ? (
