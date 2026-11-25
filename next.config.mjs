@@ -9,6 +9,12 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  async redirects() {
+    return [
+      { source: '/dashboard', destination: '/leads', permanent: false },
+      { source: '/dashboard/:path*', destination: '/leads', permanent: false },
+    ]
+  },
   async rewrites() {
     return [
       {

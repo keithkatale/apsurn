@@ -10,7 +10,7 @@ import { isGuestUser } from "@/lib/auth/guest";
 const MAX_ATTEMPTS = 5;
 const MAX_SENDS_PER_HOUR = 5;
 
-export function safeNextPath(raw: unknown, fallback = "/dashboard") {
+export function safeNextPath(raw: unknown, fallback = "/leads") {
   if (typeof raw !== "string") return fallback;
   if (!raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\")) return fallback;
   return raw.slice(0, 500);

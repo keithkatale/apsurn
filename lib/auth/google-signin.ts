@@ -72,11 +72,11 @@ export function encodeGoogleSignInState(state: string, next: string) {
 
 export function decodeGoogleSignInState(value: string) {
   const pipe = value.indexOf("|");
-  if (pipe < 0) return { state: value, next: "/dashboard/copilot" };
+  if (pipe < 0) return { state: value, next: "/auth/continue" };
   const next = value.slice(pipe + 1);
   return {
     state: value.slice(0, pipe),
-    next: next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard/copilot",
+    next: next.startsWith("/") && !next.startsWith("//") ? next : "/auth/continue",
   };
 }
 

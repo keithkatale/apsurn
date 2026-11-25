@@ -112,7 +112,7 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
                   See how it works
                 </Link>
                 <Link
-                  href={showDashboard ? "/dashboard" : "/signup?next=/setup"}
+                  href={showDashboard ? "/leads" : "/signup?next=/setup"}
                   className="hero-solid-btn inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-full px-3.5 text-[13px] font-medium"
                 >
                   {showDashboard ? "Dashboard" : "Get started"}
@@ -120,7 +120,7 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
               </>
             ) : (
               <>
-                <ThreeDButton href={showDashboard ? "/dashboard" : "/signup?next=/setup"} variant="solid" size="sm" className="landing-nav-cta rounded-xl px-4 shadow-none">
+                <ThreeDButton href={showDashboard ? "/leads" : "/signup?next=/setup"} variant="solid" size="sm" className="landing-nav-cta rounded-xl px-4 shadow-none">
                   <span>{showDashboard ? "Dashboard" : "Get 50 free credits"}</span>
                   <ArrowRight className="size-3.5" />
                 </ThreeDButton>
@@ -169,7 +169,7 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
               ) : null}
               {embedded ? (
                 <Link
-                  href={showDashboard ? "/dashboard" : "/signup?next=/setup"}
+                  href={showDashboard ? "/leads" : "/signup?next=/setup"}
                   onClick={() => setIsOpen(false)}
                   className="hero-solid-btn inline-flex h-10 w-full items-center justify-center whitespace-nowrap rounded-full px-4 text-[15px] font-medium"
                 >
@@ -177,7 +177,7 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
                 </Link>
               ) : (
                 <ThreeDButton
-                  href={showDashboard ? "/dashboard" : "/signup?next=/setup"}
+                  href={showDashboard ? "/leads" : "/signup?next=/setup"}
                   variant="solid"
                   size="md"
                   onClick={() => setIsOpen(false)}

@@ -471,7 +471,7 @@ export function MarketingHome() {
           logoAlt="apsurn"
           logoHref="/"
           items={navItems}
-          cta={hasSession ? { label: 'Dashboard', href: '/dashboard' } : { label: 'Get started', href: '/signup?next=/setup' }}
+          cta={hasSession ? { label: 'Dashboard', href: '/leads' } : { label: 'Get started', href: '/signup?next=/setup' }}
           theme={isDark ? 'dark' : 'light'}
           surface="glass"
           openOn="hover"

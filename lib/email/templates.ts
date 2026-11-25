@@ -107,7 +107,7 @@ export function verificationEmail(params: { code: string; link: string }) {
 }
 
 export function welcomeEmail(params: { dashboardUrl?: string } = {}) {
-  const url = params.dashboardUrl ?? `${appOrigin()}/dashboard`;
+  const url = params.dashboardUrl ?? `${appOrigin()}/leads`;
   const steps: [string, string][] = [
     ["Describe who you want to reach", "Tell apsurn about your offer and it builds a campaign plan for you."],
     ["Find or upload your prospects", "Let apsurn prospect for you, or start from your own CSV list."],
