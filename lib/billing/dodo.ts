@@ -1,5 +1,5 @@
 import DodoPayments from "dodopayments";
-import { isLiveBilling } from "@/lib/billing/plans";
+import { UNLOCK, dodoBrandId, isLiveBilling, unlockProductId } from "@/lib/billing/plans";
 
 let client: DodoPayments | null = null;
 
@@ -20,6 +20,44 @@ export function getDodo(): DodoPayments {
     });
   }
   return client;
+}
+
+const UNLOCK_PRODUCT_NAME = "Apsurn sending credits unlock";
+let unlockProductPromise: Promise<string> | null = null;
+
+/**
+ * Checkout sessions can only sell existing products, so the one-time unlock product is created through the API the
+ * first time it is needed (and found again by name afterwards). An env var still wins if you want to pin one.
+ */
+export function ensureUnlockProductId(): Promise<string> {
+  const pinned = unlockProductId();
+  if (pinned) return Promise.resolve(pinned);
+  if (!unlockProductPromise) {
+    unlockProductPromise = (async () => {
+      const dodo = getDodo();
+      for await (const product of dodo.products.list({ page_size: 100 })) {
+        if (product.name === UNLOCK_PRODUCT_NAME && !product.is_recurring) return product.product_id;
+      }
+      const created = await dodo.products.create({
+        name: UNLOCK_PRODUCT_NAME,
+        description: `One-time unlock for ${UNLOCK.creditsValueUsd} dollars of sending credits.`,
+        price: {
+          type: "one_time_price",
+          currency: "USD",
+          price: UNLOCK.priceUsd * 100,
+          discount: 0,
+          purchasing_power_parity: false,
+        },
+        tax_category: "saas",
+        brand_id: dodoBrandId(),
+      });
+      return created.product_id;
+    })().catch((error) => {
+      unlockProductPromise = null;
+      throw error;
+    });
+  }
+  return unlockProductPromise;
 }
 
 export function appUrl(): string {

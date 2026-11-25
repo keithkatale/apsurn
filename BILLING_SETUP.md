@@ -62,6 +62,6 @@ For local testing, expose localhost with a tunnel and register that URL for test
 Guests finish setup, click the pulsing **Get $30 of Sending Credits** button on a campaign, sign up (their workspace
 is kept), and a Dodo checkout popup charges $1 once and grants 2,000 credits (`UNLOCK` in `lib/billing/plans.ts`).
 
-1. In Dodo → Products, create a **One-Time** product priced **$1** (name e.g. "Sending credits unlock").
-2. Set its ID as `DODO_UNLOCK_PRODUCT_ID` (test) / `DODO_UNLOCK_PRODUCT_ID_LIVE` (live) on the server.
+1. Nothing to create by hand: the $1 one-time product is created through the Dodo API the first time someone checks out, and found by name afterwards.
+2. Optional: pin a specific product with `DODO_UNLOCK_PRODUCT_ID` (test) / `DODO_UNLOCK_PRODUCT_ID_LIVE` (live).
 3. The existing webhook must receive `payment.succeeded`; it grants the credits (idempotent per payment).

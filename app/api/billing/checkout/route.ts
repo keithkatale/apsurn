@@ -3,8 +3,8 @@ import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
 import { AccountRequiredError, accountRequiredResponse, assertRegisteredUser } from "@/lib/auth/guest";
 import { getBillingState, hasUnlocked } from "@/lib/billing/credits";
 import { isLiveBilling } from "@/lib/billing/plans";
-import { appUrl, getDodo, isDodoConfigured } from "@/lib/billing/dodo";
-import { OFFERED_PLAN_KEYS, TOPUPS, UNLOCK, productIdForPlan, productIdForTopup, unlockProductId } from "@/lib/billing/plans";
+import { appUrl, ensureUnlockProductId, getDodo, isDodoConfigured } from "@/lib/billing/dodo";
+import { OFFERED_PLAN_KEYS, TOPUPS, UNLOCK, productIdForPlan, productIdForTopup } from "@/lib/billing/plans";
 import { rateLimit } from "@/lib/rate-limit";
 
 const bodySchema = z.discriminatedUnion("kind", [
@@ -35,11 +35,10 @@ export async function POST(req: Request) {
 
     // $1 unlock: one-time, for registered accounts that have not unlocked yet.
     if (parsed.data.kind === "unlock") {
-      const productId = unlockProductId();
-      if (!productId) return Response.json({ error: "The unlock offer is not configured yet." }, { status: 503 });
       if (await hasUnlocked(userId)) {
         return Response.json({ error: "Your sending credits are already unlocked.", code: "already_unlocked" }, { status: 409 });
       }
+      const productId = await ensureUnlockProductId();
       const rt = parsed.data.returnTo;
       const returnTo = rt && rt.startsWith("/") && !rt.startsWith("//") ? rt : "/settings";
       const sep = returnTo.includes("?") ? "&" : "?";
