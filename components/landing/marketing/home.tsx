@@ -735,7 +735,7 @@ export function MarketingHome() {
                   ))}
                 </ul>
                 <CtaPill
-                  href={`/signup?next=${encodeURIComponent(`/dashboard?trial=${plan.key as PlanKey}`)}`}
+                  href={`/signup?next=${encodeURIComponent(`/settings?plan=${plan.key as PlanKey}`)}`}
                   onClick={() => trackGoal("start_trial", { plan: plan.key })}
                   className="mt-8 w-full"
                 >

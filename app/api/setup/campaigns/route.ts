@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { generateCampaigns } from '@/lib/ai'
 import { getCurrentUserId } from '@/lib/auth/session'
+import { beginSetupAction, settleSetupAction } from '@/lib/billing/gate'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { businessProfileSchema, competitorAnalysisSchema, type CampaignsResponse, type GeneratedCampaign } from '@/lib/types'
 
@@ -26,6 +27,9 @@ function normalizeMergeTags(text: string): string {
 export async function POST(req: Request) {
   const parsed = bodySchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return Response.json({ error: 'Invalid campaign generation request' }, { status: 400 })
+
+  const gate = await beginSetupAction('campaign_generate')
+  if (gate.blocked) return gate.blocked
 
   try {
     const rawCampaigns = await generateCampaigns({
@@ -123,6 +127,8 @@ export async function POST(req: Request) {
     } catch (dbErr) {
       console.warn('[setup/campaigns] DB persistence warning:', dbErr)
     }
+
+    await settleSetupAction(gate, 'campaign_generate')
 
     const body: CampaignsResponse = {
       campaigns: savedCampaigns.length > 0 ? savedCampaigns : rawCampaigns,

@@ -2,6 +2,8 @@ import { z } from 'zod'
 import { scorePosts } from '@/lib/ai'
 import { fetchApifyLeads } from '@/lib/apify-leads'
 import { getCurrentUserId } from '@/lib/auth/session'
+import { CREDIT_COSTS, SETUP_FREE_LEAD_CAP } from '@/lib/billing/plans'
+import { beginSetupAction, settleSetupAction } from '@/lib/billing/gate'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { businessProfileSchema, SENIORITY_OPTIONS, type ListenResponse, type SeniorityId } from '@/lib/types'
 
@@ -26,17 +28,30 @@ export async function POST(req: Request) {
   if (!parsed.success) return Response.json({ error: 'Invalid Apify lead search request' }, { status: 400 })
   const { companyId: inputCompanyId, profile, personTitle, keywords, personCountry, seniority, apifyToken } = parsed.data
 
+  // Free setup: capped preview. Active plan: up to 50 leads, 3 credits each (as many as the balance covers).
+  const gate = await beginSetupAction('prospect_company', 1)
+  if (gate.blocked) return gate.blocked
+  const leadCap = gate.paid
+    ? Math.min(TARGET_LEADS, Math.floor(gate.credits / CREDIT_COSTS.prospect_company))
+    : SETUP_FREE_LEAD_CAP
+  if (leadCap < 1) {
+    return Response.json(
+      { error: "You're out of credits. Top up or upgrade to keep going.", code: 'insufficient_credits' },
+      { status: 402 },
+    )
+  }
+
   try {
     const rawLeads = await fetchApifyLeads({
       personTitle: personTitle.length ? personTitle : profile.icp.buyerPersonas,
       webKeywords: keywords.length ? keywords : profile.icp.industries,
       personCountry: personCountry.length ? personCountry : profile.icp.geographies,
       seniority,
-      totalResults: 100,
+      totalResults: gate.paid ? 100 : Math.max(leadCap * 3, 20),
       apifyToken,
     })
 
-    const top50Raw = rawLeads.slice(0, TARGET_LEADS)
+    const top50Raw = rawLeads.slice(0, leadCap)
     const scored = top50Raw.length ? await scorePosts(profile, top50Raw) : []
     const sortedLeads = scored.sort((a, b) => b.score - a.score)
 
@@ -207,6 +222,8 @@ export async function POST(req: Request) {
     } catch (dbErr) {
       console.warn('[setup/leads] DB persistence warning:', dbErr)
     }
+
+    await settleSetupAction(gate, 'prospect_company', sortedLeads.length)
 
     const body: ListenResponse = {
       posts: sortedLeads,

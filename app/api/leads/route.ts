@@ -3,6 +3,7 @@ import { scorePosts } from '@/lib/ai'
 import { createVertexClient, getVertexModel } from '@/lib/ai/vertex'
 import { fetchApifyLeads } from '@/lib/apify-leads'
 import { getCurrentUserId } from '@/lib/auth/session'
+import { creditCost, requirePaidCredits, spendCredits } from '@/lib/billing/credits'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { BusinessProfile, SeniorityId } from '@/lib/types'
 
@@ -716,6 +717,10 @@ export async function POST(req: Request) {
         hashtags: ['#b2b', '#saas'],
       }
 
+      // Sourcing more leads is a paid action: 3 credits per lead, checked up front, charged for what was saved.
+      const sourcingGate = await requirePaidCredits(userId, creditCost('prospect_company', count))
+      if (!sourcingGate.ok) return sourcingGate.response
+
       const rawLeads = await fetchApifyLeads({
         personTitle,
         webKeywords: keywords,
@@ -853,6 +858,8 @@ export async function POST(req: Request) {
         })
       }
 
+      await spendCredits(userId, creditCost('prospect_company', createdWorkspaceLeads.length), 'prospect_company')
+
       return Response.json({
         leads: createdWorkspaceLeads,
         table: createdTable,
@@ -867,6 +874,10 @@ export async function POST(req: Request) {
       if (inputLeads.length === 0) {
         return Response.json({ error: 'No leads provided to enrich' }, { status: 400 })
       }
+
+      // AI enrichment is a paid action: email_find credits per lead (up to 20 per batch).
+      const enrichGate = await requirePaidCredits(userId, creditCost('email_find', Math.min(inputLeads.length, 20)))
+      if (!enrichGate.ok) return enrichGate.response
 
       const savedProfile = (blueprintRow?.profile as BusinessProfile | undefined) ?? null
       const ourSummary = savedProfile
@@ -951,6 +962,8 @@ Return strict JSON: { "enriched": [ { "id": string, "whatTheyDo": string, "howWe
           }
         }),
       )
+
+      await spendCredits(userId, creditCost('email_find', enrichedList.length), 'email_find')
 
       return Response.json({ enriched: enrichedList })
     }

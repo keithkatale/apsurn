@@ -9,7 +9,8 @@ net.setDefaultAutoSelectFamily(false);
 // Resolve pg from Apsurn/node_modules
 const { Client } = require('C:/Users/USER/Documents/Projects/Apsurn/node_modules/pg');
 
-const connectionString = 'postgresql://postgres.kgoyzbdvwasjzlsfxivp:Gn4CoJmz7Bs0XaB4@aws-0-eu-west-1.pooler.supabase.com:5432/postgres';
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) throw new Error('Set DATABASE_URL (Supabase Postgres connection string) before running this script.');
 
 async function main() {
   const client = new Client({ connectionString, ssl: { rejectUnauthorized: false } });

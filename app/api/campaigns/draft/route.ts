@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { createVertexClient, getVertexModel, isVertexConfigured } from '@/lib/ai/vertex'
 import { getCurrentUserId } from '@/lib/auth/session'
+import { creditCost, getBillingState, spendCredits } from '@/lib/billing/credits'
 import { tokenizeLeadMentions } from '@/lib/outreach/merge-fields'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -33,7 +34,19 @@ export async function POST(req: Request) {
   let subject = 'scaling new buyers'
   let body = `Hi {{first_name}} ,\n\nFor a {{title}} at a growing company like {{company}} , scaling beyond early traction means finding new buyers consistently, often without adding a full internal team.\n\nWe handle that entire process for B2B SaaS companies, delivering qualified meetings each month without you needing to manage tools or SDRs.\n\nIs this something on your radar at {{company}} , or am I off base?\n\nBest,\n${senderCompanyName}`
 
-  if (isVertexConfigured()) {
+  // AI drafts are a paid feature (1 credit). Everyone else gets the free template below.
+  let canUseAI = false
+  let draftUserId: string | null = null
+  try {
+    draftUserId = await getCurrentUserId()
+    const billing = await getBillingState(draftUserId)
+    canUseAI = billing.active && billing.credits >= creditCost('email_draft')
+  } catch {
+    canUseAI = false
+  }
+  let aiUsed = false
+
+  if (isVertexConfigured() && canUseAI) {
     try {
       const client = createVertexClient()
       const model = getVertexModel()
@@ -66,6 +79,7 @@ Return JSON: {"subject": string, "body": string}`,
         const json = JSON.parse(response.text) as { subject?: string; body?: string }
         if (json.subject) subject = json.subject.trim()
         if (json.body) body = tokenizeLeadMentions(json.body.trim(), lead)
+        aiUsed = true
       }
     } catch (err) {
       console.warn('[campaigns/draft] AI fallback used:', err)
@@ -89,7 +103,9 @@ Return JSON: {"subject": string, "body": string}`,
     // ignore if guest/local
   }
 
-  return Response.json({ subject, body })
+  if (aiUsed && draftUserId) await spendCredits(draftUserId, creditCost('email_draft'), 'email_draft')
+
+  return Response.json({ subject, body, ai: aiUsed, upgradeRequired: !canUseAI })
 }
 
 const patchDraftSchema = z.object({

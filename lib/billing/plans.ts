@@ -82,7 +82,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     highlight: true,
     productId: {
       // Subscription products. Checkout saves a card (mandate only) and does not charge the trial.
-      test: "pdt_0NoAYvskQ1M4UjDv03ivE",
+      test: "pdt_0Nsffee9U7dS2kaMcaJuF",
       live: "pdt_0NoAYsFpAjLoZGvfAPzag",
     },
   },
@@ -101,7 +101,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
       "Priority AI throughput",
     ],
     productId: {
-      test: "pdt_0NoAYvzgGaMeY7tcvFWpv",
+      test: "pdt_0NsffvHtSMWjrXYR4DSAe",
       live: "pdt_0NoAYve6K77SbtvcG39xw",
     },
   },

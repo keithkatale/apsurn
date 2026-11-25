@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { analyzeCompetitorsAndPositioning } from '@/lib/ai'
 import { getCurrentUserId } from '@/lib/auth/session'
+import { beginSetupAction, settleSetupAction } from '@/lib/billing/gate'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { businessProfileSchema } from '@/lib/types'
 
@@ -15,6 +16,9 @@ const bodySchema = z.object({
 export async function POST(req: Request) {
   const parsed = bodySchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return Response.json({ error: 'Invalid competitor analysis request' }, { status: 400 })
+
+  const gate = await beginSetupAction('market_scan')
+  if (gate.blocked) return gate.blocked
 
   try {
     const result = await analyzeCompetitorsAndPositioning({
@@ -53,6 +57,7 @@ export async function POST(req: Request) {
       // Ignore persistence errors for anonymous visitors
     }
 
+    await settleSetupAction(gate, 'market_scan')
     return Response.json(result)
   } catch (error) {
     console.error('[setup/competitors] error', error)

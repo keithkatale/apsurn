@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { analyzeBusiness } from '@/lib/ai'
 import { getCurrentUserId } from '@/lib/auth/session'
+import { beginSetupAction, settleSetupAction } from '@/lib/billing/gate'
 import { scrapeBusinessSite } from '@/lib/scrape-site'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { AnalyzeResponse } from '@/lib/types'
@@ -27,6 +28,9 @@ export async function POST(req: Request) {
       { status: 422 },
     )
   }
+
+  const gate = await beginSetupAction('blueprint_generate')
+  if (gate.blocked) return gate.blocked
 
   try {
     const profile = await analyzeBusiness(site)
@@ -84,6 +88,8 @@ export async function POST(req: Request) {
     } catch {
       // Continue even if unauthenticated
     }
+
+    await settleSetupAction(gate, 'blueprint_generate')
 
     const body: AnalyzeResponse = { url: site.url, companyId, profile, pagesRead }
     return Response.json(body)
