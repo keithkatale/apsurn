@@ -22,7 +22,7 @@ create table if not exists billing_accounts (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists credit_ledger (
+create table if not exists billing_credit_ledger (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
   bucket text not null check (bucket in ('plan', 'topup')),
@@ -34,11 +34,11 @@ create table if not exists credit_ledger (
   created_at timestamptz not null default now()
 );
 
-create unique index if not exists credit_ledger_ref_uidx on credit_ledger (ref) where ref is not null;
-create index if not exists credit_ledger_user_idx on credit_ledger (user_id, created_at desc);
+create unique index if not exists billing_credit_ledger_ref_uidx on billing_credit_ledger (ref) where ref is not null;
+create index if not exists billing_credit_ledger_user_idx on billing_credit_ledger (user_id, created_at desc);
 
 alter table billing_accounts enable row level security;
-alter table credit_ledger enable row level security;
+alter table billing_credit_ledger enable row level security;
 
 drop policy if exists billing_accounts_owner_select on billing_accounts;
 create policy billing_accounts_owner_select on billing_accounts
@@ -47,11 +47,11 @@ drop policy if exists billing_accounts_service_role_all on billing_accounts;
 create policy billing_accounts_service_role_all on billing_accounts
   for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
 
-drop policy if exists credit_ledger_owner_select on credit_ledger;
-create policy credit_ledger_owner_select on credit_ledger
+drop policy if exists billing_credit_ledger_owner_select on billing_credit_ledger;
+create policy billing_credit_ledger_owner_select on billing_credit_ledger
   for select using (auth.uid() = user_id);
-drop policy if exists credit_ledger_service_role_all on credit_ledger;
-create policy credit_ledger_service_role_all on credit_ledger
+drop policy if exists billing_credit_ledger_service_role_all on billing_credit_ledger;
+create policy billing_credit_ledger_service_role_all on billing_credit_ledger
   for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
 
 -- Grant (or reset) credits. Idempotent on p_ref. Returns the new total balance.
@@ -79,7 +79,7 @@ begin
   insert into billing_accounts (user_id) values (p_user) on conflict (user_id) do nothing;
   select * into acct from billing_accounts where user_id = p_user for update;
 
-  if p_ref is not null and exists (select 1 from credit_ledger where ref = p_ref) then
+  if p_ref is not null and exists (select 1 from billing_credit_ledger where ref = p_ref) then
     return acct.plan_credits + acct.topup_credits;
   end if;
 
@@ -95,7 +95,7 @@ begin
       where user_id = p_user;
   end if;
 
-  insert into credit_ledger (user_id, bucket, delta, reason, ref)
+  insert into billing_credit_ledger (user_id, bucket, delta, reason, ref)
     values (p_user, p_bucket, v_delta, p_reason, p_ref);
 
   select * into acct from billing_accounts where user_id = p_user;
@@ -128,7 +128,7 @@ begin
   insert into billing_accounts (user_id) values (p_user) on conflict (user_id) do nothing;
   select * into acct from billing_accounts where user_id = p_user for update;
 
-  if p_ref is not null and exists (select 1 from credit_ledger where ref like p_ref || ':%') then
+  if p_ref is not null and exists (select 1 from billing_credit_ledger where ref like p_ref || ':%') then
     return acct.plan_credits + acct.topup_credits;
   end if;
 
@@ -146,11 +146,11 @@ begin
     where user_id = p_user;
 
   if from_plan > 0 then
-    insert into credit_ledger (user_id, bucket, delta, reason, ref)
+    insert into billing_credit_ledger (user_id, bucket, delta, reason, ref)
       values (p_user, 'plan', -from_plan, p_reason, case when p_ref is null then null else p_ref || ':plan' end);
   end if;
   if from_topup > 0 then
-    insert into credit_ledger (user_id, bucket, delta, reason, ref)
+    insert into billing_credit_ledger (user_id, bucket, delta, reason, ref)
       values (p_user, 'topup', -from_topup, p_reason, case when p_ref is null then null else p_ref || ':topup' end);
   end if;
 
