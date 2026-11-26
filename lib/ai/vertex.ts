@@ -181,6 +181,7 @@ function errorStatus(error: unknown): number | null {
 
 function isBusy(error: unknown): boolean {
   const status = errorStatus(error);
+  if (status === 402) return false; // billing/credits depleted: retrying cannot help
   if (status === 429 || (status !== null && status >= 500)) return true;
   return /RESOURCE_EXHAUSTED|UNAVAILABLE|overloaded|try again/i.test((error as Error)?.message ?? "");
 }
