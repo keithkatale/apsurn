@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { z } from "zod";
 import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
 import { AccountRequiredError, accountRequiredResponse, assertRegisteredUser } from "@/lib/auth/guest";
@@ -33,6 +34,9 @@ export async function POST(req: Request) {
     const state = await getBillingState(userId);
     await logEvent("checkout_started", { userId, props: { kind: parsed.data.kind } });
     const dodo = getDodo();
+    // DataFast revenue attribution: Dodo forwards this metadata on its webhook so the payment is credited to the visit's channel.
+    const visitorId = (await cookies()).get("datafast_visitor_id")?.value?.slice(0, 100);
+    const attribution: Record<string, string> = visitorId ? { datafast_visitor_id: visitorId } : {};
     const back = `${appUrl()}/settings`;
 
     // $1 unlock: one-time, for registered accounts that have not unlocked yet.
@@ -47,7 +51,7 @@ export async function POST(req: Request) {
       const session = await dodo.checkoutSessions.create({
         product_cart: [{ product_id: productId, quantity: 1 }],
         customer: state.dodoCustomerId ? { customer_id: state.dodoCustomerId } : { email, name: user.user_metadata?.name ?? null },
-        metadata: { user_id: userId, kind: "unlock" },
+        metadata: { user_id: userId, kind: "unlock", ...attribution },
         return_url: `${appUrl()}${returnTo}${sep}unlocked=1`,
       });
       if (!session.checkout_url) throw new Error("Dodo did not return a checkout URL");
@@ -80,7 +84,7 @@ export async function POST(req: Request) {
       const session = await dodo.checkoutSessions.create({
         product_cart: [{ product_id: productIdForPlan(plan), quantity: 1 }],
         customer: state.dodoCustomerId ? { customer_id: state.dodoCustomerId } : { email, name: user.user_metadata?.name ?? null },
-        metadata: { user_id: userId, kind: "plan", plan_key: plan },
+        metadata: { user_id: userId, kind: "plan", plan_key: plan, ...attribution },
         return_url: `${back}?billing=success`,
       });
       if (!session.checkout_url) throw new Error("Dodo did not return a checkout URL");
@@ -98,7 +102,7 @@ export async function POST(req: Request) {
     const session = await dodo.checkoutSessions.create({
       product_cart: [{ product_id: productIdForTopup(topup), quantity: 1 }],
       customer: state.dodoCustomerId ? { customer_id: state.dodoCustomerId } : { email },
-      metadata: { user_id: userId, kind: "topup", topup_key: topup },
+      metadata: { user_id: userId, kind: "topup", topup_key: topup, ...attribution },
       return_url: `${back}?billing=topup`,
     });
     if (!session.checkout_url) throw new Error("Dodo did not return a checkout URL");
