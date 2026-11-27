@@ -16,7 +16,9 @@ import RawMagicBento from "@/components/ui/MagicBento";
 const MagicBento = RawMagicBento as React.ComponentType<any>;
 import { trackGoal } from "@/lib/analytics/datafast";
 import { ENTERPRISE_PLAN, MONEY_BACK_DAYS, PLANS, SETUP_FREE_LEAD_CAP, contactCostLabel, type PlanKey } from "@/lib/billing/plans";
+import RotatingText from "@/components/ui/RotatingText";
 
+const ROTATING_LINES = ["hiring an SDR", "an agency", "a bigger stack"];
 
 const FAQS = [
   {
@@ -441,7 +443,22 @@ export function MarketingHome() {
                 Prospecting for founder-led sales
               </p>
               <h1 className="text-[clamp(40px,5.6vw,64px)] font-medium leading-[1.02] tracking-tight text-[var(--mh-fg)]">
-                Build first your lead-list in just 5 minutes
+                Find who should buy
+                <span className="mt-2 flex flex-wrap items-center justify-center gap-x-2.5 gap-y-2">
+                  <span>without</span>
+                  <RotatingText
+                    texts={ROTATING_LINES}
+                    effect="slide"
+                    direction="up"
+                    highlight
+                    highlightColor={isDark ? "#fafafa" : "#0a0a0a"}
+                    staggerFrom="last"
+                    staggerDuration={0.025}
+                    splitLevelClassName="overflow-hidden pb-0.5 sm:pb-1"
+                    rotationInterval={2800}
+                    mainClassName="align-middle text-[0.88em] font-medium"
+                  />
+                </span>
               </h1>
               <p className="max-w-[42ch] text-[17px] leading-relaxed tracking-tight text-[color:color-mix(in_srgb,var(--mh-fg)_65%,transparent)] sm:text-[18px]">
                 Paste your website. apsurn drafts who should buy, finds them, and only keeps a contact when the email
