@@ -112,7 +112,7 @@ export function SignalFeed({ data }: { data: ListenResponse }) {
 
   return (
     <section aria-labelledby="signals-heading" className="flex flex-col gap-4">
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-3">
         <Stat label="Posts scanned (7d)" value={data.totalScanned} />
         <Stat label="Scored by AI" value={data.posts.length} />
         <Stat label="Hot signals" value={hotCount} highlight />

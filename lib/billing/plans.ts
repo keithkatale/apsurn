@@ -87,7 +87,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     productId: {
       // Subscription products. Checkout saves a card (mandate only) and does not charge the trial.
       test: "pdt_0Nsffee9U7dS2kaMcaJuF",
-      live: "pdt_0NoAYsFpAjLoZGvfAPzag",
+      live: "pdt_0Nsr4VvwlwHcWe4aP9U8V",
     },
   },
   growth: {
@@ -106,7 +106,7 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     ],
     productId: {
       test: "pdt_0NsffvHtSMWjrXYR4DSAe",
-      live: "pdt_0NoAYve6K77SbtvcG39xw",
+      live: "pdt_0Nsr4VbmSlg6IxH9QQlRL",
     },
   },
   pro: {

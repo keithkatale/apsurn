@@ -3,21 +3,29 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import type { BusinessProfile, CompetitorAnalysisResult } from '@/lib/types'
 
 export type ReportLead = {
+  id: string
   company: string
+  domain: string
+  website: string | null
   industry: string | null
   size: string | null
   location: string | null
-  website: string | null
-  fit: number | null
-  reason: string
-  angle: string
+  whatTheyDo: string
+  howWeCanHelp: string
+  score: number
   contactName: string | null
   contactTitle: string | null
+  linkedinUrl: string | null
+  /** Masked on the public page, e.g. "j***@acme.com". The real address comes with a kept list. */
+  emailMasked: string | null
+  phoneMasked: string | null
 }
 
 export type ReportSequence = {
   id: string
   name: string
+  status: string
+  angleType: string
   persona: string
   segment: string
   hook: string
@@ -79,15 +87,15 @@ export async function getReportBySlug(slug: string): Promise<Report | null> {
     admin
       .from('prospect_companies')
       .select(
-        'name, website_url, domain, industry, employee_range, location, icp_fit_score, qualify_reason, outreach_angle, contacts!contacts_prospect_company_id_fkey(full_name, title)',
+        'id, name, website_url, domain, industry, employee_range, location, description, icp_fit_score, qualify_reason, outreach_angle, contacts!contacts_prospect_company_id_fkey(full_name, title, email, phone, linkedin_url)',
         { count: 'exact' },
       )
       .eq('company_id', company.id)
       .order('icp_fit_score', { ascending: false })
-      .limit(25),
+      .limit(50),
     admin
       .from('sequences')
-      .select('id, name, description, pain, targeting, sequence_steps(step_order, delay_days, subject_template, body_template)')
+      .select('id, name, status, segment_key, description, pain, targeting, sequence_steps(step_order, delay_days, subject_template, body_template)')
       .eq('company_id', company.id)
       .order('created_at', { ascending: true })
       .limit(10),
@@ -104,17 +112,26 @@ export async function getReportBySlug(slug: string): Promise<Report | null> {
     leadTotal: count ?? prospects?.length ?? 0,
     leads: (prospects ?? []).map((p) => {
       const contact = Array.isArray(p.contacts) ? p.contacts[0] : null
+      const domain =
+        (p.domain as string | null) ||
+        (p.website_url as string | null)?.replace(/^https?:\/\//i, '').replace(/^www\./i, '').split('/')[0] ||
+        ''
       return {
-        company: p.name,
-        industry: p.industry ?? null,
-        size: p.employee_range ?? null,
-        location: p.location ?? null,
-        website: p.website_url ?? (p.domain ? `https://${p.domain}` : null),
-        fit: p.icp_fit_score ?? null,
-        reason: p.qualify_reason ?? '',
-        angle: p.outreach_angle ?? '',
+        id: p.id as string,
+        company: p.name as string,
+        domain,
+        website: (p.website_url as string | null) ?? (domain ? `https://${domain}` : null),
+        industry: (p.industry as string | null) ?? null,
+        size: (p.employee_range as string | null) ?? null,
+        location: (p.location as string | null) ?? null,
+        whatTheyDo: (p.description as string | null) || [p.industry, p.employee_range].filter(Boolean).join(' · ') || 'B2B organization matching the ICP',
+        howWeCanHelp: (p.outreach_angle as string | null) || (p.qualify_reason as string | null) || 'High-fit ICP account',
+        score: (p.icp_fit_score as number | null) ?? 0,
         contactName: contact?.full_name ?? null,
         contactTitle: contact?.title ?? null,
+        linkedinUrl: contact?.linkedin_url ?? null,
+        emailMasked: maskEmail(contact?.email),
+        phoneMasked: maskPhone(contact?.phone),
       }
     }),
     sequences: (sequences ?? []).map((s) => {
@@ -123,6 +140,8 @@ export async function getReportBySlug(slug: string): Promise<Report | null> {
       return {
         id: s.id,
         name: s.name,
+        status: s.status ?? 'draft',
+        angleType: s.segment_key ?? 'pain-point',
         persona,
         segment,
         hook: s.description ?? '',
@@ -131,6 +150,16 @@ export async function getReportBySlug(slug: string): Promise<Report | null> {
       }
     }),
   }
+}
+
+function maskEmail(email: string | null | undefined): string | null {
+  const m = /^([^@\s])[^@\s]*(@[^@\s]+)$/.exec(email?.trim() ?? '')
+  return m ? `${m[1]}•••${m[2]}` : null
+}
+
+function maskPhone(phone: string | null | undefined): string | null {
+  const digits = (phone ?? '').split(',')[0].replace(/\D/g, '')
+  return digits.length >= 4 ? `••• ••• ${digits.slice(-2)}` : null
 }
 
 export type ClaimResult =

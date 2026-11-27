@@ -4,6 +4,7 @@ import {
   Compass,
   LogOut,
   Mail,
+  MoreHorizontal,
   Moon,
   Radio,
   Settings,
@@ -51,6 +52,7 @@ export function DashboardShell({
   const pathname = usePathname()
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [isDark, setIsDark] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
 
   useEffect(() => {
     const syncTheme = () => setIsDark(document.documentElement.classList.contains('dark'))
@@ -104,7 +106,7 @@ export function DashboardShell({
       {/* Collapsed Left Sidebar that expands on hover */}
       <aside
         aria-label="Workspace navigation"
-        className="group/sidebar fixed inset-y-0 left-0 z-40 flex w-16 flex-col justify-between overflow-hidden border-r border-[var(--mh-soft)] bg-[var(--mh-bg)]/95 py-4 backdrop-blur-md transition-[width] duration-200 ease-out hover:w-60 hover:shadow-[12px_0_40px_rgba(0,0,0,0.08)] dark:hover:shadow-[12px_0_40px_rgba(0,0,0,0.45)]"
+        className="group/sidebar fixed inset-y-0 left-0 z-40 hidden w-16 md:flex flex-col justify-between overflow-hidden border-r border-[var(--mh-soft)] bg-[var(--mh-bg)]/95 py-4 backdrop-blur-md transition-[width] duration-200 ease-out hover:w-60 hover:shadow-[12px_0_40px_rgba(0,0,0,0.08)] dark:hover:shadow-[12px_0_40px_rgba(0,0,0,0.45)]"
       >
         {/* Top Brand + Primary Workspace Tabs (Leads & Campaigns) */}
         <div className="flex flex-col gap-6 px-3">
@@ -212,10 +214,96 @@ export function DashboardShell({
         </div>
       </aside>
 
+
+      {/* Phones: bottom tab bar instead of the hover sidebar */}
+      <nav
+        aria-label="Workspace navigation"
+        className="fixed inset-x-0 bottom-0 z-40 flex h-14 items-stretch border-t border-[var(--mh-soft)] bg-[var(--mh-bg)]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
+      >
+        {NAV_ITEMS.map((item) => {
+          const Icon = item.icon
+          const isActive = pathname.startsWith(item.href) || (item.id === 'leads' && pathname.startsWith('/t/'))
+          return (
+            <Link
+              key={item.id}
+              href={item.href}
+              aria-current={isActive ? 'page' : undefined}
+              className={cn(
+                'flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors',
+                isActive ? 'text-[var(--mh-fg)]' : 'text-[var(--mh-muted)]',
+              )}
+            >
+              <Icon className={cn('size-5', isActive && 'stroke-[2.4]')} aria-hidden />
+              <span>{item.label}</span>
+            </Link>
+          )
+        })}
+        <button
+          type="button"
+          onClick={() => setMoreOpen((o) => !o)}
+          aria-expanded={moreOpen}
+          aria-label="More"
+          className="flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium text-[var(--mh-muted)]"
+        >
+          <MoreHorizontal className="size-5" aria-hidden />
+          <span>More</span>
+        </button>
+      </nav>
+
+      {moreOpen && (
+        <div className="fixed inset-0 z-50 md:hidden" onClick={() => setMoreOpen(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div
+            className="absolute inset-x-0 bottom-0 rounded-t-[16px] border-t border-[var(--mh-soft)] bg-[var(--mh-bg)] p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Link
+              href="/setup"
+              onClick={() => setMoreOpen(false)}
+              className="flex h-12 items-center gap-3 rounded-[8px] px-3 text-sm font-medium text-[var(--mh-fg)] hover:bg-[color:color-mix(in_srgb,var(--mh-fg)_6%,transparent)]"
+            >
+              <Compass className="size-5" /> Website Setup
+            </Link>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="flex h-12 w-full items-center gap-3 rounded-[8px] px-3 text-left text-sm font-medium text-[var(--mh-fg)] hover:bg-[color:color-mix(in_srgb,var(--mh-fg)_6%,transparent)]"
+            >
+              {isDark ? <Sun className="size-5" /> : <Moon className="size-5" />}
+              {isDark ? 'Light mode' : 'Dark mode'}
+            </button>
+            {userEmail ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setMoreOpen(false)
+                  void handleSignOut()
+                }}
+                className="flex h-12 w-full items-center gap-3 rounded-[8px] px-3 text-left text-sm font-medium text-[var(--mh-fg)] hover:bg-[color:color-mix(in_srgb,var(--mh-fg)_6%,transparent)]"
+              >
+                <LogOut className="size-5" />
+                <span className="min-w-0">
+                  <span className="block">Sign out</span>
+                  <span className="block truncate text-xs font-normal text-[var(--mh-muted)]">{userEmail}</span>
+                </span>
+              </button>
+            ) : (
+              <Link
+                href="/login?next=/leads"
+                onClick={() => setMoreOpen(false)}
+                className="flex h-12 items-center gap-3 rounded-[8px] px-3 text-sm font-medium text-[var(--mh-fg)] hover:bg-[color:color-mix(in_srgb,var(--mh-fg)_6%,transparent)]"
+              >
+                <User className="size-5" /> Sign in
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Main Content Area offset by the collapsed 64px (w-16) sidebar */}
       <div
         className={cn(
-          'flex min-w-0 flex-1 flex-col pl-16',
+          'flex min-w-0 flex-1 flex-col pb-14 md:pb-0 md:pl-16',
           fixedHeight ? 'h-dvh max-h-dvh overflow-hidden' : 'min-h-dvh',
         )}
       >

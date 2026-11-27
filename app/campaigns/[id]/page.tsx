@@ -499,7 +499,7 @@ function CampaignSendingWorkspace() {
                   className="inline-flex shrink-0 items-center gap-1 rounded-[10px] border border-[var(--mh-soft)] px-2.5 py-1 text-xs font-medium text-[var(--mh-muted)] transition-colors hover:bg-[color:color-mix(in_srgb,var(--mh-fg)_5%,transparent)] hover:text-[var(--mh-fg)]"
                 >
                   <ChevronLeft className="size-3.5" />
-                  <span>Campaigns</span>
+                  <span className="hidden sm:inline">Campaigns</span>
                 </Link>
 
                 <span className="inline-flex size-6 shrink-0 items-center justify-center text-[var(--mh-fg)]">
@@ -562,7 +562,7 @@ function CampaignSendingWorkspace() {
                 <button
                   type="button"
                   onClick={() => router.push('/campaigns')}
-                  className="inline-flex h-8 items-center rounded-[10px] border border-[var(--mh-soft)] px-3 text-xs font-medium text-[var(--mh-fg)] transition-colors hover:bg-[color:color-mix(in_srgb,var(--mh-fg)_5%,transparent)]"
+                  className="hidden h-8 items-center rounded-[10px] border border-[var(--mh-soft)] px-3 text-xs font-medium text-[var(--mh-fg)] transition-colors hover:bg-[color:color-mix(in_srgb,var(--mh-fg)_5%,transparent)] sm:inline-flex"
                 >
                   New campaign
                 </button>

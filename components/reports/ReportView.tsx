@@ -1,10 +1,12 @@
 'use client'
 
-import { Briefcase, Mail, Users, type LucideIcon } from 'lucide-react'
+import { Briefcase, Mail, PanelLeftClose, PanelLeftOpen, UserPlus, Users, type LucideIcon } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { CompanyFavicon } from '@/components/prospects/CompanyFavicon'
+import { ReportCampaigns } from '@/components/reports/ReportCampaigns'
+import { ReportLeadsTable } from '@/components/reports/ReportLeadsTable'
 import type { Report } from '@/lib/reports'
 import { cn } from '@/lib/utils'
 
@@ -164,19 +166,18 @@ function LeadsSection({ report }: { report: Report }) {
         Showing the top {report.leads.length} by ICP fit. Emails and phone numbers come with the list when you keep it in your account.
       </p>
       <ul className="divide-y divide-[var(--mh-soft)]">
-        {report.leads.map((lead, i) => (
-          <li key={`${lead.company}-${i}`} className="flex gap-3 py-3 text-sm">
-            <CompanyFavicon domain={lead.website ?? lead.company} name={lead.company} className="mt-0.5 size-8" />
+        {report.leads.map((lead) => (
+          <li key={lead.id} className="flex gap-3 py-3 text-sm">
+            <CompanyFavicon domain={lead.domain || lead.company} name={lead.company} className="mt-0.5 size-8" />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="font-medium">{lead.company}</span>
-                {lead.fit !== null && <span className="text-xs text-[var(--mh-muted)]">Fit {lead.fit}/100</span>}
+                <span className="text-xs text-[var(--mh-muted)]">Fit {lead.score}/100</span>
               </div>
               <p className="text-xs text-[var(--mh-muted)]">
                 {[lead.contactName, lead.contactTitle, lead.industry, lead.size, lead.location].filter(Boolean).join(' · ')}
               </p>
-              {lead.reason && <p className="mt-1.5">{lead.reason}</p>}
-              {lead.angle && <p className="mt-1 text-[var(--mh-muted)]">Angle: {lead.angle}</p>}
+              <p className="mt-1.5">{lead.howWeCanHelp}</p>
             </div>
           </li>
         ))}
@@ -239,11 +240,11 @@ function BusinessTab({ report }: { report: Report }) {
 }
 
 function LeadsTab({ report }: { report: Report }) {
-  return report.leads.length ? <LeadsSection report={report} /> : <Empty text="No target accounts in this report." />
+  return report.leads.length ? <ReportLeadsTable report={report} /> : <Empty text="No target accounts in this report." />
 }
 
 function CampaignsTab({ report }: { report: Report }) {
-  return report.sequences.length ? <CampaignsSection report={report} /> : <Empty text="No campaigns in this report." />
+  return report.sequences.length ? <ReportCampaigns report={report} /> : <Empty text="No campaigns in this report." />
 }
 
 function ClaimCard({ claimPath }: { claimPath: string }) {
@@ -270,6 +271,19 @@ function ClaimCard({ claimPath }: { claimPath: string }) {
 
 export function ReportView({ report, slug }: { report: Report; slug: string }) {
   const [tab, setTab] = useState<TabId>('business')
+  const [collapsed, setCollapsed] = useState(false)
+  useEffect(() => {
+    try {
+      setCollapsed(localStorage.getItem('apsurn_report_nav') === 'collapsed')
+    } catch {}
+  }, [])
+  const toggleNav = () =>
+    setCollapsed((c) => {
+      try {
+        localStorage.setItem('apsurn_report_nav', c ? 'open' : 'collapsed')
+      } catch {}
+      return !c
+    })
   const claimPath = `/r/${slug}/claim`
   const tabs: Array<{ id: TabId; label: string; icon: LucideIcon; count?: number }> = [
     { id: 'business', label: 'Business & ICP', icon: Briefcase },
@@ -313,21 +327,46 @@ export function ReportView({ report, slug }: { report: Report; slug: string }) {
 
       {/* Desktop: workspace with tabs, like the dashboard */}
       <div className="hidden min-h-dvh md:flex">
-        <aside className="sticky top-0 flex h-dvh w-64 shrink-0 flex-col justify-between border-r border-[var(--mh-soft)] bg-[var(--mh-bg)] px-3 py-4">
+        <aside
+          aria-label="Report navigation"
+          className={cn(
+            'sticky top-0 flex h-dvh shrink-0 flex-col justify-between border-r border-[var(--mh-soft)] bg-[var(--mh-bg)] py-4 transition-[width] duration-200 ease-out',
+            collapsed ? 'w-16 px-3' : 'w-64 px-3',
+          )}
+        >
           <div className="flex flex-col gap-6">
-            <Link href="/" className="flex items-center gap-3 px-1.5 py-1">
-              <Image src="/branding/apsurn-gtm.png" alt="apsurn" width={28} height={28} className="size-7 rounded-[7px]" />
-              <span className="text-[16px] font-medium tracking-[-0.03em]">apsurn</span>
-            </Link>
-            <div className="flex items-center gap-2.5 rounded-[8px] border border-[var(--mh-soft)] px-2.5 py-2">
-              <CompanyFavicon domain={report.company.websiteUrl} name={report.company.name} className="size-8" />
-              <div className="min-w-0">
-                <p className="truncate text-[13px] font-medium">{report.company.name}</p>
-                <p className="truncate font-mono text-[11px] text-[var(--mh-muted)]">
-                  {report.company.websiteUrl.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]}
-                </p>
-              </div>
+            <div className={cn('flex items-center', collapsed ? 'flex-col gap-3' : 'justify-between')}>
+              <Link href="/" className="flex items-center gap-3 px-1.5 py-1" title="apsurn">
+                <Image src="/branding/apsurn-gtm.png" alt="apsurn" width={28} height={28} className="size-7 shrink-0 rounded-[7px]" />
+                {!collapsed && <span className="text-[16px] font-medium tracking-[-0.03em]">apsurn</span>}
+              </Link>
+              <button
+                type="button"
+                onClick={toggleNav}
+                aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                aria-expanded={!collapsed}
+                title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                className="inline-flex size-8 items-center justify-center rounded-[6px] text-[var(--mh-muted)] transition-colors hover:bg-[color:color-mix(in_srgb,var(--mh-fg)_6%,transparent)] hover:text-[var(--mh-fg)]"
+              >
+                {collapsed ? <PanelLeftOpen className="size-[18px]" /> : <PanelLeftClose className="size-[18px]" />}
+              </button>
             </div>
+
+            <div
+              className={cn('flex items-center rounded-[8px] border border-[var(--mh-soft)]', collapsed ? 'justify-center p-1.5' : 'gap-2.5 px-2.5 py-2')}
+              title={collapsed ? report.company.name : undefined}
+            >
+              <CompanyFavicon domain={report.company.websiteUrl} name={report.company.name} className="size-8 shrink-0" />
+              {!collapsed && (
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-medium">{report.company.name}</p>
+                  <p className="truncate font-mono text-[11px] text-[var(--mh-muted)]">
+                    {report.company.websiteUrl.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]}
+                  </p>
+                </div>
+              )}
+            </div>
+
             <nav className="flex flex-col gap-1" aria-label="Report sections">
               {tabs.map((t) => {
                 const Icon = t.icon
@@ -338,6 +377,7 @@ export function ReportView({ report, slug }: { report: Report; slug: string }) {
                     type="button"
                     onClick={() => setTab(t.id)}
                     aria-current={active ? 'page' : undefined}
+                    title={collapsed ? t.label : undefined}
                     className={cn(
                       'flex h-10 w-full items-center gap-3 rounded-[6px] px-2.5 text-left text-[13px] font-medium transition-colors',
                       active
@@ -346,30 +386,41 @@ export function ReportView({ report, slug }: { report: Report; slug: string }) {
                     )}
                   >
                     <Icon className="size-[18px] shrink-0" aria-hidden />
-                    <span className="flex-1 truncate">{t.label}</span>
-                    {t.count !== undefined && t.count > 0 && <span className="text-[11px] opacity-70">{t.count}</span>}
+                    {!collapsed && <span className="flex-1 truncate">{t.label}</span>}
+                    {!collapsed && t.count !== undefined && t.count > 0 && <span className="text-[11px] opacity-70">{t.count}</span>}
                   </button>
                 )
               })}
             </nav>
           </div>
 
-          <div className="flex flex-col gap-2 px-1">
-            <p className="text-xs text-[var(--mh-muted)]">Want this list in your own account?</p>
+          {collapsed ? (
             <Link
               href={`/signup?next=${encodeURIComponent(claimPath)}`}
-              className="inline-flex h-10 items-center justify-center rounded-[8px] bg-[var(--mh-fg)] text-sm font-medium text-[var(--mh-bg)]"
+              title="Keep this list"
+              aria-label="Keep this list"
+              className="inline-flex h-10 items-center justify-center rounded-[8px] bg-[var(--mh-fg)] text-[var(--mh-bg)]"
             >
-              Keep this list
+              <UserPlus className="size-[18px]" />
             </Link>
-            <Link href={`/login?next=${encodeURIComponent(claimPath)}`} className="text-center text-xs text-[var(--mh-muted)] underline">
-              I already have an account
-            </Link>
-          </div>
+          ) : (
+            <div className="flex flex-col gap-2 px-1">
+              <p className="text-xs text-[var(--mh-muted)]">Want this list in your own account?</p>
+              <Link
+                href={`/signup?next=${encodeURIComponent(claimPath)}`}
+                className="inline-flex h-10 items-center justify-center rounded-[8px] bg-[var(--mh-fg)] text-sm font-medium text-[var(--mh-bg)]"
+              >
+                Keep this list
+              </Link>
+              <Link href={`/login?next=${encodeURIComponent(claimPath)}`} className="text-center text-xs text-[var(--mh-muted)] underline">
+                I already have an account
+              </Link>
+            </div>
+          )}
         </aside>
 
         <main className="min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-8 py-8">
+          <div className={cn('mx-auto flex w-full flex-col gap-5 px-8 py-8', tab === 'business' ? 'max-w-4xl' : 'max-w-7xl')}>
             {tab === 'business' && <BusinessTab report={report} />}
             {tab === 'leads' && <LeadsTab report={report} />}
             {tab === 'campaigns' && <CampaignsTab report={report} />}
