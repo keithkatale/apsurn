@@ -85,6 +85,7 @@ export default function RootLayout({
         {/* eslint-disable-next-line @next/next/no-sync-scripts */}
         <script src="/runtime-config.js" />
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
+        <script defer data-website-id="dfid_4gIznQFFM0KtjGQBJjljf" data-domain="apsurn.com" src="https://datafa.st/js/script.js" />
       </head>
       <body className="antialiased font-sans">
         <PostHogProvider>

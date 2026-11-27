@@ -32,7 +32,15 @@ export const businessProfileSchema = z.object({
 
 export type BusinessProfile = z.infer<typeof businessProfileSchema>
 
-export type SourceId = 'apify' | 'reddit' | 'hackernews' | 'bluesky' | 'stackexchange' | 'lemmy' | 'mastodon' | 'github'
+export type SourceId =
+  | 'apify'
+  | 'hackernews'
+  | 'bluesky'
+  | 'stackexchange'
+  | 'lemmy'
+  | 'mastodon'
+  | 'github'
+  | 'linkedin'
 
 export const SENIORITY_OPTIONS = [
   { id: 'founder', label: 'Founder' },

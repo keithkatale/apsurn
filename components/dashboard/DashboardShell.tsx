@@ -5,6 +5,7 @@ import {
   LogOut,
   Mail,
   Moon,
+  Radio,
   Settings,
   Sun,
   User,
@@ -29,6 +30,7 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'leads', label: 'Leads', href: '/leads', icon: Users },
+  { id: 'signals', label: 'Signals', href: '/signals', icon: Radio },
   { id: 'campaigns', label: 'Campaigns', href: '/campaigns', icon: Mail },
   { id: 'settings', label: 'Settings', href: '/settings', icon: Settings },
 ]

@@ -18,7 +18,7 @@ async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
     headers: { 'User-Agent': UA, Accept: 'application/json', ...init?.headers },
-    signal: AbortSignal.timeout(4500),
+    signal: AbortSignal.timeout(9000),
     cache: 'no-store',
   })
   if (!res.ok) throw new Error(res.status === 403 || res.status === 429 ? `Blocked (HTTP ${res.status})` : `HTTP ${res.status}`)
@@ -89,42 +89,25 @@ const bluesky: Fetcher = async (keyword, since) => {
   })
 }
 
-const reddit: Fetcher = async (keyword) => {
-  const params = new URLSearchParams({ q: keyword, sort: 'new', t: 'week', limit: '25', raw_json: '1' })
-  type Child = {
-    data: {
-      id: string
-      title: string
-      selftext: string
-      author: string
-      subreddit_name_prefixed: string
-      created_utc: number
-      permalink: string
-      score: number
-      num_comments: number
-    }
-  }
-  const data = await getJson<{ data: { children: Child[] } }>(`https://www.reddit.com/search.json?${params}`)
-  return data.data.children.map(({ data: post }) => ({
-    id: `reddit-${post.id}`,
-    source: 'reddit',
-    url: `https://www.reddit.com${post.permalink}`,
-    title: post.title,
-    text: clean(post.selftext || post.title),
-    author: post.author,
-    community: post.subreddit_name_prefixed,
-    createdAt: new Date(post.created_utc * 1000).toISOString(),
-    keyword,
-    engagement: post.score + post.num_comments,
-  }))
-}
+// Only active sites. (Software Recommendations is effectively dormant and there is no "startups" site.)
+const STACK_SITES = [
+  { site: 'stackoverflow', label: 'Stack Overflow' },
+  { site: 'webmasters', label: 'Webmasters' },
+] as const
 
 const stackexchange: Fetcher = async (keyword, since) => {
+  const settled = await Promise.allSettled(STACK_SITES.map((s) => stackSite(s.site, s.label, keyword, since)))
+  const ok = settled.filter((r): r is PromiseFulfilledResult<RawPost[]> => r.status === 'fulfilled')
+  if (!ok.length) throw (settled[0] as PromiseRejectedResult).reason
+  return ok.flatMap((r) => r.value)
+}
+
+async function stackSite(site: string, label: string, keyword: string, since: Date): Promise<RawPost[]> {
   const params = new URLSearchParams({
     order: 'desc',
     sort: 'creation',
     q: keyword,
-    site: 'stackoverflow',
+    site,
     pagesize: '15',
     fromdate: String(Math.floor(since.getTime() / 1000)),
     filter: 'withbody',
@@ -141,13 +124,13 @@ const stackexchange: Fetcher = async (keyword, since) => {
   }
   const data = await getJson<{ items: Item[] }>(`https://api.stackexchange.com/2.3/search/advanced?${params}`)
   return data.items.map((item) => ({
-    id: `se-${item.question_id}`,
+    id: `se-${site}-${item.question_id}`,
     source: 'stackexchange',
     url: item.link,
     title: clean(item.title, 300),
     text: clean(item.body),
     author: item.owner?.display_name ?? null,
-    community: item.tags.slice(0, 3).map((t) => `#${t}`).join(' ') || 'Stack Overflow',
+    community: label,
     createdAt: new Date(item.creation_date * 1000).toISOString(),
     keyword,
     engagement: item.score,
@@ -178,7 +161,7 @@ const lemmy: Fetcher = async (keyword) => {
 }
 
 const github: Fetcher = async (keyword, since) => {
-  const q = `"${keyword.replace(/"/g, '')}" in:title,body is:issue -author:app/dependabot -author:app/renovate created:>${since.toISOString().slice(0, 10)}`
+  const q = `${keyword.replace(/["']/g, '')} in:title,body is:issue -author:app/dependabot -author:app/renovate created:>${since.toISOString().slice(0, 10)}`
   const params = new URLSearchParams({ q, sort: 'created', order: 'desc', per_page: '15' })
   type Issue = {
     id: number
@@ -191,8 +174,9 @@ const github: Fetcher = async (keyword, since) => {
     comments: number
     reactions?: { total_count: number }
   }
+  const ghToken = process.env.GITHUB_TOKEN?.trim()
   const data = await getJson<{ items: Issue[] }>(`https://api.github.com/search/issues?${params}`, {
-    headers: { Accept: 'application/vnd.github+json' },
+    headers: { Accept: 'application/vnd.github+json', ...(ghToken ? { Authorization: `Bearer ${ghToken}` } : {}) },
   })
   return data.items.map((issue) => ({
     id: `gh-${issue.id}`,
@@ -239,13 +223,64 @@ async function mastodonTag(tag: string): Promise<RawPost[]> {
     }))
 }
 
-const keywordFetchers: Record<Exclude<SourceId, 'mastodon' | 'apify'>, { fetch: Fetcher; maxKeywords: number }> = {
-  reddit: { fetch: reddit, maxKeywords: 6 },
+const keywordFetchers: Record<Exclude<SourceId, 'mastodon' | 'apify' | 'linkedin' | 'reddit'>, { fetch: Fetcher; maxKeywords: number }> = {
   hackernews: { fetch: hackernews, maxKeywords: 10 },
   bluesky: { fetch: bluesky, maxKeywords: 10 },
-  stackexchange: { fetch: stackexchange, maxKeywords: 4 },
+  stackexchange: { fetch: stackexchange, maxKeywords: 3 },
   lemmy: { fetch: lemmy, maxKeywords: 6 },
   github: { fetch: github, maxKeywords: 4 },
+}
+
+/** Free keyword sources usable by the signals pipeline, with how many queries each tolerates per scan. */
+export const FREE_SOURCE_IDS = ['hackernews', 'bluesky', 'stackexchange', 'lemmy', 'github'] as const
+export type FreeSourceId = (typeof FREE_SOURCE_IDS)[number]
+
+export function freeSourceLimit(source: FreeSourceId): number {
+  return keywordFetchers[source].maxKeywords
+}
+
+const FILLER = new Set([
+  'how', 'to', 'a', 'an', 'the', 'for', 'of', 'in', 'on', 'and', 'or', 'with', 'my', 'our', 'your', 'is', 'are', 'what',
+  'best', 'good', 'top', 'looking', 'need', 'needs', 'find', 'finding', 'recommend', 'recommendation', 'alternative',
+  'alternatives', 'switching', 'from', 'vs', 'versus', 'tool', 'tools', 'software', 'app', 'apps', 'help',
+])
+
+/** A shorter, looser version of a phrase ("how to find leads" -> "leads") for sources with narrow search. */
+export function coreQuery(keyword: string): string | null {
+  const words = keyword
+    .toLowerCase()
+    .replace(/[^a-z0-9.\s-]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w && !FILLER.has(w))
+  if (!words.length) return null
+  const core = words.slice(0, 3).join(' ')
+  return core !== keyword.toLowerCase().trim() ? core : null
+}
+
+const LOOSE_SOURCES = new Set<FreeSourceId>(['stackexchange', 'lemmy', 'github'])
+const MIN_RESULTS_BEFORE_LOOSENING = 3
+
+/** One query against one free source. Throws on HTTP errors so callers can record the failure. */
+export async function fetchKeywordPosts(source: FreeSourceId, keyword: string, since: Date): Promise<RawPost[]> {
+  const run = async (q: string) =>
+    (await keywordFetchers[source].fetch(q, since)).filter(
+      (p) => new Date(p.createdAt).getTime() >= since.getTime() && p.text.length > 20,
+    )
+
+  let posts = await run(keyword)
+  if (posts.length < MIN_RESULTS_BEFORE_LOOSENING && LOOSE_SOURCES.has(source)) {
+    const loose = coreQuery(keyword)
+    if (loose) {
+      try {
+        const more = await run(loose)
+        const seen = new Set(posts.map((p) => p.id))
+        posts = [...posts, ...more.filter((p) => !seen.has(p.id))]
+      } catch {
+        // keep what the exact phrase found
+      }
+    }
+  }
+  return posts
 }
 
 export async function runListening(

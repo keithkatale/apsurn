@@ -159,6 +159,10 @@ export const CREDIT_COSTS = {
   prospect_company: 3,
   /** One sourcing pass (registry, page, or social search) before any rows are saved. */
   lead_source_scan: 8,
+  /** Extra when a scan also searches LinkedIn (a paid Apify run, up to 30 posts). */
+  linkedin_scan: 6,
+  /** Each buying-intent signal kept in the feed after a scan. */
+  signal_kept: 1,
   /** Auto-source enrichment (Icypeas, email verification) for one radar signal. */
   radar_auto_source: 8,
 } as const;
