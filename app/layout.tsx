@@ -87,6 +87,7 @@ export default function RootLayout({
         <script src="/runtime-config.js" />
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
         <script defer data-website-id="dfid_4gIznQFFM0KtjGQBJjljf" data-domain="apsurn.com" src="https://datafa.st/js/script.js" />
+        <script defer src="https://www.ship-or-die.com/hackathon/verify.js" data-site="46e6545aa7b2113991d5f71cea903f770a9b3929" />
       </head>
       <body className="antialiased font-sans">
         <PostHogProvider>
