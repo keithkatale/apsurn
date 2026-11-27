@@ -3,7 +3,7 @@ import type { User } from '@supabase/supabase-js'
 import { isGuestUser } from '@/lib/auth/guest'
 import { createClient } from '@/lib/supabase/server'
 
-const DEFAULT_ADMINS = ['keith@apsurn.com', 'keithkatale1@gmail.com']
+const DEFAULT_ADMINS = ['keith@apsurn.com', 'keithkatale1@gmail.com', 'justinissa088@gmail.com']
 
 /** The only accounts allowed into /admin. Override with a comma-separated ADMIN_EMAILS env var. */
 export function adminEmails(): string[] {
