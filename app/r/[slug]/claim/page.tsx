@@ -47,7 +47,7 @@ export default async function ClaimReport({ params, searchParams }: Props) {
         </div>
 
         {error && (
-          <p className="rounded-[10px] border border-red-300 bg-red-100 px-3 py-2 text-sm text-red-900">
+          <p className="rounded-[10px] border border-red-500/40 bg-red-500/15 px-3 py-2 text-sm text-red-700 dark:text-red-300">
             We could not copy the list just now. Nothing was changed. Try again, or start fresh.
           </p>
         )}

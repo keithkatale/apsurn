@@ -116,6 +116,21 @@ export function BillingCard() {
   useEffect(() => {
     const result = params.get('billing')
     if (!result) return
+    // Dodo sends people back here even when the payment was declined. Say so instead of waiting for a plan that will not come.
+    const paymentStatus = params.get('status')
+    if (paymentStatus === 'failed' || paymentStatus === 'cancelled') {
+      const code = params.get('error_code') ?? params.get('error_message') ?? ''
+      setNotice(null)
+      setError(
+        paymentStatus === 'cancelled'
+          ? 'Checkout was cancelled. You have not been charged.'
+          : /insufficient/i.test(code)
+            ? 'Your payment was declined for insufficient funds. You have not been charged. Try a different card.'
+            : "Your payment didn't go through. You have not been charged. Try again or use a different card.",
+      )
+      window.history.replaceState(null, '', '/settings')
+      return
+    }
     setNotice(result === 'topup' ? 'Thanks! Adding your credits…' : 'Thanks! Activating your plan…')
     let tries = 0
     const startCredits = billing?.credits ?? 0
@@ -197,12 +212,14 @@ export function BillingCard() {
       </div>
 
       {!billing.billingEnabled && (
-        <p className="rounded-lg border border-amber-300 bg-amber-100 px-3 py-2 text-[12px] text-amber-900">
+        <p className="rounded-lg border border-amber-500/40 bg-amber-500/15 px-3 py-2 text-[12px] text-amber-800 dark:text-amber-200">
           Billing isn&apos;t configured on this server yet (missing Dodo Payments keys).
         </p>
       )}
-      {notice && <p className="rounded-lg border border-emerald-300 bg-emerald-100 px-3 py-2 text-[12px] text-emerald-900">{notice}</p>}
-      {error && <p className="text-[12px] text-red-600">{error}</p>}
+      {notice && <p className="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-2 text-[12px] text-emerald-800 dark:text-emerald-200">{notice}</p>}
+      {error && (
+        <p className="rounded-lg border border-red-500/40 bg-red-500/15 px-3 py-2 text-[12px] text-red-700 dark:text-red-300">{error}</p>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2">
         {OFFERED_PLAN_KEYS.map((key) => {
