@@ -443,7 +443,7 @@ export function MarketingHome() {
                 Prospecting for founder-led sales
               </p>
               <h1 className="text-[clamp(40px,5.6vw,64px)] font-medium leading-[1.02] tracking-tight text-[var(--mh-fg)]">
-                Find who should buy
+                Find who customers
                 <span className="mt-2 flex flex-wrap items-center justify-center gap-x-2.5 gap-y-2">
                   <span>without</span>
                   <RotatingText
