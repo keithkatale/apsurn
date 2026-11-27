@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { scorePosts } from '@/lib/ai'
 import { fetchApifyLeads } from '@/lib/apify-leads'
 import { getCurrentUserId } from '@/lib/auth/session'
+import { logEvent } from '@/lib/events'
 import { CREDIT_COSTS, SETUP_FREE_LEAD_CAP } from '@/lib/billing/plans'
 import { beginSetupAction, settleSetupAction } from '@/lib/billing/gate'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -224,6 +225,7 @@ export async function POST(req: Request) {
     }
 
     await settleSetupAction(gate, 'prospect_company', sortedLeads.length)
+    await logEvent('leads_found', { userId: gate.userId ?? null, props: { count: sortedLeads.length, paid: Boolean(gate.paid) } })
 
     const body: ListenResponse = {
       posts: sortedLeads,

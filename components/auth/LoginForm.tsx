@@ -2,28 +2,9 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Eye, EyeOff } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { SpinLoader } from "@/components/loaders/spin-loader";
-import { createClient } from "@/lib/supabase/client";
-import { setNavigationPending } from "@/lib/navigation-progress";
-import { trackGoal } from "@/lib/analytics/datafast";
-
-async function emailHasAccount(email: string): Promise<boolean> {
-  try {
-    const response = await fetch("/api/auth/account-exists", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    if (!response.ok) return true;
-    const data = (await response.json()) as { exists?: boolean };
-    return data.exists !== false;
-  } catch {
-    return true;
-  }
-}
 
 function safeNext(raw: string | null, fallback: string) {
   if (!raw) return fallback;
@@ -43,97 +24,77 @@ function GoogleMark({ className }: { className?: string }) {
 }
 
 export function LoginForm({ mode = "signin" }: { mode?: "signin" | "signup" }) {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const next = useMemo(
-    () => safeNext(searchParams.get("next"), mode === "signup" ? "/setup" : "/auth/continue"),
-    [searchParams, mode],
-  );
+  const next = useMemo(() => safeNext(searchParams.get("next"), "/auth/continue"), [searchParams]);
   const [email, setEmail] = useState(() => searchParams.get("email") ?? "");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState<string | null>(() => {
     if (searchParams.get("error") === "auth") return "Google sign-in failed. Try again.";
-    if (searchParams.get("error") === "verify") return searchParams.get("message") || "That verification link did not work.";
+    if (searchParams.get("error") === "verify") return searchParams.get("message") || "That sign-in link did not work.";
     return null;
   });
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
+  const [sentTo, setSentTo] = useState<string | null>(null);
   const isSignup = mode === "signup";
   const fromSetup = searchParams.get("from") === "setup";
 
-  async function submit() {
+  async function sendLink() {
     setBusy(true);
     setMessage(null);
     try {
-      if (isSignup) {
-        const response = await fetch("/api/auth/signup", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: email.trim(), password, nextPath: next }),
-        });
-        const data = (await response.json().catch(() => null)) as { error?: string; code?: string } | null;
-        if (data?.code === "account_exists") {
-          setBusy(false);
-          setMessage("That email already has an account. Sign in to keep this workspace.");
-          return;
-        }
-        if (!response.ok) throw new Error(data?.error || "Could not create your account.");
-        trackGoal("signup", { method: "email" });
-        setNavigationPending(true);
-        router.replace(next);
-        return;
-      }
-      const supabase = createClient();
-      const result = await supabase.auth.signInWithPassword({ email, password });
-      if (result.error) {
-        const unknownAccount =
-          result.error.code === "invalid_credentials" ||
-          /invalid login credentials/i.test(result.error.message);
-        if (unknownAccount && !(await emailHasAccount(email))) {
-          setNavigationPending(true);
-          router.replace(
-            `/signup?email=${encodeURIComponent(email.trim())}&next=${encodeURIComponent(next)}`,
-          );
-          return;
-        }
-        setBusy(false);
-        setMessage(result.error.message);
-        return;
-      }
-      if (result.data.session) {
-        await fetch("/api/auth/claim", { method: "POST" }).catch(() => null);
-        trackGoal("login", { method: "email" });
-        setNavigationPending(true);
-        router.replace(next);
-        return;
-      }
-      setBusy(false);
-      setMessage("Check your email to confirm your account.");
+      const response = await fetch("/api/auth/magic/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), next }),
+      });
+      const data = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) throw new Error(data?.error || "Could not send the link. Please try again.");
+      setSentTo(email.trim());
     } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not send the link. Please try again.");
+    } finally {
       setBusy(false);
-      setMessage(error instanceof Error ? error.message : "Could not sign in. Please try again.");
     }
   }
 
-  async function continueWithGoogle() {
+  function continueWithGoogle() {
     setGoogleBusy(true);
     setMessage(null);
     window.location.assign(`/api/auth/google/start?next=${encodeURIComponent(next)}`);
   }
 
   const explicitNext = searchParams.get("next");
-  const switchHref = `${isSignup ? "/login" : "/signup"}${
-    explicitNext ? `?next=${encodeURIComponent(next)}` : ""
-  }`;
+  const switchHref = `${isSignup ? "/login" : "/signup"}${explicitNext ? `?next=${encodeURIComponent(next)}` : ""}`;
+
+  if (sentTo) {
+    return (
+      <div>
+        <BrandLogo href="/" size={28} className="mb-8" />
+        <div className="mb-8">
+          <h1 className="auth-title">Check your email</h1>
+          <p className="auth-subtitle">
+            We sent a sign-in link to <strong>{sentTo}</strong>. It works once and expires in 15 minutes.
+          </p>
+        </div>
+        {message ? <p className="auth-message mb-4">{message}</p> : null}
+        <button type="button" disabled={busy} onClick={() => void sendLink()} className="auth-google">
+          {busy ? <SpinLoader size="sm" label="Loading" iconClassName="text-current" /> : "Send it again"}
+        </button>
+        <p className="auth-subtitle mt-6">
+          Wrong address?{" "}
+          <button type="button" className="underline" onClick={() => setSentTo(null)}>
+            Use a different email
+          </button>
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div>
       <BrandLogo href="/" size={28} className="mb-8" />
       <div className="mb-8">
-        <h1 className="auth-title">
-          {isSignup ? (fromSetup ? "One last step" : "Create your account") : "Welcome back"}
-        </h1>
+        <h1 className="auth-title">{isSignup ? (fromSetup ? "One last step" : "Create your account") : "Welcome back"}</h1>
         <p className="auth-subtitle">
           {isSignup && fromSetup ? "Create your account to open your campaigns. " : null}
           {isSignup ? "Already have an account? " : "Don't have an account? "}
@@ -145,7 +106,7 @@ export function LoginForm({ mode = "signin" }: { mode?: "signin" | "signup" }) {
         className="space-y-6"
         onSubmit={(event) => {
           event.preventDefault();
-          void submit();
+          void sendLink();
         }}
       >
         <label className="block">
@@ -162,42 +123,18 @@ export function LoginForm({ mode = "signin" }: { mode?: "signin" | "signup" }) {
           />
         </label>
 
-        <label className="block">
-          <span className="auth-label">Password</span>
-          <span className="relative block">
-            <input
-              type={showPassword ? "text" : "password"}
-              name="password"
-              required
-              minLength={8}
-              autoComplete={isSignup ? "new-password" : "current-password"}
-              placeholder="Password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="auth-input pr-12"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((current) => !current)}
-              className="auth-eye"
-              aria-label={showPassword ? "Hide password" : "Show password"}
-            >
-              {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
-            </button>
-          </span>
-        </label>
-
         {message ? <p className="auth-message">{message}</p> : null}
 
         <button type="submit" disabled={busy || googleBusy} className="auth-submit">
-          {busy ? <SpinLoader size="sm" label="Loading" iconClassName="text-current" /> : isSignup ? "Create account" : "Sign in"}
+          {busy ? <SpinLoader size="sm" label="Loading" iconClassName="text-current" /> : "Email me a sign-in link"}
         </button>
+        <p className="auth-subtitle">No password needed. We email you a link that signs you in.</p>
 
         <div className="auth-divider" aria-hidden>
           <span>or</span>
         </div>
 
-        <button type="button" disabled={busy || googleBusy} onClick={() => void continueWithGoogle()} className="auth-google">
+        <button type="button" disabled={busy || googleBusy} onClick={continueWithGoogle} className="auth-google">
           {googleBusy ? (
             <SpinLoader size="sm" label="Loading" iconClassName="text-current" />
           ) : (

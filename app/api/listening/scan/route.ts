@@ -1,3 +1,4 @@
+import { logEvent } from '@/lib/events'
 import { rateLimit } from '@/lib/rate-limit'
 import { authErrorResponse, defaultWatches, getListeningContext, isMissingTable, MIGRATION_MESSAGE } from '@/lib/listening/context'
 import { runScan, type Watch } from '@/lib/listening/pipeline'
@@ -38,6 +39,7 @@ export async function POST() {
     }
 
     const summary = await runScan({ userId, companyId, profile, watches: watches as Watch[] })
+    await logEvent('scan', { userId, props: { kept: summary.kept, scanned: summary.scanned, credits: summary.credits } })
     return Response.json({ summary })
   } catch (error) {
     const auth = authErrorResponse(error)

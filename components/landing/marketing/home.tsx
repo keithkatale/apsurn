@@ -14,11 +14,9 @@ import { ShaderFlow } from "@/components/landing/portfolio/shader-flow";
 import { SiteFrame } from "@/components/landing/portfolio/site-frame";
 import RawMagicBento from "@/components/ui/MagicBento";
 const MagicBento = RawMagicBento as React.ComponentType<any>;
-import RotatingText from "@/components/ui/RotatingText";
 import { trackGoal } from "@/lib/analytics/datafast";
-import { ENTERPRISE_PLAN, PLANS, STARTER_CREDITS, type PlanKey } from "@/lib/billing/plans";
+import { ENTERPRISE_PLAN, MONEY_BACK_DAYS, PLANS, SETUP_FREE_LEAD_CAP, contactCostLabel, type PlanKey } from "@/lib/billing/plans";
 
-const ROTATING_LINES = ["hiring an SDR", "an agency", "a bigger stack"];
 
 const FAQS = [
   {
@@ -35,7 +33,7 @@ const FAQS = [
   },
   {
     q: "Is there a free plan?",
-    a: "There is no ongoing free plan. Every account starts with 50 free credits. Your card is charged when those credits run out.",
+    a: `There is no ongoing free plan. Setup is free and shows you ${SETUP_FREE_LEAD_CAP} contacts, which is what the first 50 credits buy. After that you pay on day one and get all your credits immediately. ${contactCostLabel()}. Not what you expected? Ask within ${MONEY_BACK_DAYS} days for a full refund.`,
   },
   {
     q: "Can I cancel anytime?",
@@ -443,22 +441,7 @@ export function MarketingHome() {
                 Prospecting for founder-led sales
               </p>
               <h1 className="text-[clamp(40px,5.6vw,64px)] font-medium leading-[1.02] tracking-tight text-[var(--mh-fg)]">
-                Find who should buy
-                <span className="mt-2 flex flex-wrap items-center justify-center gap-x-2.5 gap-y-2">
-                  <span>without</span>
-                  <RotatingText
-                    texts={ROTATING_LINES}
-                    effect="slide"
-                    direction="up"
-                    highlight
-                    highlightColor={isDark ? "#fafafa" : "#0a0a0a"}
-                    staggerFrom="last"
-                    staggerDuration={0.025}
-                    splitLevelClassName="overflow-hidden pb-0.5 sm:pb-1"
-                    rotationInterval={2800}
-                    mainClassName="align-middle text-[0.88em] font-medium"
-                  />
-                </span>
+                Build first your lead-list in just 5 minutes
               </h1>
               <p className="max-w-[42ch] text-[17px] leading-relaxed tracking-tight text-[color:color-mix(in_srgb,var(--mh-fg)_65%,transparent)] sm:text-[18px]">
                 Paste your website. apsurn drafts who should buy, finds them, and only keeps a contact when the email
@@ -467,7 +450,7 @@ export function MarketingHome() {
               <WebsiteForm align="center" />
               <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
                 <p className="text-[13px] text-[var(--mh-muted)]">
-                  {STARTER_CREDITS} free credits. Charged when those run out.
+                  See {SETUP_FREE_LEAD_CAP} contacts free. {MONEY_BACK_DAYS}-day money-back guarantee.
                 </p>
                 <a
                   href="#how-it-works"
@@ -500,7 +483,7 @@ export function MarketingHome() {
               {[
                 ["10 min", "To a first list"],
                 ["Verified", "Or the contact is dropped"],
-                ["50", "Free credits to start"],
+                [`${MONEY_BACK_DAYS} days`, "Money-back guarantee"],
               ].map(([value, label]) => (
                 <div key={label} className="px-6 py-8 text-center">
                   <dt className="font-display text-[36px] font-medium leading-none tracking-tight text-[var(--mh-fg)] sm:text-[40px]">
@@ -614,10 +597,10 @@ export function MarketingHome() {
         <section id="pricing" className="scroll-mt-28 mt-20 sm:mt-28">
           <div className="mx-auto max-w-[640px] text-center">
             <h2 className="text-[clamp(32px,4.2vw,48px)] font-medium leading-[1.08] tracking-tight text-[var(--mh-fg)]">
-              Every plan starts with 50 credits
+              Pay today, get every credit today
             </h2>
             <p className="mt-4 text-[16px] leading-relaxed text-[color:color-mix(in_srgb,var(--mh-fg)_60%,transparent)]">
-              Your card is charged when those credits run out. Cancel anytime.
+              {contactCostLabel()}. {MONEY_BACK_DAYS}-day money-back guarantee. Cancel anytime.
             </p>
           </div>
           <div className="mx-auto mt-12 grid max-w-[860px] grid-cols-1 gap-4 md:grid-cols-2">
@@ -637,7 +620,7 @@ export function MarketingHome() {
                   <span className="text-[15px] text-[var(--mh-muted)]">/month</span>
                 </p>
                 <p className="mt-3 text-[15px] text-[color:color-mix(in_srgb,var(--mh-fg)_60%,transparent)]">
-                  {plan.credits.toLocaleString("en-US")} credits after the free {STARTER_CREDITS} run out.
+                  {plan.credits.toLocaleString("en-US")} credits, available the moment you subscribe.
                 </p>
                 <ul className="mt-6 flex flex-1 flex-col gap-2.5 text-[14px] text-[color:color-mix(in_srgb,var(--mh-fg)_70%,transparent)]">
                   {(plan.key === "startup"
@@ -652,8 +635,9 @@ export function MarketingHome() {
                   onClick={() => trackGoal("start_trial", { plan: plan.key })}
                   className="mt-8 w-full"
                 >
-                  Start with {STARTER_CREDITS} credits
+                  Get {plan.name} for ${plan.price}
                 </CtaPill>
+                <p className="mt-3 text-center text-[12px] text-[var(--mh-muted)]">{MONEY_BACK_DAYS}-day money-back guarantee</p>
               </article>
             ))}
           </div>

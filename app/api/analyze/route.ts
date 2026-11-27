@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { analyzeBusiness } from '@/lib/ai'
 import { getCurrentUserId } from '@/lib/auth/session'
 import { beginSetupAction, settleSetupAction } from '@/lib/billing/gate'
+import { logEvent } from '@/lib/events'
 import { scrapeBusinessSite } from '@/lib/scrape-site'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { AnalyzeResponse } from '@/lib/types'
@@ -90,6 +91,7 @@ export async function POST(req: Request) {
     }
 
     await settleSetupAction(gate, 'blueprint_generate')
+    await logEvent('analyze', { userId: gate.userId ?? null, props: { host: new URL(site.url).hostname } })
 
     const body: AnalyzeResponse = { url: site.url, companyId, profile, pagesRead }
     return Response.json(body)

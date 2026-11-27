@@ -1,6 +1,7 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata } from 'next'
 import { Fraunces, Geist, Geist_Mono, Manrope, Newsreader, Poppins } from 'next/font/google'
+import { PageViewBeacon } from '@/components/analytics/PageViewBeacon'
 import { PostHogProvider } from '@/components/analytics/PostHogProvider'
 import { ThemeProvider } from '@/components/theme/theme-provider'
 import { THEME_BOOTSTRAP_SCRIPT } from '@/lib/theme'
@@ -91,6 +92,7 @@ export default function RootLayout({
         <PostHogProvider>
           <ThemeProvider>{children}</ThemeProvider>
         </PostHogProvider>
+        <PageViewBeacon />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ThreeDButton } from '@/components/buttons/three-d-button'
-import { OFFERED_PLAN_KEYS, PLANS, TOPUPS, type PlanKey, type TopupKey } from '@/lib/billing/plans'
+import { MONEY_BACK_DAYS, OFFERED_PLAN_KEYS, PLANS, TOPUPS, contactCostLabel, type PlanKey, type TopupKey } from '@/lib/billing/plans'
 
 type Billing = {
   planKey: PlanKey | null
@@ -220,7 +220,7 @@ export function BillingCard() {
                   <span className="text-[12px] text-[var(--mh-muted)]">/mo</span>
                 </span>
               </div>
-              <p className="mt-1 text-[12px] text-[var(--mh-muted)]">{plan.creditsPerMonth.toLocaleString()} credits every month</p>
+              <p className="mt-1 text-[12px] text-[var(--mh-muted)]">{plan.creditsPerMonth.toLocaleString()} credits every month · {contactCostLabel()}</p>
               <div className="mt-3">
                 {isCurrent ? (
                   <span className="text-[12px] font-semibold text-[var(--mh-fg)]">✓ Current plan</span>
@@ -242,9 +242,12 @@ export function BillingCard() {
                       disabled={busy !== null || !billing.billingEnabled}
                       onClick={() => void startCheckout({ kind: 'plan', plan: key }, `plan:${key}`)}
                     >
-                      {busy === `plan:${key}` ? 'Opening…' : `Start ${plan.name}`}
+                      {busy === `plan:${key}` ? 'Opening…' : `Get ${plan.name} · $${plan.priceUsd} today`}
                     </ThreeDButton>
                   )
+                )}
+                {!isCurrent && !(billing.planKey && billing.active) && (
+                  <p className="mt-2 text-[11px] text-[var(--mh-muted)]">{MONEY_BACK_DAYS}-day money-back guarantee</p>
                 )}
               </div>
             </div>

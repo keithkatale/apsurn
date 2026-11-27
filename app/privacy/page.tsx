@@ -320,6 +320,13 @@ export default function PrivacyPage() {
                 cross-site advertising. You can block non-essential scripts in your browser; the product
                 login will still require cookies needed for the session.
               </p>
+              <p className="mt-3">
+                We also keep our own first-party usage records: the pages visited, a random identifier
+                stored in a first-party cookie (<code>apsurn_aid</code>), the referring site, the type of
+                device, and key actions such as signing up or sending an email. We do not store IP
+                addresses or fingerprints in these records, and we use them only to understand and
+                improve the product.
+              </p>
             </Section>
 
             <Section id="international" title="12. International transfers">

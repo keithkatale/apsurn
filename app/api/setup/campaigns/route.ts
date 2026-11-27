@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { generateCampaigns } from '@/lib/ai'
 import { getCurrentUserId } from '@/lib/auth/session'
+import { logEvent } from '@/lib/events'
 import { beginSetupAction, settleSetupAction } from '@/lib/billing/gate'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { businessProfileSchema, competitorAnalysisSchema, type CampaignsResponse, type GeneratedCampaign } from '@/lib/types'
@@ -129,6 +130,7 @@ export async function POST(req: Request) {
     }
 
     await settleSetupAction(gate, 'campaign_generate')
+    await logEvent('campaigns_generated', { userId: gate.userId ?? null, props: { count: savedCampaigns.length || rawCampaigns.length } })
 
     const body: CampaignsResponse = {
       campaigns: savedCampaigns.length > 0 ? savedCampaigns : rawCampaigns,

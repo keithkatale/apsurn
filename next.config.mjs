@@ -15,6 +15,25 @@ const nextConfig = {
       { source: '/dashboard/:path*', destination: '/leads', permanent: false },
     ]
   },
+  // The admin area must never be indexed, cached or archived.
+  async headers() {
+    return [
+      {
+        source: '/admin/:path*',
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive, nosnippet' },
+          { key: 'Cache-Control', value: 'no-store' },
+        ],
+      },
+      {
+        source: '/admin',
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive, nosnippet' },
+          { key: 'Cache-Control', value: 'no-store' },
+        ],
+      },
+    ]
+  },
   // PostHog calls go through our own domain (US cloud) so ad blockers do not drop them.
   skipTrailingSlashRedirect: true,
   async rewrites() {

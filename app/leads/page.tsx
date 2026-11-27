@@ -18,6 +18,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react'
 import type { WorkspaceLead, WorkspaceLeadTable } from '@/app/api/leads/route'
 import { DashboardShell } from '@/components/dashboard/DashboardShell'
 import { ContactAvatar } from '@/components/prospects/ContactAvatar'
+import { CONTACT_CREDITS, contactCostLabel } from '@/lib/billing/plans'
 import { cn } from '@/lib/utils'
 
 function LeadsDirectory() {
@@ -607,12 +608,14 @@ function LeadsDirectory() {
                     }
                     className="h-9 rounded-[10px] border border-[var(--mh-soft)] bg-[var(--mh-bg)] px-3 text-sm text-[var(--mh-fg)] outline-none"
                   >
-                    <option value={10}>10 verified leads</option>
-                    <option value={25}>25 verified leads</option>
-                    <option value={50}>50 verified leads</option>
+                    <option value={10}>10 contacts · {10 * CONTACT_CREDITS} credits</option>
+                    <option value={25}>25 contacts · {25 * CONTACT_CREDITS} credits</option>
+                    <option value={50}>50 contacts · {50 * CONTACT_CREDITS} credits</option>
                   </select>
                 </label>
               </div>
+
+              <p className="text-[11px] text-[var(--mh-muted)]">{contactCostLabel()}. Charged only for contacts we find.</p>
 
               <div className="mt-2 flex items-center justify-end gap-2">
                 <button

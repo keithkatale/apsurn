@@ -3,6 +3,7 @@
 import { Check, Copy, Download, ExternalLink, Globe, Phone, Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { ContactAvatar } from '@/components/prospects/ContactAvatar'
+import { CONTACT_CREDITS, contactCostLabel } from '@/lib/billing/plans'
 import type { ListenResponse, ScoredPost } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -126,6 +127,9 @@ export function LeadsTable({ data }: { data: ListenResponse }) {
 
   return (
     <div className="flex flex-col gap-4">
+      <p className="text-xs text-[var(--mh-muted)]">
+        {data.posts.length} contacts found = {data.posts.length * CONTACT_CREDITS} credits. {contactCostLabel()}.
+      </p>
       {/* Minimalist Table Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">

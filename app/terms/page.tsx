@@ -188,8 +188,19 @@ export default function TermsPage() {
               <p>
                 Features may be offered with free starting credits or a paid plan. If we charge, prices, limits, and
                 renewal terms will be shown at checkout or in an order form. Unless required by law, fees
-                are non-refundable once a billing period starts. We may change prices on notice for later
-                periods.
+                are non-refundable once a billing period starts, except as set out below. We may change prices
+                on notice for later periods.
+              </p>
+              <p>
+                <strong>14-day money-back guarantee.</strong> If you are not satisfied with a paid plan, email{" "}
+                <a href="mailto:keith@apsurn.com" className="underline">keith@apsurn.com</a> within 14 days of your
+                first payment for that plan and we will refund that payment in full. Plan credits are charged and
+                granted at checkout. The guarantee covers your first payment for a plan, not later renewals or credit
+                top-ups, and does not apply where we find fraud or abuse of the service.
+              </p>
+              <p>
+                <strong>Credits.</strong> Verified contacts are billed in credits (currently 5 credits per contact).
+                The price per credit depends on your plan or top-up and is shown at checkout.
               </p>
               <p>
                 Third-party usage (for example data-provider credits or Google quotas) may be billed by

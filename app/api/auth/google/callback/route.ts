@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logEvent } from "@/lib/events";
+import { reportSlugFromPath } from "@/lib/reports";
 import { createClient } from "@/lib/supabase/server";
 import {
   decodeGoogleSignInState,
@@ -31,12 +33,19 @@ export async function GET(request: NextRequest) {
   try {
     const tokens = await exchangeGoogleSignInCode(code, request);
     const supabase = await createClient();
-    const { error } = await supabase.auth.signInWithIdToken({
+    const { data, error } = await supabase.auth.signInWithIdToken({
       provider: "google",
       token: tokens.idToken,
       access_token: tokens.accessToken ?? undefined,
     });
     if (error) throw error;
+    // An account created in the last couple of minutes is a signup, not a return visit.
+    const createdAt = data.user?.created_at ? new Date(data.user.created_at).getTime() : 0;
+    const isNew = createdAt > 0 && Date.now() - createdAt < 2 * 60 * 1000;
+    await logEvent(isNew ? "signup" : "login", {
+      userId: data.user?.id ?? null,
+      props: { method: "google", report: reportSlugFromPath(next) },
+    });
     return clear(NextResponse.redirect(new URL(next, origin)));
   } catch (error) {
     console.error("[auth/google]", error);

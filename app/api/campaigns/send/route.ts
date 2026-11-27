@@ -3,6 +3,7 @@ import { AuthenticationError, getCurrentUserId } from "@/lib/auth/session";
 import { AccountRequiredError, accountRequiredResponse, assertRegisteredUser } from "@/lib/auth/guest";
 import { getBillingState } from "@/lib/billing/credits";
 import { SMTP_SCOPE, sendSmtpMessage, type ConnectedInbox } from "@/lib/inbox/smtp";
+import { logEvent } from "@/lib/events";
 import { rateLimit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -82,6 +83,7 @@ export async function POST(request: Request) {
       { onConflict: "user_id,campaign_id,contact_id" },
     );
     if (trackError) console.error("[campaigns/send] could not record send:", trackError.message);
+    await logEvent("email_sent", { userId });
 
     return Response.json({ ok: true, from: inbox.email_address, messageId: result.providerMessageId });
   } catch (error) {

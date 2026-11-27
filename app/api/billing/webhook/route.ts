@@ -1,6 +1,7 @@
 import { grantCredits, monthlyCreditsFor } from "@/lib/billing/credits";
 import { getDodo, isDodoConfigured } from "@/lib/billing/dodo";
 import { STARTER_CREDITS, TOPUPS, UNLOCK, planKeyFromProductId, type PlanKey, type TopupKey } from "@/lib/billing/plans";
+import { logEvent } from "@/lib/events";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -80,6 +81,8 @@ async function handleEvent(type: string, data: Payload, webhookId: string) {
         `sub-start:${data.subscription_id}`,
         true,
       );
+      await logEvent("subscription_changed", { userId, props: { change: "started", plan } });
+      await logEvent("payment_succeeded", { userId, props: { kind: "subscription", plan } });
       return;
     }
 
@@ -143,6 +146,7 @@ async function handleEvent(type: string, data: Payload, webhookId: string) {
       await saveAccount(userId, subscriptionFields(data, status));
       // Subscription is over: the monthly allowance goes with it. Purchased top-ups are kept.
       await grantCredits(userId, "plan", 0, `plan_${status}`, `sub-end:${webhookId}`, true);
+      await logEvent("subscription_changed", { userId, props: { change: status } });
       return;
     }
 
@@ -152,6 +156,7 @@ async function handleEvent(type: string, data: Payload, webhookId: string) {
         const unlockUser = await resolveUserId(data);
         if (!unlockUser || !data.payment_id) return;
         await grantCredits(unlockUser, "topup", UNLOCK.credits, "unlock", `unlock:${data.payment_id}`);
+        await logEvent("payment_succeeded", { userId: unlockUser, props: { kind: "unlock" } });
         return;
       }
       if (data.metadata?.kind !== "topup") return;
@@ -159,6 +164,7 @@ async function handleEvent(type: string, data: Payload, webhookId: string) {
       const key = data.metadata?.topup_key as TopupKey | undefined;
       if (!userId || !key || !TOPUPS[key] || !data.payment_id) return;
       await grantCredits(userId, "topup", TOPUPS[key].credits, "topup", `topup:${data.payment_id}`);
+      await logEvent("payment_succeeded", { userId, props: { kind: "topup", topup: key } });
       return;
     }
 

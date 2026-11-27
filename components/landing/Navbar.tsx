@@ -121,7 +121,7 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
             ) : (
               <>
                 <ThreeDButton href={showDashboard ? "/leads" : "/signup?next=/setup"} variant="solid" size="sm" className="landing-nav-cta rounded-xl px-4 shadow-none">
-                  <span>{showDashboard ? "Dashboard" : "Get 50 free credits"}</span>
+                  <span>{showDashboard ? "Dashboard" : "See 10 contacts free"}</span>
                   <ArrowRight className="size-3.5" />
                 </ThreeDButton>
               </>
@@ -183,7 +183,7 @@ export function Navbar({ embedded = false }: { embedded?: boolean }) {
                   onClick={() => setIsOpen(false)}
                   className="landing-nav-cta w-full rounded-xl shadow-none"
                 >
-                  <span>{showDashboard ? "Dashboard" : "Get 50 free credits"}</span>
+                  <span>{showDashboard ? "Dashboard" : "See 10 contacts free"}</span>
                   <ArrowRight className="size-3.5" />
                 </ThreeDButton>
               )}

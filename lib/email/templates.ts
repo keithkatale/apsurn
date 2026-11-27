@@ -33,7 +33,9 @@ const para = (html: string, size = 16, color = BODY) =>
 const small = (html: string) => para(html, 13, MUTED);
 
 function shell(opts: { preheader: string; eyebrow: string; title: string; titleSize?: number; body: string; footer: string; internal?: boolean }) {
-  const logo = `${appOrigin()}/branding/email-logo.png`;
+  // Mail clients fetch the logo from the public internet, so a localhost dev origin would show a broken image.
+  const publicOrigin = /^https?:\/\/(localhost|127\.|\[::1\]|192\.168\.|10\.)/i.test(appOrigin()) ? "https://apsurn.com" : appOrigin();
+  const logo = `${publicOrigin}/branding/email-logo.png`;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -102,6 +104,32 @@ export function verificationEmail(params: { code: string; link: string }) {
     params.link,
     "",
     "Didn't ask for this? You can ignore this email.",
+  ].join("\n");
+  return { html, text };
+}
+
+export function magicLinkEmail(params: { link: string; minutes: number }) {
+  const body = [
+    para("Use the button to sign in to apsurn. No password needed."),
+    gap(24),
+    button("Sign in to apsurn", params.link),
+    gap(20),
+    divider,
+    gap(8),
+    small(`This link works once and expires in ${params.minutes} minutes. Didn't ask for it? You can safely ignore this email.`),
+  ].join("\n");
+  const html = shell({
+    preheader: "Your apsurn sign-in link",
+    eyebrow: "Sign in",
+    title: "Your sign-in link",
+    body,
+    footer: "Sent by apsurn because someone entered this address to sign in.<br>Questions? Just reply to this email.",
+  });
+  const text = [
+    "Sign in to apsurn:",
+    params.link,
+    "",
+    `This link works once and expires in ${params.minutes} minutes. Didn't ask for it? You can ignore this email.`,
   ].join("\n");
   return { html, text };
 }

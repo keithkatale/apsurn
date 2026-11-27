@@ -1,7 +1,7 @@
 /**
  * Apsurn billing catalog — Dodo product IDs + credit allotments.
- * A new plan saves a card and starts with 50 free credits.
- * The plan price is charged when those credits run out.
+ * A plan is charged at checkout and its full monthly credits are granted immediately (14-day money-back guarantee).
+ * The free setup preview is 10 contacts, which is 50 credits at 5 credits per contact.
  */
 
 export type PlanKey = "startup" | "growth" | "pro";
@@ -52,8 +52,12 @@ export const STARTER_CREDITS = 50;
 /** Charged once when a card is saved, so the free credit grant can start. */
 export const ACTIVATION_FEE_USD = 1;
 
-/** Leads allowed during setup before an active subscription. */
+/** Leads allowed during setup before an active subscription. 10 contacts x 5 credits = the 50 free credits. */
 export const SETUP_FREE_LEAD_CAP = 10;
+
+/** Refund window for a first plan payment. Refunds are handled by email (see the Terms). */
+export const MONEY_BACK_DAYS = 14;
+export const SUPPORT_EMAIL = "keith@apsurn.com";
 
 /** Dodo Payments brand — checkout / receipts show as Apsurn. */
 export const DODO_BRAND_ID = {
@@ -71,10 +75,10 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     name: "Startup",
     priceUsd: 30,
     creditsPerMonth: 2_000,
-    description: "For founders starting outbound. 50 free credits, then $30 when those credits run out.",
+    description: "For founders starting outbound. $30 today, 2,000 credits right away, 14-day money-back guarantee.",
     features: [
-      "50 free credits to start",
-      "2,000 AI credits after your card is charged",
+      "2,000 credits every month, available immediately",
+      "About 400 contacts a month (5 credits each)",
       "Personalized email drafts",
       "Campaign sequences",
       "Lead enrichment",
@@ -91,11 +95,11 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     name: "Growth",
     priceUsd: 79,
     creditsPerMonth: 8_000,
-    description: "For teams running outbound every week. 50 free credits, then $79 when those credits run out.",
+    description: "For teams running outbound every week. $79 today, 8,000 credits right away, 14-day money-back guarantee.",
     highlight: false,
     features: [
-      "50 free credits to start",
-      "8,000 AI credits after your card is charged",
+      "8,000 credits every month, available immediately",
+      "About 1,600 contacts a month (5 credits each)",
       "Everything in Startup",
       "Higher prospecting volume",
       "Priority AI throughput",
@@ -110,10 +114,10 @@ export const PLANS: Record<PlanKey, PlanDefinition> = {
     name: "Pro",
     priceUsd: 149,
     creditsPerMonth: 20_000,
-    description: "For power users and agencies. 50 free credits, then $149 when those credits run out.",
+    description: "For power users and agencies. $149 today, 20,000 credits right away, 14-day money-back guarantee.",
     features: [
-      "50 free credits to start",
-      "20,000 AI credits after your card is charged",
+      "20,000 credits every month, available immediately",
+      "About 4,000 contacts a month (5 credits each)",
       "Everything in Growth",
       "Best for multi-campaign volume",
       "Credit top-ups available in-app",
@@ -152,11 +156,14 @@ export const TOPUPS: Record<TopupKey, TopupDefinition> = {
 export const CREDIT_COSTS = {
   email_draft: 1,
   email_find: 5,
-  campaign_generate: 25,
-  blueprint_generate: 20,
-  market_scan: 15,
+  // Setup (business blueprint, competitor scan, campaign drafts) is free so the credits go to what people came for:
+  // contacts. 10 contacts at 5 credits each use the 50 free credits inside the first session.
+  campaign_generate: 0,
+  blueprint_generate: 0,
+  market_scan: 0,
   copilot_turn: 2,
-  prospect_company: 3,
+  /** One verified contact. */
+  prospect_company: 5,
   /** One sourcing pass (registry, page, or social search) before any rows are saved. */
   lead_source_scan: 8,
   /** Extra when a scan also searches LinkedIn (a paid Apify run, up to 30 posts). */
@@ -172,6 +179,11 @@ export const CREDIT_COSTS = {
  * Create a one-time $1 product in Dodo and set DODO_UNLOCK_PRODUCT_ID (test) / DODO_UNLOCK_PRODUCT_ID_LIVE (live).
  */
 export const UNLOCK = { priceUsd: 1, creditsValueUsd: 30, credits: 2_000 } as const;
+
+/** What one contact costs, stated everywhere so nobody is surprised. Priced at the Startup rate ($30 / 2,000 credits). */
+export const CONTACT_CREDITS = CREDIT_COSTS.prospect_company;
+export const CONTACT_COST_USD = (CONTACT_CREDITS * 30) / 2_000;
+export const contactCostLabel = () => `1 contact = ${CONTACT_CREDITS} credits (about $${CONTACT_COST_USD.toFixed(2)})`;
 
 export function unlockProductId(): string | null {
   const id = isLiveBilling() ? process.env.DODO_UNLOCK_PRODUCT_ID_LIVE : process.env.DODO_UNLOCK_PRODUCT_ID;

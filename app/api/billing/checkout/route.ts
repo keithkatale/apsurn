@@ -5,6 +5,7 @@ import { getBillingState, hasUnlocked } from "@/lib/billing/credits";
 import { isLiveBilling } from "@/lib/billing/plans";
 import { appUrl, ensureUnlockProductId, getDodo, isDodoConfigured } from "@/lib/billing/dodo";
 import { OFFERED_PLAN_KEYS, TOPUPS, UNLOCK, productIdForPlan, productIdForTopup } from "@/lib/billing/plans";
+import { logEvent } from "@/lib/events";
 import { rateLimit } from "@/lib/rate-limit";
 
 const bodySchema = z.discriminatedUnion("kind", [
@@ -30,6 +31,7 @@ export async function POST(req: Request) {
     if (!email) return Response.json({ error: "Your account has no email address." }, { status: 400 });
 
     const state = await getBillingState(userId);
+    await logEvent("checkout_started", { userId, props: { kind: parsed.data.kind } });
     const dodo = getDodo();
     const back = `${appUrl()}/settings`;
 
